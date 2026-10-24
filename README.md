@@ -43,7 +43,8 @@ dotnet run --project Tests                                                # the 
 ```
 
 In the Hub, **New project** makes a starter project: a scene with a sun, sky, camera and a flat terrain. To package Empire Engine itself
-for release, run `python3 publish.py` (see the script's header).
+for release, run `python3 publish.py` (see the script's header). The Hub package doesn't include an editor: a released Hub downloads
+one from the GitHub releases (Installs > Install version...).
 
 Empire Engine is developed mainly on macOS and works on Windows. Linux builds are supported by `publish.py` but have had the
 least testing.

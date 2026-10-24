@@ -168,7 +168,7 @@ public partial class MainWindow : Window
         string? wanted = EmpireProject.TryRead(folder)?.EditorVersion;
         if (EditorInstall.ForProject(_installs, wanted) is not { } install)
         {
-            Status("No Empire Engine editor is installed. See the Installs page.");
+            Status("No Empire Engine editor is installed. Open the Installs page and press Install version...");
             return;
         }
 

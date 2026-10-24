@@ -42,12 +42,13 @@
     <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.22" />
   </ItemGroup>
 
-  <!-- The hub ships with the current editor. Building the hub builds the editor first, without referencing its code. -->
+  <!-- Building the hub builds the editor first, without referencing its code, so a build from source has an editor to open
+       projects with. A published hub does not include one: people install editors from the Installs page. -->
   <ItemGroup>
     <ProjectReference Include="..\Editor\Editor.csproj" ReferenceOutputAssembly="false" Private="false" />
   </ItemGroup>
 
-  <!-- Copies the editor's build output to <hub>/Empire/<version>/, where the hub finds its bundled install. -->
+  <!-- Copies the editor's build output to <hub>/Empire/<version>/ in the build folder (not in a publish), where the hub finds it. -->
   <Target Name="BundleEditor" AfterTargets="Build">
     <MSBuild Projects="..\Editor\Editor.csproj" Targets="GetTargetPath" Properties="Configuration=$(Configuration)">
       <Output TaskParameter="TargetOutputs" PropertyName="EditorTargetPath" />
@@ -63,8 +64,9 @@
           SkipUnchangedFiles="true" />
   </Target>
 
-  <!-- dotnet publish of the hub also publishes the editor into <publish>/Empire/<version>/. -->
-  <Target Name="PublishEditor" AfterTargets="Publish">
+  <!-- Off by default: a published hub has no editor. Pass -p:PublishEditorWithHub=true to publish one into
+       <publish>/Empire/<version>/ as well (publish.py does not; it makes the editor package separately). -->
+  <Target Name="PublishEditor" AfterTargets="Publish" Condition="'$(PublishEditorWithHub)' == 'true'">
     <PropertyGroup>
       <EditorPublishDir>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(PublishDir)', 'Empire', '$(EmpireVersion)'))</EditorPublishDir>
       <EditorPublishProps>Configuration=$(Configuration);PublishDir=$(EditorPublishDir)</EditorPublishProps>

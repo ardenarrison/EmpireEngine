@@ -10,7 +10,7 @@ public sealed class EditorInstall
     public required bool Bundled { get; init; }   // in the hub's Empire Engine folder, as opposed to located by the user
     public bool Downloaded { get; init; }         // put there by the hub from a GitHub release rather than shipped with it
 
-    public string Kind => Downloaded ? "Downloaded from GitHub" : Bundled ? "Included with Empire Engine Hub" : "Located";
+    public string Kind => Downloaded ? "Downloaded from GitHub" : Bundled ? "Built with the Hub" : "Located";
     public bool CanRemove => !Bundled;
 
     private const string EntryDll = "empire.dll";

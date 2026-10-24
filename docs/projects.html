@@ -46,7 +46,7 @@
 <p>A project name can't start or end with a space or contain <code>/ \ : * ? " &lt; &gt; |</code>, and the folder it makes must be new or empty.</p>
 
 <h3>Installs</h3>
-<p>The editor versions the Hub knows about. Building the Hub copies the current editor into <code>&lt;hub&gt;/Empire/&lt;version&gt;/</code>, which is where it finds its bundled install. Each row says where it came from: <em>Included with Empire Engine Hub</em>, <em>Downloaded from GitHub</em>, or <em>Located</em>.</p>
+<p>The editor versions the Hub knows about. <strong>A released Hub comes without an editor</strong>: the first thing to do is press <em>Install version…</em> and install one. Editors live in <code>&lt;hub&gt;/Empire/&lt;version&gt;/</code>. (Building the Hub from source also copies the editor you just built there.) Each row says where it came from: <em>Built with the Hub</em>, <em>Downloaded from GitHub</em>, or <em>Located</em>.</p>
 <p><strong>A project opens with the Empire Engine version it was made with when that version is installed, and with the newest installed version otherwise.</strong></p>
 <ul>
   <li><strong>Install version…</strong> downloads a version from GitHub (see below).</li>
@@ -58,9 +58,9 @@
 <ol>
   <li>downloads the release's zip for your computer (<code>Empire-&lt;version&gt;-&lt;platform&gt;.zip</code>), showing progress,</li>
   <li>checks it against the checksum GitHub lists for it,</li>
-  <li>unpacks the editor into <code>&lt;hub&gt;/Empire/&lt;version&gt;/</code>, next to the version that came with the Hub:</li>
+  <li>unpacks the editor into <code>&lt;hub&gt;/Empire/&lt;version&gt;/</code>, next to any others:</li>
 </ol>
-<pre data-label="&lt;hub&gt;/Empire/"><code>0.1.0/    included with the hub
+<pre data-label="&lt;hub&gt;/Empire/"><code>0.1.0/    downloaded from the 0.1.0 release
 0.1.1/    downloaded from the 0.1.1 release</code></pre>
 <p>The new version appears on the Installs page and in the version list when you make a new project, and projects made with it open with it. <strong>Cancel</strong> stops a download part-way and leaves nothing behind.</p>
 <ul>

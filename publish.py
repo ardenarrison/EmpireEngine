@@ -1,16 +1,20 @@
 #!/usr/bin/env python3
-"""Publishes Empire Engine Hub, the editor and the player, and packages them into one folder.
+"""Publishes Empire Engine Hub, the editor and the player as two separate packages per platform.
 
     python3 publish.py                         # for the platform you are on
     python3 publish.py --rid win-x64 --rid linux-x64 --zip
 
-The result is Empire/<platform>/, ready to zip and ship:
+The hub does not come with an editor. People install one from inside the hub (Installs > Install version...), which
+downloads the editor package from the GitHub release. The result is two folders in Empire/ for each platform:
 
-    Empire/osx-arm64/
+    Empire/osx-arm64/                the hub package         ->  EmpireHub-<version>-osx-arm64.zip
         EmpireHub                    the hub (run this)
-        Empire/<version>/            the editor, which is where the hub looks for installed editors
+    Empire/osx-arm64-editor/         the editor package      ->  Empire-<version>-osx-arm64.zip
+        Empire/<version>/            what the hub unpacks into <hub>/Empire/<version>/
             empire                   the editor
             Player/                  the game player
+
+To try the hub with an editor without a release, copy the Empire/ folder from the editor package next to EmpireHub.
 
 Needs the .NET SDK. Games are built self-contained, so people who run them need nothing installed except, on macOS
 and Linux, whatever the editor's build says it couldn't bundle.
@@ -61,19 +65,24 @@ def publish(project, destination, rid, *extra):
 
 def package(rid, out_root, version, make_zip):
     exe = EXE if rid.startswith("win") else ""
-    destination = out_root / rid
-    editor_dir = destination / "Empire" / version
+    destination = out_root / rid                       # the hub package: no editor in it
+    editor_root = out_root / f"{rid}-editor"           # the editor package, laid out as the hub unpacks it
+    editor_dir = editor_root / "Empire" / version
 
     # Start clean, so files from an older publish don't end up in the package.
-    if destination.exists():
-        shutil.rmtree(destination)
+    for folder in (destination, editor_root):
+        if folder.exists():
+            shutil.rmtree(folder)
 
-    # The hub's publish also publishes the editor into <hub>/Empire/<version>/ (see Hub.csproj).
+    # Publishing the hub leaves the editor out (see PublishEditor in Hub.csproj).
     publish("Hub/Hub.csproj", destination, rid)
+    publish("Editor/Editor.csproj", editor_dir, rid)
     # The player goes next to the editor. GameName is the name of the program it builds.
     publish("Player/Player.csproj", editor_dir / "Player", rid, "-p:GameName=Player")
 
     expected = [destination / ("EmpireHub" + exe), editor_dir / ("empire" + exe), editor_dir / "Player" / ("Player" + exe)]
+    if (destination / "Empire").exists():
+        sys.exit(f"The hub package must not contain an editor, but {destination / 'Empire'} exists.")
     missing = [path for path in expected if not path.exists()]
     if missing:
         sys.exit("The package is incomplete, these are missing:\n  " + "\n  ".join(str(path) for path in missing))
@@ -84,19 +93,21 @@ def package(rid, out_root, version, make_zip):
         # and games only run on Macs that have Vulkan installed.
         for folder in (editor_dir, editor_dir / "Player"):
             if not (folder / "libvulkan.1.dylib").exists() or not (folder / "vulkan" / "icd.d" / "MoltenVK_icd.json").exists():
-                problems.append(f"{folder.relative_to(destination)} has no bundled Vulkan (libvulkan.1.dylib, vulkan/icd.d).")
+                problems.append(f"{folder.relative_to(editor_root)} has no bundled Vulkan (libvulkan.1.dylib, vulkan/icd.d).")
         if problems:
             problems.append("They come from ThirdParty/Vulkan in the repo: restore that folder, or set the EmpireVulkanLoader "
                             "and EmpireMoltenVK environment variables to the paths of libvulkan.1.dylib and libMoltenVK.dylib.")
 
     if make_zip:
-        archive = shutil.make_archive(str(out_root / f"Empire-{version}-{rid}"), "zip", root_dir=destination)
-        print(f"Zipped: {archive}")
+        # The editor zip is the one the hub's Install version... downloads, so its name and layout are fixed:
+        # Empire-<version>-<platform>.zip holding Empire/<version>/ (see Hub/Releases/ReleaseCatalog.cs).
+        for name, root in ((f"EmpireHub-{version}-{rid}", destination), (f"Empire-{version}-{rid}", editor_root)):
+            print(f"Zipped: {shutil.make_archive(str(out_root / name), 'zip', root_dir=root)}")
     return destination, problems
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Publish Empire Engine Hub, the editor and the player into the Empire folder.")
+    parser = argparse.ArgumentParser(description="Publish Empire Engine Hub, and the editor with the player, as separate packages in the Empire folder.")
     parser.add_argument("--rid", action="append", metavar="PLATFORM",
                         help="platform to build for (osx-arm64, osx-x64, win-x64, win-arm64, linux-x64, linux-arm64). "
                              "Repeat for several. Default: this computer's.")

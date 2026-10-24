@@ -82,7 +82,7 @@
       <Panel>
         <TextBlock x:Name="NoInstallsText" Classes="dim" FontSize="14" HorizontalAlignment="Center"
                    VerticalAlignment="Center" TextAlignment="Center"
-                   Text="No Empire Engine editor found.&#10;Rebuild Empire Engine Hub, or locate an editor folder." />
+                   Text="No Empire Engine editor is installed yet.&#10;Press Install version... to download one, or Locate... to add one you have." />
         <ListBox x:Name="InstallList" Background="Transparent">
           <ListBox.ItemTemplate>
             <DataTemplate x:DataType="local:EditorInstall">

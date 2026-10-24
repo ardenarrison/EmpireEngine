@@ -18,7 +18,7 @@ You need the .NET 10 SDK and a Vulkan-capable GPU.
 
 ```sh
 dotnet build EmpireEngine.slnx      # Engine, Editor, Player, Tests, Probe
-dotnet build Hub                    # the launcher (separate, as it bundles the editor)
+dotnet build Hub                    # the launcher (separate; a build from source also builds and copies in the editor)
 dotnet run --project Tests          # prints PASS or FAIL for each check; exits 1 if any fail
 python3 Tools/check_repo.py         # repository checks: licenses, no build output, the BRUTAL splash is intact
 ```
