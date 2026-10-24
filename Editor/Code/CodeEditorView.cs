@@ -117,6 +117,9 @@ public sealed class CodeEditorView
 
     public bool HasUnsavedChanges => _docs.Values.Any(d => d.Dirty);
 
+    // The script open in the view, as its name and text (null when none is open). The assistant offers it as an attachment.
+    public (string Name, string Text)? CurrentScript => _doc is null ? null : (_doc.Name, _doc.Text);
+
     // Returns true once after the "3D view" button was pressed.
     public bool TakeExit()
     {

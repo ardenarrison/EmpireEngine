@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The AI Assistant · Empire Engine Docs</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<article>
+
+<p class="eyebrow">Using the editor</p>
+<h1>The AI assistant (optional)</h1>
+<p class="lead">A chat inside the editor that can help you write and fix scripts. It uses the Claude API from Anthropic with <strong>your own API key</strong>. It is off until you agree to a notice, it sends nothing until you press Send, and it never changes your project by itself.</p>
+
+<h2>Turning it on</h2>
+<ol class="steps">
+  <li>Open <strong>Help &gt; AI Assistant…</strong>. The first time, it shows a notice about what is sent, where it goes, and who pays. Read it, tick <em>I agree</em> and press <em>Turn on the assistant</em>. Nothing is switched on before that.</li>
+  <li><strong>Enter your Anthropic API key.</strong> Create one in the <a href="https://console.anthropic.com/settings/keys">Anthropic Console</a> (the <em>Get a key</em> button opens it). You need an Anthropic account with credit.</li>
+  <li>Type a question and press <em>Send</em> (or Return).</li>
+</ol>
+
+<h2>What you can do</h2>
+<ul>
+  <li><strong>Ask anything</strong> about your game, a script, or how Empire Engine works. The assistant knows the basics of Empire Engine scripting and says so when it isn't sure something exists.</li>
+  <li><strong>Attach the open script.</strong> When a script is open in the code view, tick <em>Send it</em> under <em>Open script</em> to include its text with your question.</li>
+  <li><strong>Attach the selected object.</strong> Tick <em>Send it</em> under <em>Selected object</em> to include its name, position, scale and the names of its components and scripts.</li>
+  <li><strong>Copy answers.</strong> Each answer has <em>Copy answer</em> and, if it holds code, <em>Copy code</em> buttons. You paste what you want into your scripts. The assistant never edits files itself.</li>
+  <li><strong>Choose a model</strong> under <em>Settings</em>. Larger models answer better and cost more per question.</li>
+  <li><strong>Stop</strong> cancels a question that is still waiting. <strong>Clear</strong> empties the conversation.</li>
+</ul>
+<p>The editor's text font only has plain letters, so characters it can't draw (emoji, accents) show as <code>?</code> in the chat. Copying an answer copies the real text.</p>
+
+<h2 id="what-is-sent">What is sent, and where</h2>
+<ul>
+  <li><strong>Only when you press Send</strong>, and only to <code>api.anthropic.com</code> over https. The editor refuses to send the key anywhere else.</li>
+  <li><strong>What goes:</strong> your question, the earlier messages of this conversation (the last 20), a short fixed instruction describing Empire Engine scripting, and whatever you ticked. Nothing is attached unless you tick it, and the ticks are remembered but start off.</li>
+  <li><strong>A script's name is sent, never its file path</strong>, so folder and user names stay on your computer. Attachments over 40,000 characters are cut, and the message says so.</li>
+  <li><strong>What doesn't go:</strong> other scripts, scenes, models, your project folder, or anything you didn't tick or type.</li>
+  <li>Anthropic's terms and privacy policy apply to what you send. If your project is confidential, read them first. The notice has buttons for the <a href="https://www.anthropic.com/legal/aup">Usage Policy</a>, the <a href="https://www.anthropic.com/legal/privacy">Privacy Policy</a> and the <a href="https://www.anthropic.com/legal/commercial-terms">Commercial Terms</a>.</li>
+  <li>Empire Engine has no server in the middle and receives nothing.</li>
+</ul>
+
+<h2 id="your-key">Your API key</h2>
+<ul>
+  <li><strong>Empire Engine has no key of its own.</strong> You bring yours, and Anthropic bills your account for each question. Each answer shows how many tokens it used.</li>
+  <li><strong>Where it is kept:</strong> in one file in your user folder (<code>EmpireEngineEditor/anthropic-api-key</code> inside the app-data folder: <code>~/Library/Application Support</code> on macOS, <code>~/.config</code> on Linux, <code>AppData</code> on Windows). On macOS and Linux the file can be read only by you. It is not encrypted, so on a shared computer use the next option.</li>
+  <li><strong>Or an environment variable:</strong> set <code>ANTHROPIC_API_KEY</code> and the editor uses that and saves nothing. It takes priority over a saved key.</li>
+  <li>The key is <strong>never put in a project, a scene, a log or the editor's error reports</strong>, and it is removed from any error text before it is shown. <em>Settings &gt; Remove saved key</em> deletes the file.</li>
+  <li>The settings (whether you agreed, the model, what you chose to attach) are in <code>assistant.json</code> next to it. The conversation itself is kept in memory only and is gone when you close the editor.</li>
+  <li>Don't share your key, and don't commit it to a repository. If it leaks, delete it in the Anthropic Console.</li>
+</ul>
+<p>The assistant can't use a Claude.ai subscription (Free, Pro or Max): those logins are for Anthropic's own apps. It needs an API key.</p>
+
+<h2>Please keep in mind</h2>
+<ul>
+  <li><strong>Answers can be wrong or unsafe.</strong> Read code before you run it, and test it.</li>
+  <li><strong>Follow Anthropic's Usage Policy</strong> in what you ask.</li>
+  <li><strong>Don't send secrets</strong> such as passwords or keys, or other people's personal data.</li>
+  <li>If a script contains instructions, they are treated as part of your project, not as orders to the assistant, but no assistant is perfectly resistant to that. Don't attach scripts from sources you don't trust.</li>
+</ul>
+
+<h2>If something goes wrong</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>You see</th><th>What it means</th></tr></thead>
+  <tbody>
+    <tr><td>Anthropic rejected the API key</td><td>The key is wrong, deleted or expired. Enter a new one under <em>Settings</em>.</td></tr>
+    <tr><td>…usage limit… or credit balance too low</td><td>Your account is out of credit or over a limit. Add credit in the Anthropic Console.</td></tr>
+    <tr><td>Anthropic doesn't know that model name</td><td>Pick another model in <em>Settings</em>.</td></tr>
+    <tr><td>Anthropic's service is busy</td><td>Try again in a moment.</td></tr>
+    <tr><td>Couldn't reach Anthropic</td><td>Check your internet connection.</td></tr>
+  </tbody>
+</table></div>
+<p>A question that got no answer is taken back, so the conversation stays in step.</p>
+
+<h2>Turning it off</h2>
+<p><em>Settings &gt; Turn off the assistant</em> switches it off and clears the conversation; the notice is shown again if you turn it back on. Removing the saved key stops it from sending anything. Games you build never contain the assistant: it is part of the editor only.</p>
+
+<h2>For people changing the editor</h2>
+<ul>
+  <li>The code is in <code>Editor/Assistant/</code>: <code>AssistantClient</code> (the API calls), <code>AssistantSettings</code> (settings and the key store), <code>AssistantPrompt</code> (what is sent) and <code>AssistantWindow</code> (the window). The first three are plain .NET and are tested in <code>Tests/</code>.</li>
+  <li><strong>Keep it bring-your-own-key.</strong> Never add a key to the code, a build or a config file, and don't send to any address other than api.anthropic.com. <code>Tools/check_repo.py</code> fails if something that looks like an Anthropic key is committed.</li>
+  <li>If you change what is sent or stored, update the notice in <code>AssistantWindow</code> and raise <code>AssistantSettings.CurrentConsentVersion</code> so everyone is asked again.</li>
+</ul>
+<p>Empire Engine is not made, endorsed or supported by Anthropic. Claude is a trademark of Anthropic, PBC.</p>
+
+</article>
+</body>
+</html>

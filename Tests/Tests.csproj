@@ -10,6 +10,8 @@
     <Compile Include="../Hub/Releases/*.cs" Link="HubReleases/%(Filename)%(Extension)" />
     <!-- and the hub's project file and settings, which are plain .NET too -->
     <Compile Include="../Hub/EmpireProject.cs;../Hub/HubJson.cs;../Hub/HubSettings.cs;../Hub/Credits.cs;../Hub/EditorInstall.cs" Link="HubFiles/%(Filename)%(Extension)" />
+    <!-- the editor's AI assistant: the API client, key storage and prompts are plain .NET, so they are tested here -->
+    <Compile Include="../Editor/Assistant/Assistant*.cs" Link="EditorAssistant/%(Filename)%(Extension)" Exclude="../Editor/Assistant/AssistantWindow.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../Engine.Core/Engine.Core.csproj" />

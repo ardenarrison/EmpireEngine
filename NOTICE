@@ -14,4 +14,7 @@ The BRUTAL logo (Engine.Brutal/Ui/Logos/BrutalLogo.png) belongs to Ahwoo Limited
 it is used under the BRUTAL License, which requires it to be shown, unaltered except for scaling, in every product built
 with BRUTAL.
 
+The editor's optional AI assistant calls the Claude API from Anthropic using the user's own API key. Claude and Anthropic are
+trademarks of Anthropic, PBC. Empire Engine is not affiliated with, endorsed by or sponsored by Anthropic.
+
 The Empire Engine name and crown logo are trademarks of Arden Arrison and are not licensed by the Apache License. See TRADEMARKS.md.

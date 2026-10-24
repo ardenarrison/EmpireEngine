@@ -9,6 +9,9 @@ The marks are:
 - the names **Empire Engine** and **Empire Engine Hub**
 - the **crown logo**: `EmpireEngineIcon.png`, `EmpireEngineIcon.ico`, `EmpireEngineIcon-mac.png` and `Engine.Brutal/Ui/Logos/EmpireEngineCrown.png`
 
+Claude and Anthropic are trademarks of Anthropic, PBC. Empire Engine's optional AI assistant calls Anthropic's API with the user's own
+key. Empire Engine is not affiliated with, endorsed by or sponsored by Anthropic.
+
 ## What you can do
 
 - Say that something is made with, works with or is a fork of Empire Engine ("Made with Empire Engine", "a fork of Empire Engine").

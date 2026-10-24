@@ -6,7 +6,7 @@ Empire Engine is a 3D game engine written in C# on .NET 10. It draws with Vulkan
 scripts in C# or snap them together from blocks, press Play to try the game, and build it into a program you can hand to
 other people.
 
-> **Status: early (0.1.2).** It works and is used to make small games, but expect rough edges and changes between versions.
+> **Status: early (0.1.3).** It works and is used to make small games, but expect rough edges and changes between versions.
 
 ## What's in it
 
@@ -48,6 +48,14 @@ one from the GitHub releases (Installs > Install version...).
 
 Empire Engine is developed mainly on macOS and works on Windows. Linux builds are supported by `publish.py` but have had the
 least testing.
+
+## AI assistant (optional)
+
+The editor has an optional chat (**Help > AI Assistant**) that uses the Claude API from Anthropic. It is off until you agree to a
+notice, it uses **your own API key** (Empire Engine has none and no server), and it sends nothing until you press Send: only your
+question plus the open script or selected object if you tick them. Nothing is sent from games, the Hub, or in the background.
+See [the assistant's page](docs/assistant.html) for what is sent, where the key is kept, and what it costs. Empire Engine is not
+made, endorsed or supported by Anthropic.
 
 ## Making games with Empire Engine
 

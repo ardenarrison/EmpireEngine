@@ -24,8 +24,13 @@ any program you run. So:
 - **Only open projects, scenes and packages from people you trust**, the same way you would only run a program you trust.
 - A project that runs code when you open and play it is **not** a vulnerability. Empire Engine has no sandbox.
 
+**The AI assistant** (Help > AI Assistant) is optional and uses the user's own Anthropic API key, which is stored in one file only
+that user can read (or read from `ANTHROPIC_API_KEY`). Details are on [its docs page](docs/assistant.html).
+
 Things we do want to hear about:
 
+- The assistant sending the key or any project content anywhere other than `api.anthropic.com`, sending anything without the user
+  pressing Send or ticking an attachment, or writing the key into a project, scene, log or error report.
 - A scene, model, image, sound or save file that crashes the editor or a game in a way that looks exploitable
   (memory corruption, for example), or that runs code without playing the project's scripts.
 - The editor, Hub or a built game doing something with your files or network that a project's scripts didn't ask for.

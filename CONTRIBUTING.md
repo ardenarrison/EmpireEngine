@@ -48,6 +48,10 @@ Empire Engine is Apache-2.0 and ships inside people's games, so:
   commercial product. State where they came from in the pull request.
 - **The BRUTAL splash stays.** The [BRUTAL License](Licenses/BRUTAL-LICENSE.txt) requires the BRUTAL logo in every product
   built with it, so games, the editor and the Hub all open on it. A pull request that removes, hides, shrinks, recolors or skips it will not be accepted.
+- **The AI assistant stays bring-your-own-key.** Never put an API key in code, a build or a config file, and never send the
+  user's key or content to any address other than `api.anthropic.com`. If you change what the assistant sends or stores, update the
+  notice in `Editor/Assistant/AssistantWindow.cs` and raise `AssistantSettings.CurrentConsentVersion`. See
+  [the assistant's page](docs/assistant.html).
 - **Empire Engine's name and crown logo** are trademarks; see [TRADEMARKS.md](TRADEMARKS.md).
 
 ## Signing off your commits (DCO)

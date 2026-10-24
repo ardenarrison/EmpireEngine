@@ -118,6 +118,7 @@ public sealed class Gui
 
     private readonly Dictionary<string, float> _scroll = new();
     private readonly Dictionary<string, float> _contentHeight = new();
+    private readonly HashSet<string> _scrollToEnd = new();   // child regions to show the bottom of this frame
     private readonly Dictionary<string, bool> _open = new();
     private readonly Dictionary<string, float> _popupHeights = new();
     private string? _openPopup;
@@ -195,6 +196,7 @@ public sealed class Gui
 
     public void End()
     {
+        _scrollToEnd.Clear();
         if (!MouseDown || !_activeSeen) _active = null;
         if (!_focusSeen) _focus = null;
         C.Layer = Canvas2D.PanelLayer;
@@ -287,11 +289,16 @@ public sealed class Gui
 
     public void EndChild() => EndWindow();
 
+    // Shows the bottom of a child region (by the id given to BeginChild, in the current window) this frame, for a chat that
+    // follows its newest message. The content height it uses is last frame's, so call it for a few frames after a change.
+    public void ScrollChildToEnd(string childId) => _scrollToEnd.Add(_w.Id + "/" + childId);
+
     private void BeginLayout(Frame frame)
     {
         if (frame.Scrolls)
         {
             float scroll = _scroll.GetValueOrDefault(frame.Id);
+            if (_scrollToEnd.Contains(frame.Id)) scroll = float.MaxValue;   // clamped just below to the end of last frame's content
             if (_hovered == frame.Id && _wheel != 0) scroll -= _wheel * RowHeight * 3;
             float max = Math.Max(0f, _contentHeight.GetValueOrDefault(frame.Id) - frame.Content.H);
             frame.Scroll = Math.Clamp(scroll, 0f, max);
@@ -782,7 +789,8 @@ public sealed class Gui
     // Makes the next InputText drawn start with the keyboard focus, for a dialog that opens ready to type in.
     public void FocusNextInput() => _focusNextInput = true;
 
-    public bool InputText(string label, ref string value, int maxLength = 256)
+    // mask shows stars instead of the text, for something secret such as an API key. (Pasting still works.)
+    public bool InputText(string label, ref string value, int maxLength = 256, bool mask = false)
     {
         var control = Row(label);
         string id = Id(label);
@@ -797,7 +805,7 @@ public sealed class Gui
                 Focus(id, value, numeric: false);
             C.Rect(control.X, control.Y, control.W, control.H, hover ? FieldHover : FieldColor);
             C.Outline(control.X, control.Y, control.W, control.H, 1f, BorderColor);
-            C.Text(Fit(value, control.W - 10f), control.X + 5f, TextTop(control.Y, control.H), TextColor);
+            C.Text(Fit(mask ? new string('*', value.Length) : value, control.W - 10f), control.X + 5f, TextTop(control.Y, control.H), TextColor);
             return false;
         }
 
@@ -811,7 +819,7 @@ public sealed class Gui
         if (Pressed(ImGuiKey.Enter) || Pressed(ImGuiKey.KeypadEnter) || Pressed(ImGuiKey.Escape) ||
             (MousePressed && !Hovered(control) && !_focusJustSet))
             _focus = null;
-        DrawEditBox(control);
+        DrawEditBox(control, mask);
 
         if (_editText == before && _editText == value) return false;
         bool changed = _editText != value;
@@ -848,12 +856,12 @@ public sealed class Gui
         if (Command && Pressed(ImGuiKey.A)) _editText = "";   // select-all-and-replace, the common case
     }
 
-    private void DrawEditBox(Box box)
+    private void DrawEditBox(Box box, bool mask = false)
     {
         C.Rect(box.X, box.Y, box.W, box.H, FieldColor);
         C.Outline(box.X, box.Y, box.W, box.H, 1f, AccentHover);
         // Show the end of the text when it doesn't fit, so the caret stays visible.
-        string shown = _editText;
+        string shown = mask ? new string('*', _editText.Length) : _editText;
         while (shown.Length > 0 && C.MeasureText(shown) > box.W - 14f) shown = shown[1..];
         C.Text(shown, box.X + 5f, TextTop(box.Y, box.H), TextColor);
         if ((_now - _caretReset) % 1.0 < 0.6)

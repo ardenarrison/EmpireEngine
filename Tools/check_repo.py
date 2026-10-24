@@ -64,7 +64,7 @@ def check_files(paths):
 def check_text(paths):
     personal = re.compile(r"/Users/[A-Za-z0-9._-]+/|[A-Za-z]:\\+Users\\+[A-Za-z0-9._-]+|/home/[a-z0-9._-]+/")
     secrets = re.compile(
-        r"AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{30,}|-----BEGIN [A-Z ]*PRIVATE KEY-----|xox[baprs]-[A-Za-z0-9-]{10,}"
+        r"AKIA[0-9A-Z]{16}|sk-ant-[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9]{30,}|-----BEGIN [A-Z ]*PRIVATE KEY-----|xox[baprs]-[A-Za-z0-9-]{10,}"
         r"|(?i:(?:api[_-]?key|secret|passwd|password)\s*[:=]\s*[\"'][^\"']{8,}[\"'])")
     for p, text in text_files(paths):
         if p == "Tools/check_repo.py":

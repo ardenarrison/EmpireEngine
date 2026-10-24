@@ -76,6 +76,7 @@ public sealed class EditorApp
     private bool _confirmingExit;       // the unsaved-changes prompt is open
     private readonly FolderBrowser _folderBrowser = new();
     private readonly CreditsWindow _credits = new();
+    private readonly Editor.Assistant.AssistantWindow _assistant = new();
     private string _buildName = "";
     private BuildStage _buildStage = BuildStage.Off;
     private string _buildFolder = "";
@@ -2829,6 +2830,8 @@ public sealed class EditorApp
         }
         if (g.BeginMenu("Help"))
         {
+            if (g.MenuItem("AI Assistant...", enabled: _mode == EditorMode.Edit))
+                _assistant.Open();
             if (g.MenuItem("Credits"))
                 _credits.Open();
             g.EndMenu();
@@ -2836,7 +2839,26 @@ public sealed class EditorApp
         g.EndMenuBar();
         _credits.Draw(g);
         if (_mode == EditorMode.Edit)
+            _assistant.Draw(g, AssistantContext());
+        if (_mode == EditorMode.Edit)
             _packages.Draw(g, _scene, _scriptFields.Classes, _scriptFields.Errors, _scriptFields.IsCompiling);
+    }
+
+    // What the AI assistant may attach to a question if the user ticks it: the script open in the code view, and the selected
+    // object's name, transform and components. Only the script's name is given, never its path.
+    private Editor.Assistant.AssistantContext AssistantContext()
+    {
+        if (!_assistant.IsOpen) return new Editor.Assistant.AssistantContext(null, null, null, null);
+        var script = _code.CurrentScript;
+        string? summary = null;
+        if (_selected is { } obj)
+        {
+            var parts = obj.Components.Select(c => c is ScriptComponent s ? $"Script({s.ScriptName})" : c.GetType().Name);
+            var e = obj.Position;
+            summary = $"Name: {obj.Name}\nPosition: ({e.X:0.##}, {e.Y:0.##}, {e.Z:0.##})\nScale: ({obj.Scale.X:0.##}, {obj.Scale.Y:0.##}, {obj.Scale.Z:0.##})\n" +
+                      $"Components: {(obj.Components.Count == 0 ? "none" : string.Join(", ", parts))}\nChildren: {obj.Children.Count}";
+        }
+        return new Editor.Assistant.AssistantContext(script?.Name, script?.Text, _selected?.Name, summary);
     }
 
     // ---- exiting ---------------------------------------------------------------------
@@ -2887,6 +2909,7 @@ public sealed class EditorApp
     private bool CloseTopDialog()
     {
         if (_credits.IsOpen) { _credits.Close(); return true; }
+        if (_assistant.IsOpen) { _assistant.Close(); return true; }
         if (_packages.IsOpen) { _packages.Close(); return true; }
         if (_assetPanel.CloseDialog()) return true;
         if (_browser.IsOpen) { _browser.Close(); return true; }

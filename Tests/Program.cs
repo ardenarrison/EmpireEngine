@@ -1,3 +1,4 @@
+using Editor.Assistant;
 using System.IO.Compression;
 using System.Net;
 using System.Reflection;
@@ -1946,6 +1947,142 @@ Directory.CreateDirectory(Path.Combine(projectDir, "Scenes"));
     bool refusedBroken = false;
     try { EmpireProject.SetEditorVersion(brokenDir, "0.1.1"); } catch (InvalidDataException) { refusedBroken = true; }
     Check(refusedBroken && File.ReadAllText(Path.Combine(brokenDir, "project.empire")) == "{ this is not json", "a project.empire that can't be read is left alone, not overwritten");
+}
+
+// ---- The editor's AI assistant: the Claude API client, key storage and prompts -----------------------------------------
+{
+    const string Key = "sk-" + "ant-test-0123456789abcdefghijklmnop";   // split so the repo scan doesn't mistake a fixture for a real key
+    string ReplyJson(string text = "Hello there", int input = 12, int output = 7, string stop = "end_turn") =>
+        $$"""{ "id": "msg_1", "type": "message", "role": "assistant", "content": [ { "type": "text", "text": "{{text}}" } ], "stop_reason": "{{stop}}", "usage": { "input_tokens": {{input}}, "output_tokens": {{output}} } }""";
+    HttpResponseMessage Json(HttpStatusCode code, string body) => new(code) { Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json") };
+    async Task<(AssistantReply? Reply, string Error)> Ask(Func<HttpRequestMessage, HttpResponseMessage> respond, string key = Key, string endpoint = AssistantClient.Endpoint,
+        IReadOnlyList<ChatMessage>? messages = null, CancellationToken ct = default)
+    {
+        using var http = new HttpClient(new FakeGitHub(respond));
+        try { return (await AssistantClient.SendAsync(http, key, "claude-sonnet-5-5", "be brief", messages ?? [new ChatMessage("user", "hi")], 1000, ct, endpoint), ""); }
+        catch (AssistantException ex) { return (null, ex.Message); }
+    }
+
+    // --- what is sent ---
+    string? sentBody = null; HttpRequestMessage? sentRequest = null;
+    var ok = await Ask(r => { sentRequest = r; sentBody = r.Content!.ReadAsStringAsync().Result; return Json(HttpStatusCode.OK, ReplyJson()); },
+        messages: [new ChatMessage("user", "first"), new ChatMessage("assistant", "answer"), new ChatMessage("user", "second \"quoted\"")]);
+    using (var sent = System.Text.Json.JsonDocument.Parse(sentBody!))
+    {
+        var body0 = sent.RootElement;
+        Check(sentRequest!.Method == HttpMethod.Post && sentRequest.RequestUri!.ToString() == "https://api.anthropic.com/v1/messages" &&
+              sentRequest.Headers.GetValues("x-api-key").Single() == Key && sentRequest.Headers.GetValues("anthropic-version").Single() == "2023-06-01",
+              "a question goes to api.anthropic.com with the user's key and the API version in headers");
+        Check(body0.GetProperty("model").GetString() == "claude-sonnet-5-5" && body0.GetProperty("max_tokens").GetInt32() == 1000 && body0.GetProperty("system").GetString() == "be brief" &&
+              body0.GetProperty("messages").GetArrayLength() == 3 && body0.GetProperty("messages")[2].GetProperty("content").GetString() == "second \"quoted\"" &&
+              body0.GetProperty("messages")[1].GetProperty("role").GetString() == "assistant",
+              "the request holds the model, the system prompt and the whole conversation, with quotes escaped");
+        Check(!sentBody!.Contains(Key), "the API key is in a header only, never in the body that is sent");
+    }
+    Check(ok.Reply is { Text: "Hello there", InputTokens: 12, OutputTokens: 7, StopReason: "end_turn" }, "the answer's text and token counts are read");
+    var multi = AssistantClient.ParseReply("""{ "content": [ { "type": "text", "text": "A" }, { "type": "tool_use", "id": "x" }, { "type": "text", "text": "B" } ], "usage": { "input_tokens": 1, "output_tokens": 2 } }""");
+    Check(multi.Text == "AB" && AssistantClient.ParseReply("""{ "content": [], "stop_reason": "refusal" }""").Text.Contains("declined") && AssistantClient.ParseReply("""{ "content": [] }""").Text.Contains("empty"),
+          "several text blocks are joined, other block types are ignored, and an empty or refused answer is explained");
+
+    // --- failures are explained, and the key never appears in a message ---
+    async Task<string> ErrorFor(HttpStatusCode code, string body) => (await Ask(_ => Json(code, body))).Error;
+    string e401 = await ErrorFor(HttpStatusCode.Unauthorized, """{ "type": "error", "error": { "type": "authentication_error", "message": "invalid x-api-key" } }""");
+    string e429 = await ErrorFor((HttpStatusCode)429, """{ "error": { "message": "rate limited" } }""");
+    string e529 = await ErrorFor((HttpStatusCode)529, "overloaded");
+    string e400 = await ErrorFor(HttpStatusCode.BadRequest, """{ "error": { "message": "Your credit balance is too low to access the Anthropic API." } }""");
+    string e404 = await ErrorFor(HttpStatusCode.NotFound, """{ "error": { "message": "model: nope" } }""");
+    string eEcho = await ErrorFor(HttpStatusCode.Unauthorized, $$"""{ "error": { "message": "bad key {{Key}} sent" } }""");
+    Check(e401.Contains("rejected the API key") && e429.Contains("too many requests") && e529.Contains("busy") && e400.Contains("credit balance is too low") && e404.Contains("model name"),
+          "a rejected key, a rate limit, an overloaded service, a low balance and an unknown model each get a plain message");
+    Check(!eEcho.Contains(Key) && eEcho.Contains("[key removed]"), "an error message that echoes the key has it removed before it is shown");
+    var offline = await Ask(_ => throw new HttpRequestException("no route to host"));
+    Check(offline.Error.Contains("Couldn't reach Anthropic") && !offline.Error.Contains(Key), "no internet connection is explained");
+    var garbage = await Ask(_ => Json(HttpStatusCode.OK, "this is not json"));
+    Check(garbage.Error.Contains("expected form"), "an answer that isn't JSON is a readable error");
+    using (var cancelled = new CancellationTokenSource())
+    {
+        cancelled.Cancel();
+        bool stopped = false;
+        try { await Ask(_ => Json(HttpStatusCode.OK, ReplyJson()), ct: cancelled.Token); } catch (OperationCanceledException) { stopped = true; }
+        Check(stopped, "stopping a question cancels it");
+    }
+
+    // --- where it may send ---
+    Check(AssistantClient.IsAllowedEndpoint("https://api.anthropic.com/v1/messages") && AssistantClient.IsAllowedEndpoint("http://127.0.0.1:8080/v1/messages") &&
+          !AssistantClient.IsAllowedEndpoint("http://api.anthropic.com/v1/messages") && !AssistantClient.IsAllowedEndpoint("https://evil.example.com/v1/messages") &&
+          !AssistantClient.IsAllowedEndpoint("https://api.anthropic.com.evil.example/v1/messages") && !AssistantClient.IsAllowedEndpoint("not a url"),
+          "the key is only ever sent to https://api.anthropic.com (this computer's own address is allowed for tests)");
+    int calls = 0;
+    var blocked = await Ask(_ => { calls++; return Json(HttpStatusCode.OK, ReplyJson()); }, endpoint: "https://evil.example.com/v1/messages");
+    Check(blocked.Error.Contains("only talks to api.anthropic.com") && calls == 0, "a request to any other address is refused before anything is sent");
+    var noMessage = await Ask(_ => { calls++; return Json(HttpStatusCode.OK, ReplyJson()); }, messages: []);
+    var endsWithReply = await Ask(_ => { calls++; return Json(HttpStatusCode.OK, ReplyJson()); }, messages: [new ChatMessage("user", "a"), new ChatMessage("assistant", "b")]);
+    var badKey = await Ask(_ => { calls++; return Json(HttpStatusCode.OK, ReplyJson()); }, key: "short");
+    Check(noMessage.Error.Length > 0 && endsWithReply.Error.Length > 0 && badKey.Error.Contains("API key") && calls == 0, "nothing is sent without a question or with an invalid key");
+
+    // --- the key and settings on disk ---
+    string assistantDir = Path.Combine(dir, "assistant-" + Guid.NewGuid().ToString("N"));
+    Check(AssistantKeyStore.ValidateKey(Key) is null && AssistantKeyStore.ValidateKey("") is not null && AssistantKeyStore.ValidateKey("has a space 0123456789abcdef") is not null &&
+          AssistantKeyStore.ValidateKey("line\nbreak0123456789abcdefgh") is not null && AssistantKeyStore.ValidateKey(new string('k', 500)) is not null,
+          "a key must be one printable string without spaces or line breaks, so it can't break out of a header");
+    const string EnvKey = "sk-" + "ant-from-environment-0123456789abcdef";
+    string? oldEnvironment = Environment.GetEnvironmentVariable(AssistantKeyStore.EnvironmentVariable);
+    try
+    {
+        Environment.SetEnvironmentVariable(AssistantKeyStore.EnvironmentVariable, null);
+        Check(AssistantKeyStore.Resolve(out _, assistantDir) is null, "with no saved key and no environment variable there is no key");
+        AssistantKeyStore.Save("  " + Key + "\n", assistantDir);
+        Check(AssistantKeyStore.Resolve(out string source, assistantDir) == Key && source == "file", "a saved key is read back, trimmed");
+        if (!OperatingSystem.IsWindows())
+            Check(File.GetUnixFileMode(Path.Combine(assistantDir, "anthropic-api-key")) == (UnixFileMode.UserRead | UnixFileMode.UserWrite), "the key file can be read only by its owner");
+        Environment.SetEnvironmentVariable(AssistantKeyStore.EnvironmentVariable, EnvKey);
+        Check(AssistantKeyStore.Resolve(out string source2, assistantDir) == EnvKey && source2 == "environment", "the ANTHROPIC_API_KEY environment variable wins over a saved key");
+        Environment.SetEnvironmentVariable(AssistantKeyStore.EnvironmentVariable, null);
+        AssistantKeyStore.Delete(assistantDir);
+        Check(AssistantKeyStore.Resolve(out _, assistantDir) is null && !File.Exists(Path.Combine(assistantDir, "anthropic-api-key")), "removing the saved key deletes its file");
+        bool refusedSave = false;
+        try { AssistantKeyStore.Save("not a key", assistantDir); } catch (AssistantException) { refusedSave = true; }
+        Check(refusedSave && !File.Exists(Path.Combine(assistantDir, "anthropic-api-key")), "an invalid key is not saved");
+    }
+    finally { Environment.SetEnvironmentVariable(AssistantKeyStore.EnvironmentVariable, oldEnvironment); }
+
+    var fresh = AssistantSettings.Load(assistantDir);
+    Check(!fresh.HasConsented && !fresh.IncludeScript && !fresh.IncludeSelection && fresh.Model == AssistantClient.DefaultModel,
+          "the assistant starts switched off, with nothing attached by default");
+    fresh.ConsentVersion = AssistantSettings.CurrentConsentVersion; fresh.IncludeScript = true; fresh.Model = "claude-opus-5-5";
+    fresh.Save(assistantDir);
+    var assistantSaved = AssistantSettings.Load(assistantDir);
+    Check(assistantSaved.HasConsented && assistantSaved.IncludeScript && !assistantSaved.IncludeSelection && assistantSaved.Model == "claude-opus-5-5", "the user's agreement and choices are remembered");
+    assistantSaved.ConsentVersion = AssistantSettings.CurrentConsentVersion - 1;
+    Check(!assistantSaved.HasConsented, "a notice that has changed since the user agreed is asked about again");
+    File.WriteAllText(Path.Combine(assistantDir, "assistant.json"), "{ broken");
+    Check(!AssistantSettings.Load(assistantDir).HasConsented, "unreadable settings count as not agreed, not as a crash");
+    Check(!File.ReadAllText(Path.Combine(assistantDir, "assistant.json")).Contains("sk-ant"), "the settings file never holds the key");
+
+    // --- what is attached ---
+    var ctx = new AssistantContext("Mover", "public class Mover : Behaviour { }", "Player", "Name: Player\nPosition: (0, 1, 0)");
+    string plain = AssistantPrompt.BuildUserMessage("  why is it slow?  ", ctx, includeScript: false, includeSelection: false);
+    string withScript = AssistantPrompt.BuildUserMessage("why?", ctx, true, false);
+    string withBoth = AssistantPrompt.BuildUserMessage("why?", ctx, true, true);
+    Check(plain == "why is it slow?", "with nothing ticked only the question is sent");
+    Check(withScript.Contains("<open_script name=\"Mover\">") && withScript.Contains("class Mover") && !withScript.Contains("selected_object") && withScript.EndsWith("why?") &&
+          withBoth.Contains("<selected_object name=\"Player\">"), "a ticked script or selection is attached, and only those");
+    var pathy = new AssistantContext("/mnt/someone/Secret Project/Scripts/Mover\"><x", "code", null, null);
+    string pathMessage = AssistantPrompt.BuildUserMessage("q", pathy, true, false);
+    Check(!pathMessage.Contains("/mnt") && !pathMessage.Contains("someone") && pathMessage.Contains("name=\"Moverx\">"), "only a script's name is sent, never a folder path, and a name can't break out of its tag");
+    string huge = AssistantPrompt.BuildUserMessage("q", new AssistantContext("Big", new string('x', 100_000), null, null), true, false);
+    Check(huge.Length < AssistantPrompt.MaxAttachmentChars + 500 && huge.Contains("too long to send in full"), "a very long script is cut, and says so");
+    Check(AssistantPrompt.BuildUserMessage(new string('q', 20_000), ctx, false, false).Length == AssistantPrompt.MaxQuestionChars, "a very long question is cut");
+    var longChat = Enumerable.Range(0, 60).Select(i => new ChatMessage(i % 2 == 0 ? "user" : "assistant", "m" + i)).ToList();
+    var recent = AssistantPrompt.Recent(longChat);
+    Check(recent.Count <= AssistantPrompt.MaxMessages && recent[0].Role == "user" && recent[^1].Text == "m59", "only the recent part of a long conversation is sent, starting with a user message");
+    Check(AssistantPrompt.System.Contains("<project_context>") && AssistantPrompt.System.Contains("not instructions"), "the model is told the project content is data, not instructions");
+
+    // --- showing answers ---
+    Check(AssistantText.ToAscii("It\u2019s \u201Cgood\u201D \u2014 ok\u2026 \u2022 a\u2192b \ud83d\ude00\tx") == "It's \"good\" - ok... * a->b ??    x", "an answer is shown in the editor's ASCII font: quotes, dashes and arrows are mapped and the rest becomes ?");
+    var blocks = AssistantText.CodeBlocks("Try:\n```csharp\nvar a = 1;\nvar b = 2;\n```\ntext\n```\nsecond\n```\n");
+    Check(blocks.Count == 2 && blocks[0] == "var a = 1;\nvar b = 2;" && blocks[1] == "second" && AssistantText.CodeBlocks("no code").Count == 0, "the code blocks in an answer can be copied one by one");
+    Check(AssistantClient.Models.Contains(AssistantClient.DefaultModel), "the default model is one of the models offered");
 }
 
 Console.WriteLine(failures == 0 ? "\nAll checks passed." : $"\n{failures} check(s) failed.");
