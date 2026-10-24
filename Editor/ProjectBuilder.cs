@@ -12,7 +12,8 @@ namespace Editor;
 public sealed record BuildResult(bool Success, string Message, string? OutputFolder, string Log = "");
 
 // Builds a standalone game into <parent>/<buildName>/:
-//   <buildName>(.exe) and its runtime libraries, published from Player/ for this machine
+//   <buildName>(.exe) and its runtime libraries: published from Player/ for this machine when the source is here, or
+//                     copied from the built Player/ folder that a released editor carries next to it
 //   GameData/Core/...   a copy of the project's content; Models/... keeps its folder structure
 //   GameData/game.json  which scene the game starts with
 public static class ProjectBuilder
@@ -67,10 +68,12 @@ public static class ProjectBuilder
         if (name.Length == 0)
             return Fail("The build name is empty.");
 
+        // A build from source has Player/Player.csproj above the editor. A released editor has no source, but carries the
+        // player already built (Player/ next to empire.dll), which is used as it is.
         string? playerProject = FindPlayerProject();
-        if (playerProject is null)
-            return Fail("Could not find Player/Player.csproj in a folder above the Editor.");
-        string playerDir = Path.GetDirectoryName(playerProject)!;
+        string? prebuiltPlayer = playerProject is null ? FindPrebuiltPlayer() : null;
+        if (playerProject is null && prebuiltPlayer is null)
+            return Fail("Could not find Player/Player.csproj in a folder above the Editor, or a built Player folder next to it.");
 
         string content = Path.GetFullPath(contentRoot);
         string scene = Path.GetFullPath(scenePath);
@@ -86,19 +89,32 @@ public static class ProjectBuilder
         // Build files for the Player go in a temp folder outside the projects, so they never mix with the Editor's obj/bin.
         string artifacts = Path.Combine(Path.GetTempPath(), "empire-player-build");
 
-        // 1. Restore packages for this platform.
-        var (restoreExit, restoreLog) = Run("dotnet",
-            $"restore \"{playerProject}\" -r {rid} --artifacts-path \"{artifacts}\"", playerDir);
-        if (restoreExit != 0)
-            return Failed("dotnet restore failed", restoreExit, restoreLog);
+        string log;
+        if (prebuiltPlayer is not null)
+        {
+            // 1-2. Copy the built player, with its program renamed to the game's name. The program finds its Player.dll by a
+            //      path stored inside it, not by its own file name, so renaming it is safe.
+            CopyPrebuiltPlayer(prebuiltPlayer, outDir, name);
+            log = $"Copied the built player from {prebuiltPlayer} (no .NET SDK needed).";
+        }
+        else
+        {
+            string playerDir = Path.GetDirectoryName(playerProject)!;
 
-        // 2. Publish the Player for this platform, including the runtime.
-        var (publishExit, publishLog) = Run("dotnet",
-            $"publish \"{playerProject}\" -c Release -r {rid} --self-contained true --no-restore " +
-            $"--artifacts-path \"{artifacts}\" -p:GameName=\"{name}\" -o \"{outDir}\"", playerDir);
-        string log = restoreLog + "\n" + publishLog;
-        if (publishExit != 0)
-            return Failed("dotnet publish failed", publishExit, log);
+            // 1. Restore packages for this platform.
+            var (restoreExit, restoreLog) = Run("dotnet",
+                $"restore \"{playerProject}\" -r {rid} --artifacts-path \"{artifacts}\"", playerDir);
+            if (restoreExit != 0)
+                return Failed("dotnet restore failed", restoreExit, restoreLog);
+
+            // 2. Publish the Player for this platform, including the runtime.
+            var (publishExit, publishLog) = Run("dotnet",
+                $"publish \"{playerProject}\" -c Release -r {rid} --self-contained true --no-restore " +
+                $"--artifacts-path \"{artifacts}\" -p:GameName=\"{name}\" -o \"{outDir}\"", playerDir);
+            log = restoreLog + "\n" + publishLog;
+            if (publishExit != 0)
+                return Failed("dotnet publish failed", publishExit, log);
+        }
 
         // 3. Publish does not always include the Vulkan and GLFW native libraries. Copy them in from the Editor's
         //    output folder, the NuGet package cache, and (on macOS) the Vulkan loader.
@@ -172,6 +188,36 @@ public static class ProjectBuilder
             if (File.Exists(candidate)) return candidate;
         }
         return null;
+    }
+
+    // The built player a released editor carries: Player/ next to empire.dll, holding the Player program and Player.dll.
+    private static string? FindPrebuiltPlayer()
+    {
+        string folder = Path.Combine(AppContext.BaseDirectory, "Player");
+        bool hasProgram = File.Exists(Path.Combine(folder, "Player")) || File.Exists(Path.Combine(folder, "Player.exe"));
+        return hasProgram && File.Exists(Path.Combine(folder, "Player.dll")) ? folder : null;
+    }
+
+    // Copies the built player into the game's folder, with Player/Player.exe named after the game.
+    private static void CopyPrebuiltPlayer(string from, string to, string gameName)
+    {
+        Directory.CreateDirectory(to);
+        foreach (var file in Directory.GetFiles(from))
+        {
+            string fileName = Path.GetFileName(file);
+            if (fileName.StartsWith('.')) continue;
+            bool isProgram = fileName is "Player" or "Player.exe";
+            string target = Path.Combine(to, isProgram ? gameName + Path.GetExtension(fileName) : fileName);
+            File.Copy(file, target, overwrite: true);
+            if (!OperatingSystem.IsWindows())
+                File.SetUnixFileMode(target, File.GetUnixFileMode(file));
+        }
+        foreach (var dir in Directory.GetDirectories(from))
+        {
+            string dirName = Path.GetFileName(dir);
+            if (!dirName.StartsWith('.'))
+                CopyDirectory(dir, Path.Combine(to, dirName));
+        }
     }
 
     private static (int ExitCode, string Output) Run(string fileName, string arguments, string workingDirectory)

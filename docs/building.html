@@ -38,11 +38,12 @@ GameData/
 </ul>
 
 <h3>What you need to build</h3>
-<p>Building runs <code>dotnet restore</code> and <code>dotnet publish</code> on the <code>Player</code> project, so it needs:</p>
+<p>Build Project takes the player from one of two places, and uses the first it finds:</p>
 <ul>
-  <li>the <strong>.NET 10 SDK</strong> on the computer, and</li>
-  <li><code>Player/Player.csproj</code> in a folder above the editor's own folder, which is the case when the editor runs from a checkout of this repository (with <code>dotnet run --project Editor</code> or from the Hub built from source). Otherwise the build stops with <em>Could not find Player/Player.csproj in a folder above the Editor</em>.</li>
+  <li><strong>A released editor</strong> (installed from the Hub) carries the player already built, in the <code>Player/</code> folder next to <code>empire.dll</code>. Building copies it, names the program after your game, and adds your project's content and compiled scripts. <strong>Nothing needs to be installed</strong>, not even the .NET SDK.</li>
+  <li><strong>An editor run from a checkout of this repository</strong> (with <code>dotnet run --project Editor</code>, or the Hub built from source) has <code>Player/Player.csproj</code> in a folder above it. Building then runs <code>dotnet restore</code> and <code>dotnet publish</code> on it, which needs the <strong>.NET 10 SDK</strong>.</li>
 </ul>
+<p>If neither is found, the build stops with <em>Could not find Player/Player.csproj in a folder above the Editor, or a built Player folder next to it</em>.</p>
 
 <h3>Running the game</h3>
 <ul>
@@ -78,7 +79,7 @@ python3 publish.py --rid win-x64 --rid linux-x64 --zip</code></pre>
   <tbody>
     <tr><td><code>--rid PLATFORM</code></td><td>A platform to build for: <code>osx-arm64</code>, <code>osx-x64</code>, <code>win-x64</code>, <code>win-arm64</code>, <code>linux-x64</code> or <code>linux-arm64</code>. Repeat for several. Defaults to this computer's.</td></tr>
     <tr><td><code>--out FOLDER</code></td><td>Where packages go (default <code>Empire/</code> next to the script, which git ignores)</td></tr>
-    <tr><td><code>--zip</code></td><td>Also zip each package: <code>EmpireHub-&lt;version&gt;-&lt;platform&gt;.zip</code> (the Hub) and <code>Empire-&lt;version&gt;-&lt;platform&gt;.zip</code> (the editor)</td></tr>
+    <tr><td><code>--zip</code></td><td>Also zip each package: <code>EmpireEngineHub-&lt;version&gt;-&lt;platform&gt;.zip</code> (the Hub) and <code>EmpireEngine-&lt;version&gt;-&lt;platform&gt;.zip</code> (the editor)</td></tr>
   </tbody>
 </table></div>
 <pre data-label="Empire/osx-arm64/ (the Hub package)"><code>EmpireHub                the Hub: run this</code></pre>
@@ -92,7 +93,7 @@ python3 publish.py --rid win-x64 --rid linux-x64 --zip</code></pre>
 <p>The Hub's <a href="projects.html#installing-other-versions">Install version…</a> button reads the project's GitHub releases. To make a version installable:</p>
 <ol class="steps">
   <li><strong>Bump the version</strong> (<code>EmpireVersion</code> in <code>Directory.Build.props</code>) and commit it.</li>
-  <li><strong>Build the zips</strong> on each platform you support: <code>python3 publish.py --zip</code> makes two in <code>Empire/</code>. <code>Empire-&lt;version&gt;-&lt;platform&gt;.zip</code> (for example <code>Empire-0.1.1-osx-arm64.zip</code>) is the editor, which the Hub's Install version… downloads; it holds <code>Empire/&lt;version&gt;/empire.dll</code>, and that name and layout are required. <code>EmpireHub-&lt;version&gt;-&lt;platform&gt;.zip</code> is the Hub itself, for people to download first.</li>
+  <li><strong>Build the zips</strong> on each platform you support: <code>python3 publish.py --zip</code> makes two in <code>Empire/</code>. <code>EmpireEngine-&lt;version&gt;-&lt;platform&gt;.zip</code> (for example <code>EmpireEngine-0.1.1-osx-arm64.zip</code>) is the editor, which the Hub's Install version… downloads; it holds <code>Empire/&lt;version&gt;/empire.dll</code>, and that name and layout are required. <code>EmpireEngineHub-&lt;version&gt;-&lt;platform&gt;.zip</code> is the Hub itself, for people to download first.</li>
   <li><strong>Create a release</strong> on GitHub (Releases &gt; Draft a new release) with a tag that is the version, <code>v0.1.1</code> or <code>0.1.1</code>, and attach both zips as release assets. GitHub adds a checksum to each asset, and the Hub checks it.</li>
   <li><strong>Publish it.</strong> Drafts aren't shown. Tick <em>Set as a pre-release</em> for a beta, and it appears in the list marked <em>Pre-release</em>.</li>
 </ol>
@@ -103,7 +104,7 @@ python3 publish.py --rid win-x64 --rid linux-x64 --zip</code></pre>
 </ul>
 
 <h2>Versioning</h2>
-<p>The Empire Engine version (currently <strong>0.1.0</strong>) is set once, as <code>EmpireVersion</code> in <code>Directory.Build.props</code>, and shared by the editor, the player and the Hub. Bump it there for a release. New projects record the version they were made with, and the Hub opens each project with that version when it's installed.</p>
+<p>The Empire Engine version (currently <strong>0.1.1</strong>) is set once, as <code>EmpireVersion</code> in <code>Directory.Build.props</code>, and shared by the editor, the player and the Hub. Bump it there for a release. New projects record the version they were made with, and the Hub opens each project with that version when it's installed.</p>
 
 </article>
 </body>

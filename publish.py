@@ -7,9 +7,9 @@
 The hub does not come with an editor. People install one from inside the hub (Installs > Install version...), which
 downloads the editor package from the GitHub release. The result is two folders in Empire/ for each platform:
 
-    Empire/osx-arm64/                the hub package         ->  EmpireHub-<version>-osx-arm64.zip
+    Empire/osx-arm64/                the hub package         ->  EmpireEngineHub-<version>-osx-arm64.zip
         EmpireHub                    the hub (run this)
-    Empire/osx-arm64-editor/         the editor package      ->  Empire-<version>-osx-arm64.zip
+    Empire/osx-arm64-editor/         the editor package      ->  EmpireEngine-<version>-osx-arm64.zip
         Empire/<version>/            what the hub unpacks into <hub>/Empire/<version>/
             empire                   the editor
             Player/                  the game player
@@ -103,8 +103,8 @@ def package(rid, out_root, version, make_zip):
 
     if make_zip:
         # The editor zip is the one the hub's Install version... downloads, so its name and layout are fixed:
-        # Empire-<version>-<platform>.zip holding Empire/<version>/ (see Hub/Releases/ReleaseCatalog.cs).
-        for name, root in ((f"EmpireHub-{version}-{rid}", destination), (f"Empire-{version}-{rid}", editor_root)):
+        # EmpireEngine-<version>-<platform>.zip holding Empire/<version>/ (see Hub/Releases/ReleaseCatalog.cs).
+        for name, root in ((f"EmpireEngineHub-{version}-{rid}", destination), (f"EmpireEngine-{version}-{rid}", editor_root)):
             print(f"Zipped: {shutil.make_archive(str(out_root / name), 'zip', root_dir=root)}")
     return destination, problems
 

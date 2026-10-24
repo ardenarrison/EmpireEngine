@@ -6,7 +6,7 @@ using System.Text.RegularExpressions;
 
 namespace EmpireHub;
 
-// A download the hub can offer for one computer: a zip made by publish.py, which holds Empire/<version>/ (the editor).
+// A download the hub can offer for one computer: the editor zip made by publish.py, which holds Empire/<version>/.
 public sealed record ReleaseAsset(string Name, string Url, long Size, string? Sha256);
 
 // One published version of Empire, as listed on GitHub's Releases page.
@@ -24,7 +24,7 @@ public sealed class EmpireRelease
 }
 
 // Finds the versions of Empire that can be installed: the releases of the project's GitHub repository. A release counts
-// when its tag is a version ("v0.1.1" or "0.1.1") and it has a zip named Empire-<version>-<platform>.zip for this computer.
+// when its tag is a version ("v0.1.1" or "0.1.1") and it has a zip named EmpireEngine-<version>-<platform>.zip (or Empire-<version>-<platform>.zip, as 0.1.0 named it) for this computer.
 public static class ReleaseCatalog
 {
     public const string Repository = "ardenarrison/EmpireEngine";
@@ -145,17 +145,24 @@ public static class ReleaseCatalog
         return Regex.IsMatch(text, @"^\d+(\.\d+){1,3}([-+][0-9A-Za-z][0-9A-Za-z.\-+]*)?$") ? text : null;
     }
 
-    // The release's zip for this platform: Empire-<version>-<platform>.zip. A zip for another version number still counts
-    // (a release can be re-tagged), but the one named for this version wins.
+    // The release's zip for this platform: EmpireEngine-<version>-<platform>.zip, or Empire-<version>-<platform>.zip as the
+    // 0.1.0 release named it. A zip for another version number still counts (a release can be re-tagged), but the one named
+    // for this version wins, and the current name wins over the old one.
+    private static readonly string[] AssetPrefixes = ["EmpireEngine-", "Empire-"];
+
     private static ReleaseAsset? PickAsset(List<GitHubAsset>? assets, string version, string platform)
     {
         var matches = (assets ?? new()).Where(a =>
                 (a.State is null or "uploaded") &&
                 a.BrowserDownloadUrl.Length > 0 &&
-                a.Name.StartsWith("Empire-", StringComparison.OrdinalIgnoreCase) &&
                 a.Name.EndsWith($"-{platform}.zip", StringComparison.OrdinalIgnoreCase))
+            .Select(a => (Asset: a, Rank: Array.FindIndex(AssetPrefixes, p => a.Name.StartsWith(p, StringComparison.OrdinalIgnoreCase))))
+            .Where(m => m.Rank >= 0)
+            .OrderBy(m => m.Rank)
+            .Select(m => m.Asset)
             .ToList();
-        var best = matches.FirstOrDefault(a => a.Name.Equals($"Empire-{version}-{platform}.zip", StringComparison.OrdinalIgnoreCase))
+        var best = AssetPrefixes.Select(p => matches.FirstOrDefault(a => a.Name.Equals($"{p}{version}-{platform}.zip", StringComparison.OrdinalIgnoreCase)))
+                       .FirstOrDefault(a => a is not null)
                    ?? matches.FirstOrDefault();
         if (best is null) return null;
 

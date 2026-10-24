@@ -1632,6 +1632,14 @@ Directory.CreateDirectory(Path.Combine(projectDir, "Scenes"));
           "a release without a zip for this platform has no download, while another platform finds it");
     Check(ReleaseCatalog.Parse(releaseJson, "osx-arm64").Single(r => r.Version == "0.1.1").Asset!.Url.Contains("osx-arm64") &&
           ReleaseCatalog.Parse(releaseJson, "linux-x64").All(r => r.Asset is null), "the 'Source code (zip)' GitHub adds is never offered as an install");
+    // The current zip name (EmpireEngine-...) is preferred, the 0.1.0 name (Empire-...) still installs, and the Hub's own zip never counts.
+    string AssetJson(params string[] names) => "[{ \"tag_name\": \"v0.3.0\", \"draft\": false, \"prerelease\": false, \"assets\": [" +
+        string.Join(",", names.Select(n => $"{{ \"name\": \"{n}\", \"size\": 1, \"state\": \"uploaded\", \"browser_download_url\": \"https://github.com/x/{n}\" }}")) + "] }]";
+    string? Picked(params string[] names) => ReleaseCatalog.Parse(AssetJson(names), "win-x64").Single().Asset?.Name;
+    Check(Picked("EmpireEngineHub-0.3.0-win-x64.zip", "Empire-0.3.0-win-x64.zip", "EmpireEngine-0.3.0-win-x64.zip") == "EmpireEngine-0.3.0-win-x64.zip" &&
+          Picked("EmpireHub-0.1.0-win-x64.zip", "Empire-0.1.0-win-x64.zip") == "Empire-0.1.0-win-x64.zip" &&
+          Picked("EmpireEngineHub-0.3.0-win-x64.zip", "EmpireHub-0.3.0-win-x64.zip") is null,
+          "the editor zip is EmpireEngine-<version>-<platform>.zip, the older Empire- name still installs, and the Hub's own zip is never picked");
     Check(ReleaseCatalog.VersionOf("v1.2.3") == "1.2.3" && ReleaseCatalog.VersionOf("1.2") == "1.2" && ReleaseCatalog.VersionOf("v1.0.0-rc.1") == "1.0.0-rc.1" &&
           ReleaseCatalog.VersionOf("latest") is null && ReleaseCatalog.VersionOf("v1.x") is null && ReleaseCatalog.VersionOf("") is null,
           "tags that are versions are recognised, with or without a leading v");
