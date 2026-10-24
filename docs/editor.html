@@ -148,10 +148,22 @@
 <h2>Live reloading</h2>
 <p>Once a second the editor reloads models whose files changed on disk, so a re-export from Blender shows up right away. Scripts edited elsewhere are picked up the same way.</p>
 
+<h2 id="project-settings">Project settings</h2>
+<p><strong>File &gt; Project Settings…</strong> opens the settings that belong to this project. They are saved in <code>project-settings.json</code> in the project folder, so they travel with the project and with version control.</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>Setting</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Editor Far Clip Plane</strong> (10 to 100000, usually 500)</td><td>How far from the editor's camera the scene is drawn, in world units. Anything farther away isn't drawn. Raise it to see distant objects, such as a big terrain's far edge, while you edit; lower it for finer depth detail close up.</td></tr>
+    <tr><td><strong>Editor Near Clip Plane</strong> (0.01 to 100, usually 0.1)</td><td>How close to the editor's camera things can be and still be drawn. Anything nearer isn't drawn. Lower it to look at small things up close without them being cut off; raise it for finer depth detail far away. It is never more than half the far plane, so lowering the far plane can pull the near plane in with it.</td></tr>
+  </tbody>
+</table></div>
+<p>Drag a number, or click it to type one; <em>Reset both to the usual values</em> puts them back to 500 and 0.1. The editor's clip planes only change the camera you fly around the scene with. The cameras in your scene have their own <strong>Near</strong> and <strong>Far</strong> (set on the Camera component), which is what the game and Play mode use, so changing them doesn't change how the game looks. They apply at once and are saved when you let go of the mouse or close the window.</p>
+
 <h2>Other windows</h2>
 <ul>
   <li><strong>File &gt; Build Project…</strong> builds a standalone game. See <a href="building.html">Building and publishing</a>.</li>
   <li><strong>File &gt; Package Manager…</strong> turns packages on and off. See <a href="packages.html">Packages</a>.</li>
+  <li><strong>File &gt; Project Settings…</strong> holds settings that belong to the project. See <a href="#project-settings">Project settings</a> below.</li>
   <li><strong>Help &gt; Credits</strong> lists third-party software and licenses.</li>
 </ul>
 

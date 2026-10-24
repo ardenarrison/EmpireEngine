@@ -1,4 +1,5 @@
 using Editor.Assistant;
+using Editor;
 using Editor.Terminal;
 using System.IO.Compression;
 using System.Net;
@@ -2283,6 +2284,69 @@ if (!OperatingSystem.IsWindows())
     }
     Check(!Directory.GetFiles(Path.Combine(Path.GetTempPath(), "empire-terminal-" + Environment.UserName), "*.tty").Any(f => File.GetLastWriteTime(f) > DateTime.Now.AddMinutes(-2)),
           "the temporary file naming the terminal is removed when the terminal closes");
+}
+
+// ---- Project settings (File > Project Settings): the editor's far clip plane --------------------------------------------------
+{
+    string psDir = Path.Combine(dir, "ps-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(psDir);
+    string psFile = Path.Combine(psDir, ProjectSettings.FileName);
+
+    Check(ProjectSettings.Load(psDir).EditorFarClipPlane == 500f && ProjectSettings.DefaultFarClipPlane == 500f, "a project with no settings file uses the usual far clip plane of 500");
+    Check(!File.Exists(psFile), "reading settings never creates the file");
+    var ps = new ProjectSettings { EditorFarClipPlane = 12000f };
+    ps.Save(psDir);
+    Check(ProjectSettings.Load(psDir).EditorFarClipPlane == 12000f && File.Exists(psFile), "a saved far clip plane is read back");
+    Check(Directory.GetFiles(psDir).Length == 1, "saving leaves no temporary files");
+
+    Check(new ProjectSettings { EditorFarClipPlane = 1f }.EditorFarClipPlane == ProjectSettings.MinFarClipPlane &&
+          new ProjectSettings { EditorFarClipPlane = -50f }.EditorFarClipPlane == ProjectSettings.MinFarClipPlane &&
+          new ProjectSettings { EditorFarClipPlane = 1e9f }.EditorFarClipPlane == ProjectSettings.MaxFarClipPlane &&
+          new ProjectSettings { EditorFarClipPlane = float.NaN }.EditorFarClipPlane == 500f &&
+          new ProjectSettings { EditorFarClipPlane = float.PositiveInfinity }.EditorFarClipPlane == 500f,
+          "a far clip plane outside the allowed range is brought into it, and a non-number becomes the default");
+
+    File.WriteAllText(psFile, """{ "editorFarClipPlane": 99999999, "somethingFromANewerEditor": { "keep": [1, 2, 3] } }""");
+    Check(ProjectSettings.Load(psDir).EditorFarClipPlane == ProjectSettings.MaxFarClipPlane, "an out-of-range value in the file is limited when read");
+    var ps2 = ProjectSettings.Load(psDir); ps2.EditorFarClipPlane = 2500f; ps2.Save(psDir);
+    string psText = File.ReadAllText(psFile);
+    Check(ProjectSettings.Load(psDir).EditorFarClipPlane == 2500f && psText.Contains("somethingFromANewerEditor") && psText.Contains("\"keep\""), "saving keeps fields in the file that this editor doesn't know about");
+
+    foreach (var bad in new[] { "{ broken", "", "[1,2]", "null", "{ \"editorFarClipPlane\": \"far\" }", "{ \"editorFarClipPlane\": null }" })
+    {
+        File.WriteAllText(psFile, bad);
+        Check(ProjectSettings.Load(psDir).EditorFarClipPlane == 500f && File.ReadAllText(psFile) == bad, $"an unreadable settings file ({(bad.Length > 12 ? bad[..12] : bad)}...) gives the default and is not touched by reading");
+    }
+    File.WriteAllText(psFile, "{ broken");
+    new ProjectSettings { EditorFarClipPlane = 800f }.Save(psDir);
+    Check(ProjectSettings.Load(psDir).EditorFarClipPlane == 800f, "saving replaces a broken settings file with a good one");
+
+    // the near clip plane
+    Check(new ProjectSettings().EditorNearClipPlane == 0.1f && ProjectSettings.DefaultNearClipPlane == 0.1f, "the editor's near clip plane is 0.1 unless set");
+    var nearSettings = new ProjectSettings { EditorFarClipPlane = 1000f, EditorNearClipPlane = 2f };
+    nearSettings.Save(psDir);
+    var nearBack = ProjectSettings.Load(psDir);
+    Check(nearBack.EditorNearClipPlane == 2f && nearBack.EditorFarClipPlane == 1000f, "near and far clip planes are saved and read back together");
+    Check(new ProjectSettings { EditorNearClipPlane = 0.0001f }.EditorNearClipPlane == ProjectSettings.MinNearClipPlane &&
+          new ProjectSettings { EditorNearClipPlane = 5000f }.EditorNearClipPlane == ProjectSettings.MaxNearClipPlane &&
+          new ProjectSettings { EditorNearClipPlane = float.NaN }.EditorNearClipPlane == 0.1f,
+          "a near clip plane outside the allowed range is brought into it, and a non-number becomes the default");
+    var tied = new ProjectSettings { EditorFarClipPlane = 1000f, EditorNearClipPlane = 80f };
+    Check(tied.EditorNearClipPlane == 80f, "a near plane up to half the far plane is allowed");
+    tied.EditorNearClipPlane = 900f;
+    Check(tied.EditorNearClipPlane == 100f, "the near plane is never more than 100");
+    var shortFar = new ProjectSettings { EditorFarClipPlane = 50f, EditorNearClipPlane = 90f };
+    Check(shortFar.EditorNearClipPlane == 25f, "and never more than half the far plane"); 
+    tied.EditorFarClipPlane = 40f;
+    Check(tied.EditorNearClipPlane == 20f && tied.EditorFarClipPlane == 40f, "lowering the far plane pulls the near plane in with it");
+    File.WriteAllText(psFile, """{ "editorNearClipPlane": 60, "editorFarClipPlane": 100 }""");
+    Check(ProjectSettings.Load(psDir) is { EditorFarClipPlane: 100f, EditorNearClipPlane: 50f }, "a file whose near plane is too far for its far plane is read with the near plane limited");
+    File.WriteAllText(psFile, """{ "editorFarClipPlane": 700 }""");
+    Check(ProjectSettings.Load(psDir) is { EditorFarClipPlane: 700f, EditorNearClipPlane: 0.1f }, "a file with only a far plane keeps the usual near plane");
+
+    bool refused = false;
+    try { new ProjectSettings().Save(Path.Combine(psDir, "no-such-folder")); } catch (IOException) { refused = true; } catch (UnauthorizedAccessException) { refused = true; }
+    Check(refused, "saving to a folder that doesn't exist is reported, not silently ignored");
 }
 
 Console.WriteLine(failures == 0 ? "\nAll checks passed." : $"\n{failures} check(s) failed.");

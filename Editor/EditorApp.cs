@@ -77,6 +77,7 @@ public sealed class EditorApp
     private readonly FolderBrowser _folderBrowser = new();
     private readonly CreditsWindow _credits = new();
     private readonly Editor.Assistant.AssistantWindow _assistant = new();
+    private ProjectSettingsWindow _projectSettings = null!;
     private Editor.Terminal.TerminalWindow _terminal = null!;
     private string _buildName = "";
     private BuildStage _buildStage = BuildStage.Off;
@@ -140,6 +141,10 @@ public sealed class EditorApp
         _terminal = new Editor.Terminal.TerminalWindow(contentRoot);
         AppDomain.CurrentDomain.ProcessExit += (_, _) => _terminal.Shutdown();   // stops the shell, and anything running in it, with the editor
         _packages = new PackageManagerWindow(contentRoot);
+        var projectSettings = ProjectSettings.Load(contentRoot);
+        _camera.Far = projectSettings.EditorFarClipPlane;
+        _camera.Near = projectSettings.EditorNearClipPlane;
+        _projectSettings = new ProjectSettingsWindow(projectSettings, _camera, contentRoot);
         _packages.Changed += _scriptFields.Invalidate;
         // The code view checks scripts against the enabled packages too, so using their classes isn't an error.
         Editor.Code.CodeEditorView.ExtraReferences = () => Packages.Enabled(_contentRoot)
@@ -391,7 +396,7 @@ public sealed class EditorApp
             else
             {
                 eye = _camera.Position;
-                viewProj = _camera.View * VulkanMath.Projection(MathF.PI / 3f, aspect, 0.1f, 500f);
+                viewProj = _camera.View * VulkanMath.Projection(MathF.PI / 3f, aspect, _camera.Near, _camera.Far);
             }
             var sceneArea = SceneArea(ctx);
             Input.SetView(new Vector2(sceneArea.Z, sceneArea.W), viewProj);   // for Input.GetMouseRay in scripts
@@ -2824,6 +2829,8 @@ public sealed class EditorApp
                 StartBuild();
             if (g.MenuItem("Package Manager...", enabled: _mode == EditorMode.Edit))
                 _packages.Open();
+            if (g.MenuItem("Project Settings...", enabled: _mode == EditorMode.Edit))
+                _projectSettings.Open();
             g.Separator();
             if (g.MenuItem("Save and Exit", enabled: _mode == EditorMode.Edit))
             {
@@ -2855,6 +2862,8 @@ public sealed class EditorApp
             _assistant.Draw(g, AssistantContext());
         _terminal.Update();
         _terminal.Draw(g, Environment.TickCount64 / 1000.0);
+        if (_mode == EditorMode.Edit)
+            _projectSettings.Draw(g);
         if (_mode == EditorMode.Edit)
             _packages.Draw(g, _scene, _scriptFields.Classes, _scriptFields.Errors, _scriptFields.IsCompiling);
     }
@@ -2926,6 +2935,7 @@ public sealed class EditorApp
         if (_credits.IsOpen) { _credits.Close(); return true; }
         if (_assistant.IsOpen) { _assistant.Close(); return true; }
         if (_packages.IsOpen) { _packages.Close(); return true; }
+        if (_projectSettings.IsOpen) { _projectSettings.Close(); return true; }
         if (_assetPanel.CloseDialog()) return true;
         if (_browser.IsOpen) { _browser.Close(); return true; }
         if (_pickingScript) { _pickingScript = false; return true; }

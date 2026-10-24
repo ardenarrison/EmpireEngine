@@ -18,6 +18,7 @@
   <thead><tr><th>File</th><th>Where</th><th>What</th></tr></thead>
   <tbody>
     <tr><td><code>project.empire</code></td><td>project root</td><td>The project's name, editor version and start scene</td></tr>
+    <tr><td><code>project-settings.json</code></td><td>project root</td><td>The editor's per-project settings (File &gt; Project Settings)</td></tr>
     <tr><td><code>*.empirescene</code></td><td><code>Scenes/</code> (usually)</td><td>A scene</td></tr>
     <tr><td><code>*.visualcode</code></td><td><code>Scripts/</code></td><td>A visual script</td></tr>
     <tr><td><code>packages.json</code></td><td><code>Packages/</code></td><td>The packages a project has turned on</td></tr>
@@ -34,6 +35,13 @@
   "startScene": "Scenes/Main.empirescene"
 }</code></pre>
 <p><code>startScene</code> defaults to <code>Scenes/Main.empirescene</code>. The Hub writes this file; a folder without one still opens if it has a scene in <code>Scenes/</code>.</p>
+
+<h2>project-settings.json</h2>
+<pre><code class="language-json">{
+  "editorFarClipPlane": 500,
+  "editorNearClipPlane": 0.1
+}</code></pre>
+<p>Written by the editor (File &gt; Project Settings), not the Hub, and only once you change a setting. <code>editorFarClipPlane</code> is how far the editor's own camera draws, from 10 to 100000 (default 500), and <code>editorNearClipPlane</code> is how close things can be and still be drawn, from 0.01 to 100 and never more than half the far plane (default 0.1). A value outside its range is brought into it. A missing or unreadable file means the defaults. Fields the editor doesn't know about are kept when it saves.</p>
 
 <h2>Scene files (.empirescene)</h2>
 <pre><code class="language-json">{

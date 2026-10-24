@@ -12,6 +12,8 @@ public sealed class EditorCamera
     public Vector3 Position;
     public float Yaw;     // radians around Y; 0 looks down -Z
     public float Pitch;   // radians, clamped
+    public float Far = ProjectSettings.DefaultFarClipPlane;     // how far the scene view draws (File > Project Settings)
+    public float Near = ProjectSettings.DefaultNearClipPlane;   // how close things can be and still be drawn (File > Project Settings)
 
     private double2? _lastCursor;
 
