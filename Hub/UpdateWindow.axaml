@@ -1,0 +1,28 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="EmpireHub.UpdateWindow"
+        Title="Update Empire Engine Hub"
+        Icon="avares://EmpireHub/Assets/EmpireEngineIcon.ico"
+        Width="560" Height="440" MinWidth="440" MinHeight="320"
+        WindowStartupLocation="CenterOwner">
+  <DockPanel Margin="24,20,24,16">
+    <TextBlock DockPanel.Dock="Top" Classes="title" Text="Update Empire Engine Hub" />
+    <TextBlock x:Name="MessageText" DockPanel.Dock="Top" Margin="0,8,0,10" TextWrapping="Wrap"
+               Text="Looking for a newer version on GitHub..." />
+
+    <StackPanel DockPanel.Dock="Bottom" Spacing="8" Margin="0,12,0,0">
+      <ProgressBar x:Name="Progress" IsVisible="False" Height="6" Minimum="0" Maximum="1" />
+      <TextBlock x:Name="StatusText" Classes="dim" TextWrapping="Wrap" MinHeight="18" />
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+        <Button x:Name="ActionButton" Classes="accent" IsVisible="False" Click="OnActionClick" />
+        <Button x:Name="CloseButton" Content="Close" Click="OnCloseClick" />
+      </StackPanel>
+    </StackPanel>
+
+    <Border x:Name="NotesBox" Background="#16181E" CornerRadius="6" Padding="14" IsVisible="False">
+      <ScrollViewer>
+        <SelectableTextBlock x:Name="NotesText" TextWrapping="Wrap" FontSize="13" />
+      </ScrollViewer>
+    </Border>
+  </DockPanel>
+</Window>

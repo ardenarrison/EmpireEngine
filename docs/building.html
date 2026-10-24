@@ -98,13 +98,14 @@ python3 publish.py --rid win-x64 --rid linux-x64 --zip</code></pre>
   <li><strong>Publish it.</strong> Drafts aren't shown. Tick <em>Set as a pre-release</em> for a beta, and it appears in the list marked <em>Pre-release</em>.</li>
 </ol>
 <ul>
+  <li>Installed Hubs update themselves from the <code>EmpireEngineHub-&lt;version&gt;-&lt;platform&gt;.zip</code> in a release (see <a href="projects.html#updating-the-hub">Updating the Hub</a>), so attach it for every platform. A release without a Hub zip for someone's computer simply offers them no update.</li>
   <li>Don't rely on GitHub's automatic "Source code" zips: they hold source, not a built editor, and the Hub never offers them.</li>
   <li>A release only needs the platforms you've built. Someone on another platform sees <em>No download for &lt;platform&gt;</em>.</li>
   <li>The repository the Hub reads is set in <code>Hub/Releases/ReleaseCatalog.cs</code> (<code>Repository</code>). A fork should change it. Setting the environment variable <code>EMPIRE_RELEASES_URL</code> to a releases-list address makes the Hub read that instead, which is how the tests and demos fake GitHub.</li>
 </ul>
 
 <h2>Versioning</h2>
-<p>The Empire Engine version (currently <strong>0.1.1</strong>) is set once, as <code>EmpireVersion</code> in <code>Directory.Build.props</code>, and shared by the editor, the player and the Hub. Bump it there for a release. New projects record the version they were made with, and the Hub opens each project with that version when it's installed.</p>
+<p>The Empire Engine version (currently <strong>0.1.2</strong>) is set once, as <code>EmpireVersion</code> in <code>Directory.Build.props</code>, and shared by the editor, the player and the Hub. Bump it there for a release. New projects record the version they were made with, and the Hub opens each project with that version when it's installed.</p>
 
 </article>
 </body>

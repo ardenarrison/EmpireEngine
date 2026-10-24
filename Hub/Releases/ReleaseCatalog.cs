@@ -19,7 +19,8 @@ public sealed class EmpireRelease
     public bool Prerelease { get; init; }
     public string Notes { get; init; } = "";
     public string? PageUrl { get; init; }
-    public ReleaseAsset? Asset { get; init; }             // the zip for this computer, or null when the release has none
+    public ReleaseAsset? Asset { get; init; }             // the editor's zip for this computer, or null when the release has none
+    public ReleaseAsset? HubAsset { get; init; }          // the Hub's own zip for this computer, which the Hub updates itself from
     public bool IsLatest { get; set; }                    // the newest version that isn't a pre-release
 }
 
@@ -123,7 +124,8 @@ public static class ReleaseCatalog
                 Prerelease = r.Prerelease,
                 Notes = (r.Body ?? "").Trim(),
                 PageUrl = r.HtmlUrl,
-                Asset = PickAsset(r.Assets, version, platform),
+                Asset = PickAsset(r.Assets, version, platform, EditorPrefixes),
+                HubAsset = PickAsset(r.Assets, version, platform, HubPrefixes),
             });
         }
 
@@ -145,23 +147,25 @@ public static class ReleaseCatalog
         return Regex.IsMatch(text, @"^\d+(\.\d+){1,3}([-+][0-9A-Za-z][0-9A-Za-z.\-+]*)?$") ? text : null;
     }
 
-    // The release's zip for this platform: EmpireEngine-<version>-<platform>.zip, or Empire-<version>-<platform>.zip as the
-    // 0.1.0 release named it. A zip for another version number still counts (a release can be re-tagged), but the one named
-    // for this version wins, and the current name wins over the old one.
-    private static readonly string[] AssetPrefixes = ["EmpireEngine-", "Empire-"];
+    // The release's zips for this platform. The editor's is EmpireEngine-<version>-<platform>.zip, or Empire-<version>-<platform>.zip
+    // as the 0.1.0 release named it; the Hub's own is EmpireEngineHub-<version>-<platform>.zip, or EmpireHub-... in 0.1.0. A zip
+    // for another version number still counts (a release can be re-tagged), but the one named for this version wins, and the
+    // current name wins over the old one.
+    private static readonly string[] EditorPrefixes = ["EmpireEngine-", "Empire-"];
+    private static readonly string[] HubPrefixes = ["EmpireEngineHub-", "EmpireHub-"];
 
-    private static ReleaseAsset? PickAsset(List<GitHubAsset>? assets, string version, string platform)
+    private static ReleaseAsset? PickAsset(List<GitHubAsset>? assets, string version, string platform, string[] prefixes)
     {
         var matches = (assets ?? new()).Where(a =>
                 (a.State is null or "uploaded") &&
                 a.BrowserDownloadUrl.Length > 0 &&
                 a.Name.EndsWith($"-{platform}.zip", StringComparison.OrdinalIgnoreCase))
-            .Select(a => (Asset: a, Rank: Array.FindIndex(AssetPrefixes, p => a.Name.StartsWith(p, StringComparison.OrdinalIgnoreCase))))
+            .Select(a => (Asset: a, Rank: Array.FindIndex(prefixes, p => a.Name.StartsWith(p, StringComparison.OrdinalIgnoreCase))))
             .Where(m => m.Rank >= 0)
             .OrderBy(m => m.Rank)
             .Select(m => m.Asset)
             .ToList();
-        var best = AssetPrefixes.Select(p => matches.FirstOrDefault(a => a.Name.Equals($"{p}{version}-{platform}.zip", StringComparison.OrdinalIgnoreCase)))
+        var best = prefixes.Select(p => matches.FirstOrDefault(a => a.Name.Equals($"{p}{version}-{platform}.zip", StringComparison.OrdinalIgnoreCase)))
                        .FirstOrDefault(a => a is not null)
                    ?? matches.FirstOrDefault();
         if (best is null) return null;

@@ -10,6 +10,7 @@ public sealed class HubSettings
     public List<ProjectEntry> Projects { get; set; } = new();
     public List<string> LocatedInstalls { get; set; } = new();
     public string? LastLocation { get; set; }
+    public bool CheckForUpdates { get; set; } = true;   // look for a newer Hub on GitHub when the Hub starts
 
     public static string Folder { get; } =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "EmpireHub");

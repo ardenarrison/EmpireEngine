@@ -34,7 +34,7 @@
 </div>
 
 <h2>Empire Engine Hub</h2>
-<p>Run the Hub with <code>dotnet run --project Hub</code>, or start <code>EmpireHub</code> from a packaged release. It has three pages.</p>
+<p>Run the Hub with <code>dotnet run --project Hub</code>, or start <code>EmpireHub</code> from a packaged release. It has three pages, and it can update itself (see <a href="#updating-the-hub">Updating the Hub</a>).</p>
 
 <h3>Projects</h3>
 <ul>
@@ -47,10 +47,19 @@
 
 <h3>Installs</h3>
 <p>The editor versions the Hub knows about. <strong>A released Hub comes without an editor</strong>: the first thing to do is press <em>Install version…</em> and install one. Editors live in <code>&lt;hub&gt;/Empire/&lt;version&gt;/</code>. (Building the Hub from source also copies the editor you just built there.) Each row says where it came from: <em>Built with the Hub</em>, <em>Downloaded from GitHub</em>, or <em>Located</em>.</p>
-<p><strong>A project opens with the Empire Engine version it was made with when that version is installed, and with the newest installed version otherwise.</strong></p>
+<p><strong>A project opens with the Empire Engine version it was made with. If that version isn't installed, the Hub asks which one to use</strong> (see <a href="#choosing-a-version">Choosing the editor version</a>). A project with no version recorded opens with the newest installed one.</p>
 <ul>
   <li><strong>Install version…</strong> downloads a version from GitHub (see below).</li>
   <li><strong>Locate…</strong> adds an editor folder from somewhere else, such as a build of your own. The Hub only remembers where it is.</li>
+  <li><strong>Uninstall</strong> (on a version in the Hub's own folder) deletes that version after asking. <strong>Remove</strong> (on one you located) only forgets it and leaves its files alone. Projects are never touched; one made with an uninstalled version opens with the newest installed version until you install it again (the Hub will ask which version to use). An editor that is open can't be uninstalled, so close it first.</li>
+</ul>
+
+<h3 id="choosing-a-version">Choosing the editor version</h3>
+<p>Each project records the version it was made with in <code>project.empire</code> (<code>editorVersion</code>).</p>
+<ul>
+  <li><strong>Changing it:</strong> on a project's row, open the <em>…</em> menu and choose <em>Change editor version…</em>. Pick one of the installed versions, or <em>Any version</em> to always use the newest. The Hub only edits <code>project.empire</code>; the project's files are not converted. A project saved by a newer version may not open in an older one, so back it up first if you're going back.</li>
+  <li><strong>When the version isn't installed:</strong> pressing <em>Open</em> shows a window that says which version the project wants. It suggests the closest installed version (the lowest one that is at least as new, otherwise the newest), and you can pick another from the list. Press <em>Open</em> to use it for this time, or tick <em>Also change this project to use that version</em> to switch the project over so you're not asked again. Press <em>Install …</em> to download the version the project wants from GitHub; once it's installed the project opens with it. <em>Cancel</em> opens nothing.</li>
+  <li>If no editor is installed at all, the window only offers to install the version the project wants.</li>
 </ul>
 
 <h3 id="installing-other-versions">Installing other versions</h3>
@@ -66,13 +75,28 @@
 <ul>
   <li><strong>What's checked.</strong> Only github.com over https is trusted. A download that doesn't match its checksum, isn't a zip with an Empire Engine editor in it, or tries to write outside its folder (or contains a symbolic link) is refused and discarded. A version is moved into place only once it has unpacked completely.</li>
   <li><strong>Rows you can't install:</strong> a version that's already installed reads <em>Installed</em>, and a release with no zip for your computer says <em>No download for &lt;platform&gt;</em>.</li>
-  <li><strong>Removing a version</strong> means deleting its folder in <code>&lt;hub&gt;/Empire/</code> while the Hub is closed.</li>
+  <li><strong>Removing a version</strong> is the <em>Uninstall</em> button on its row. It only deletes a folder directly inside <code>&lt;hub&gt;/Empire/</code> that holds an editor, never anything else.</li>
   <li><strong>If the list is empty</strong> or GitHub can't be reached, the window says why. Releases of a private repository can't be listed. GitHub also limits requests that aren't signed in to 60 an hour, which is plenty for this.</li>
   <li><strong>Write access.</strong> The Hub's own folder has to be writable. If you installed it somewhere protected (such as <code>Program Files</code>), move it to a folder you own.</li>
 </ul>
 
 <h3>About</h3>
-<p>The third-party software in the Hub and the editor, with each license. The editor shows the same list under <em>Help &gt; Credits</em>.</p>
+<p>The third-party software in the Hub and the editor, with each license. The editor shows the same list under <em>Help &gt; Credits</em>. This page also has the update controls below.</p>
+
+<h3 id="updating-the-hub">Updating the Hub</h3>
+<p>When the Hub starts it asks GitHub once whether a newer Hub has been released. If there is one, a box appears at the bottom of the sidebar: press <strong>Update…</strong>. You can also press <strong>Check for updates…</strong> on the About page at any time, and untick <em>Look for updates when the Hub starts</em> there to stop the automatic check.</p>
+<p>In the update window, <strong>Update and restart</strong> does this:</p>
+<ol>
+  <li>downloads the new Hub's zip for your computer (<code>EmpireEngineHub-&lt;version&gt;-&lt;platform&gt;.zip</code>) and checks it against the checksum GitHub lists for it,</li>
+  <li>unpacks it into a temporary folder and closes the Hub,</li>
+  <li>lets the new Hub copy its files over the old Hub's folder, then starts the Hub again.</li>
+</ol>
+<ul>
+  <li><strong>What is kept:</strong> your projects and settings (they live in the app data folder, not the Hub's folder), and every installed editor in <code>&lt;hub&gt;/Empire/</code>. An update never adds, replaces or removes an editor; use <em>Install version…</em> for that.</li>
+  <li><strong>What is checked:</strong> only github.com over https is trusted, and an update with no checksum, a wrong checksum, or an unsafe path in its zip is refused. Nothing changes until the download is complete and checked.</li>
+  <li><strong>When it can't update itself:</strong> a Hub run from a source build (<code>dotnet run</code>) or in a folder it can't write to says why, and the button opens the release page so you can download the new version yourself.</li>
+  <li><strong>If it fails:</strong> the old Hub keeps running, and if the file swap itself fails the Hub starts again and shows what went wrong in the status line.</li>
+</ul>
 
 <h2>Which scene opens</h2>
 <p>The editor opens the project's <code>StartScene</code> from <code>project.empire</code> if it exists, otherwise <code>Scenes/Main.empirescene</code>, otherwise the first scene it finds.</p>

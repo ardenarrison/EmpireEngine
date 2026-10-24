@@ -1790,6 +1790,162 @@ Directory.CreateDirectory(Path.Combine(projectDir, "Scenes"));
         Check(cancelled && Leftovers(rootCancel).Length == 0 && !Directory.Exists(Path.Combine(rootCancel, "0.1.1")),
               "cancelling a download stops it and leaves no files behind");
     }
+
+    // --- uninstalling an editor ---
+    string uninstallRoot = NewRoot();
+    string v1 = Path.Combine(uninstallRoot, "0.1.0"), v2 = Path.Combine(uninstallRoot, "0.1.1");
+    foreach (var v in new[] { v1, v2 }) { Directory.CreateDirectory(Path.Combine(v, "Player")); File.WriteAllText(Path.Combine(v, "empire.dll"), "dll"); File.WriteAllText(Path.Combine(v, "Player", "Player"), "p"); }
+    ReleaseInstaller.Uninstall(uninstallRoot, v1);
+    Check(!Directory.Exists(v1) && File.Exists(Path.Combine(v2, "empire.dll")), "uninstalling deletes that version's folder and no other");
+    string outside = Path.Combine(dir, "outside-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(outside); File.WriteAllText(Path.Combine(outside, "empire.dll"), "x");
+    string noEditorFolder = Path.Combine(uninstallRoot, "notes"); Directory.CreateDirectory(noEditorFolder); File.WriteAllText(Path.Combine(noEditorFolder, "readme.txt"), "x");
+    string[] refused =
+    [
+        InstallError(() => { ReleaseInstaller.Uninstall(uninstallRoot, outside); return Task.CompletedTask; }),                        // not in the installs folder
+        InstallError(() => { ReleaseInstaller.Uninstall(uninstallRoot, uninstallRoot); return Task.CompletedTask; }),                  // the installs folder itself
+        InstallError(() => { ReleaseInstaller.Uninstall(uninstallRoot, Path.Combine(v2, "Player")); return Task.CompletedTask; }),     // deeper than a version folder
+        InstallError(() => { ReleaseInstaller.Uninstall(uninstallRoot, Path.Combine(v2, "..", "..")); return Task.CompletedTask; }),   // sneaking out with ..
+        InstallError(() => { ReleaseInstaller.Uninstall(uninstallRoot, noEditorFolder); return Task.CompletedTask; }),                      // no editor in it
+    ];
+    Check(refused.All(m => m.Length > 0) && Directory.Exists(outside) && Directory.Exists(v2) && Directory.Exists(noEditorFolder) && Directory.Exists(uninstallRoot),
+          "uninstall refuses a folder outside the installs folder, the installs folder itself, a subfolder, a .. path and a folder with no editor");
+    if (!OperatingSystem.IsWindows())
+    {
+        string linked = Path.Combine(uninstallRoot, "0.9.0");
+        Directory.CreateSymbolicLink(linked, outside);
+        ReleaseInstaller.Uninstall(uninstallRoot, linked);
+        Check(!Directory.Exists(linked) && File.Exists(Path.Combine(outside, "empire.dll")), "uninstalling a link removes the link and never what it points at");
+    }
+
+    // --- updating the hub itself ---
+    string hubJson = """
+        [
+          { "tag_name": "v0.3.0", "draft": false, "prerelease": true, "assets": [ { "name": "EmpireEngineHub-0.3.0-win-x64.zip", "size": 1, "state": "uploaded", "browser_download_url": "https://github.com/x/h30" } ] },
+          { "tag_name": "v0.2.0", "draft": false, "prerelease": false, "assets": [
+              { "name": "EmpireEngineHub-0.2.0-win-x64.zip", "size": 10, "state": "uploaded", "browser_download_url": "https://github.com/x/EmpireEngineHub-0.2.0-win-x64.zip", "digest": "sha256:AB12" },
+              { "name": "EmpireEngine-0.2.0-win-x64.zip", "size": 99, "state": "uploaded", "browser_download_url": "https://github.com/x/EmpireEngine-0.2.0-win-x64.zip" } ] },
+          { "tag_name": "v0.1.5", "draft": false, "prerelease": false, "assets": [ { "name": "EmpireEngine-0.1.5-win-x64.zip", "size": 1, "state": "uploaded", "browser_download_url": "https://github.com/x/e15" } ] },
+          { "tag_name": "v0.1.1", "draft": false, "prerelease": false, "assets": [ { "name": "EmpireHub-0.1.1-win-x64.zip", "size": 1, "state": "uploaded", "browser_download_url": "https://github.com/x/h11" } ] }
+        ]
+        """;
+    var hubReleases = ReleaseCatalog.Parse(hubJson, "win-x64");
+    Check(hubReleases.Single(r => r.Version == "0.2.0") is { HubAsset.Name: "EmpireEngineHub-0.2.0-win-x64.zip", Asset.Name: "EmpireEngine-0.2.0-win-x64.zip" } &&
+          hubReleases.Single(r => r.Version == "0.1.1").HubAsset!.Name == "EmpireHub-0.1.1-win-x64.zip" && hubReleases.Single(r => r.Version == "0.1.1").Asset is null,
+          "a release's Hub zip and editor zip are told apart, and the 0.1.0-style EmpireHub- name still counts as a Hub zip");
+    Check(HubUpdater.FindUpdate(hubReleases, "0.1.0")?.Version == "0.2.0" && HubUpdater.FindUpdate(hubReleases, "0.2.0") is null && HubUpdater.FindUpdate(hubReleases, "0.9.0") is null &&
+          HubUpdater.FindUpdate(hubReleases, "0.1.5")?.Version == "0.2.0",
+          "an update is the newest final release with a Hub zip that is newer than this Hub: a pre-release, an older one and the same version are not");
+    Check(HubUpdater.FindUpdate(ReleaseCatalog.Parse(hubJson, "linux-x64"), "0.1.0") is null, "no update is offered when the newer release has no Hub zip for this computer");
+
+    byte[] hubZip = MakeZip(("EmpireHub", Bytes("host"), Plain), ("EmpireHub.dll", Bytes("dll"), Plain), ("Licenses/NOTICE.txt", Bytes("n"), Plain),
+        ("Empire/0.2.0/empire.dll", Bytes("must not be unpacked"), Plain));
+    HubUpdate Update(byte[] zip, string? sha, string url = "https://github.com/ardenarrison/EmpireEngine/releases/download/v0.2.0/EmpireEngineHub-0.2.0-osx-arm64.zip") =>
+        new("0.2.0", "v0.2.0", new ReleaseAsset("EmpireEngineHub-0.2.0-osx-arm64.zip", url, zip.Length, sha), null, "notes");
+    string TempRoot() => Path.Combine(dir, "tmp-" + Guid.NewGuid().ToString("N"));
+    string[] UpdateLeftovers(string root) => Directory.Exists(root) ? Directory.GetFileSystemEntries(root) : [];
+
+    string updTemp = TempRoot();
+    using (var http = Serving(hubZip, out _))
+    {
+        var reportsU = new List<InstallProgress>();
+        string staged = await HubUpdater.DownloadAsync(http, Update(hubZip, Sha(hubZip)), new SyncProgress(reportsU.Add), CancellationToken.None, updTemp);
+        Check(File.Exists(Path.Combine(staged, HubUpdater.ExecutableName)) && File.ReadAllText(Path.Combine(staged, "Licenses", "NOTICE.txt")) == "n" &&
+              !Directory.Exists(Path.Combine(staged, "Empire")) && !File.Exists(Path.Combine(Path.GetDirectoryName(staged)!, "download.zip")),
+              "a Hub update is downloaded, checked and unpacked, without the Empire/ folder and without leaving the zip behind");
+        Check(reportsU.Any(r => r.Stage == "Downloading") && reportsU.Any(r => r.Stage == "Unpacking"), "an update reports its progress");
+        if (!OperatingSystem.IsWindows())
+            Check((File.GetUnixFileMode(Path.Combine(staged, HubUpdater.ExecutableName)) & UnixFileMode.UserExecute) != 0, "the new Hub program can be run");
+    }
+    string UpdateError(HttpClient http, HubUpdate update, string root)
+    {
+        try { HubUpdater.DownloadAsync(http, update, null, CancellationToken.None, root).GetAwaiter().GetResult(); return ""; }
+        catch (InstallException ex) { return ex.Message; }
+    }
+    string updBad = TempRoot();
+    using (var http = Serving(hubZip, out _))
+    {
+        string wrongSumU = UpdateError(http, Update(hubZip, new string('0', 64)), updBad);
+        string noSumU = UpdateError(http, Update(hubZip, null), updBad);
+        string offSiteU = UpdateError(http, Update(hubZip, Sha(hubZip), "https://evil.example.com/hub.zip"), updBad);
+        byte[] notHub = MakeZip(("readme.txt", Bytes("x"), Plain));
+        using var http2 = Serving(notHub, out _);
+        string notHubU = UpdateError(http2, Update(notHub, Sha(notHub)), updBad);
+        byte[] slipHub = MakeZip(("EmpireHub", Bytes("h"), Plain), ("../evil.txt", Bytes("pwned"), Plain));
+        using var http3 = Serving(slipHub, out _);
+        string slipU = UpdateError(http3, Update(slipHub, Sha(slipHub)), updBad);
+        Check(wrongSumU.Contains("checksum") && noSumU.Contains("no checksum") && offSiteU.Contains("isn't on GitHub") && notHubU.Contains("doesn't contain the Hub") && slipU.Contains("unsafe path"),
+              "an update with a wrong checksum, no checksum, an address off GitHub, no Hub in it or an unsafe path is refused");
+        Check(UpdateLeftovers(updBad).Length == 0 && !File.Exists(Path.Combine(updBad, "..", "evil.txt")), "a refused update leaves nothing behind");
+    }
+
+    // Swapping the files: the new Hub's files replace the old ones, the editors in Empire/ and the user's other files stay.
+    string newHub = Path.Combine(dir, "newhub-" + Guid.NewGuid().ToString("N")), oldHub = Path.Combine(dir, "oldhub-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(Path.Combine(newHub, "Licenses")); Directory.CreateDirectory(Path.Combine(oldHub, "Empire", "0.1.1")); Directory.CreateDirectory(Path.Combine(oldHub, "Licenses"));
+    File.WriteAllText(Path.Combine(newHub, HubUpdater.ExecutableName), "new host"); File.WriteAllText(Path.Combine(newHub, "EmpireHub.dll"), "new dll");
+    File.WriteAllText(Path.Combine(newHub, "Licenses", "NOTICE.txt"), "new notice"); Directory.CreateDirectory(Path.Combine(newHub, "Empire")); File.WriteAllText(Path.Combine(newHub, "Empire", "intruder.txt"), "x");
+    File.WriteAllText(Path.Combine(oldHub, HubUpdater.ExecutableName), "old host"); File.WriteAllText(Path.Combine(oldHub, "EmpireHub.dll"), "old dll");
+    File.WriteAllText(Path.Combine(oldHub, "Licenses", "OLD.txt"), "old only"); File.WriteAllText(Path.Combine(oldHub, "Empire", "0.1.1", "empire.dll"), "editor");
+    if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(Path.Combine(newHub, HubUpdater.ExecutableName), (UnixFileMode)0x1ED);
+    HubUpdater.CopyOver(newHub, oldHub);
+    Check(File.ReadAllText(Path.Combine(oldHub, "EmpireHub.dll")) == "new dll" && File.ReadAllText(Path.Combine(oldHub, HubUpdater.ExecutableName)) == "new host" &&
+          File.ReadAllText(Path.Combine(oldHub, "Licenses", "NOTICE.txt")) == "new notice" && File.Exists(Path.Combine(oldHub, "Licenses", "OLD.txt")),
+          "applying an update replaces the Hub's files and keeps files only the old Hub had");
+    Check(File.ReadAllText(Path.Combine(oldHub, "Empire", "0.1.1", "empire.dll")) == "editor" && !File.Exists(Path.Combine(oldHub, "Empire", "intruder.txt")) &&
+          !Directory.GetFiles(oldHub, "*.new-*", SearchOption.AllDirectories).Any(),
+          "applying an update never touches the installed editors in Empire/, and leaves no temporary files");
+    if (!OperatingSystem.IsWindows())
+        Check((File.GetUnixFileMode(Path.Combine(oldHub, HubUpdater.ExecutableName)) & UnixFileMode.UserExecute) != 0, "the replaced Hub program keeps its executable permission");
+
+    // Whether a Hub may replace itself.
+    string installedHub = Path.Combine(dir, "installed-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(installedHub);
+    string buildHub = Path.Combine(dir, "build-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(buildHub); File.WriteAllText(Path.Combine(buildHub, "EmpireHub.pdb"), "");
+    Check(HubUpdater.CanReplace(installedHub, Path.Combine(installedHub, HubUpdater.ExecutableName), out _) &&
+          !HubUpdater.CanReplace(installedHub, "/usr/bin/dotnet", out string why1) && why1.Contains("not from an installed Hub") &&
+          !HubUpdater.CanReplace(installedHub, null, out _) && !HubUpdater.CanReplace(buildHub, Path.Combine(buildHub, HubUpdater.ExecutableName), out _) &&
+          !HubUpdater.CanReplace(installedHub, Path.Combine(buildHub, HubUpdater.ExecutableName), out _),
+          "a Hub replaces itself only when it is the installed program in its own folder, not a build or dotnet");
+
+    // Asking GitHub for an update end to end (a fake GitHub).
+    using (var http = new HttpClient(new FakeGitHub(r => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(hubJson), RequestMessage = r })))
+        Check((await HubUpdater.CheckAsync(http, CancellationToken.None, "0.1.0", "win-x64"))?.Version == "0.2.0" && await HubUpdater.CheckAsync(http, CancellationToken.None, "0.2.0", "win-x64") is null,
+              "checking for an update finds the newer Hub, and says nothing when this Hub is the newest");
+
+    // Old update folders are cleaned up, new ones kept.
+    string cleanRoot = TempRoot(); Directory.CreateDirectory(cleanRoot);
+    string oldUpd = Path.Combine(cleanRoot, "EmpireHubUpdate-old"), newUpd = Path.Combine(cleanRoot, "EmpireHubUpdate-new"), other = Path.Combine(cleanRoot, "something-else");
+    foreach (var d in new[] { oldUpd, newUpd, other }) Directory.CreateDirectory(d);
+    Directory.SetCreationTimeUtc(oldUpd, DateTime.UtcNow.AddHours(-3));
+    HubUpdater.CleanOldUpdates(cleanRoot);
+    Check(!Directory.Exists(oldUpd) && Directory.Exists(newUpd) && Directory.Exists(other), "leftover update folders older than an hour are deleted, and nothing else is");
+
+    // --- choosing an editor version for a project ---
+    Check(EditorVersions.Suggest("0.1.0", ["0.1.1", "0.2.0"]) == "0.1.1" && EditorVersions.Suggest("0.1.5", ["0.1.1", "0.2.0", "0.3.0"]) == "0.2.0" &&
+          EditorVersions.Suggest("0.5.0", ["0.1.1", "0.2.0"]) == "0.2.0" && EditorVersions.Suggest("0.2.0", ["0.2.0-beta", "0.10.0", "0.9.0"]) == "0.2.0-beta",
+          "the suggested editor is the lowest installed one that is at least as new as the project's, else the newest (compared by number, so 0.10 is newer than 0.9)");
+    Check(EditorVersions.Suggest("0.1.0", Array.Empty<string>()) is null, "nothing is suggested when no editor is installed");
+
+    string projDir = Path.Combine(dir, "proj-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(projDir);
+    File.WriteAllText(Path.Combine(projDir, "project.empire"), """{ "name": "Space", "editorVersion": "0.1.0", "startScene": "Scenes/Level1.empirescene" }""");
+    var changed = EmpireProject.SetEditorVersion(projDir, "0.1.1");
+    var reread = EmpireProject.TryRead(projDir)!;
+    Check(changed.EditorVersion == "0.1.1" && reread is { Name: "Space", EditorVersion: "0.1.1", StartScene: "Scenes/Level1.empirescene" },
+          "changing a project's editor version keeps its name and start scene");
+    EmpireProject.SetEditorVersion(projDir, null);
+    Check(EmpireProject.TryRead(projDir)!.EditorVersion is null, "a project can be set back to any version");
+
+    string bareDir = Path.Combine(dir, "bare-" + Guid.NewGuid().ToString("N") + "-My Game");
+    Directory.CreateDirectory(bareDir);
+    EmpireProject.SetEditorVersion(bareDir, "0.2.0");
+    Check(EmpireProject.TryRead(bareDir) is { EditorVersion: "0.2.0" } made && made.Name.EndsWith("-My Game"), "a project folder with no project.empire gets one, named after the folder");
+
+    string brokenDir = Path.Combine(dir, "broken-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(brokenDir);
+    File.WriteAllText(Path.Combine(brokenDir, "project.empire"), "{ this is not json");
+    bool refusedBroken = false;
+    try { EmpireProject.SetEditorVersion(brokenDir, "0.1.1"); } catch (InvalidDataException) { refusedBroken = true; }
+    Check(refusedBroken && File.ReadAllText(Path.Combine(brokenDir, "project.empire")) == "{ this is not json", "a project.empire that can't be read is left alone, not overwritten");
 }
 
 Console.WriteLine(failures == 0 ? "\nAll checks passed." : $"\n{failures} check(s) failed.");

@@ -102,7 +102,7 @@ public static class ReleaseInstaller
         return host == "github.com" || host.EndsWith(".github.com") || host.EndsWith(".githubusercontent.com");
     }
 
-    private static async Task<string> DownloadAsync(HttpClient http, ReleaseAsset asset, string path,
+    internal static async Task<string> DownloadAsync(HttpClient http, ReleaseAsset asset, string path,
         IProgress<InstallProgress>? progress, CancellationToken ct)
     {
         progress?.Report(new InstallProgress("Downloading", 0));
@@ -153,7 +153,27 @@ public static class ReleaseInstaller
         if (!Regex.IsMatch(folder, @"^[0-9A-Za-z][0-9A-Za-z._+\-]*$") || folder.Contains(".."))
             throw new InstallException($"The version folder in this download ('{folder}') isn't a usable name.");
 
-        string prefix = $"Empire/{folder}/";
+        ExtractEntries(zip, $"Empire/{folder}/", stagingFolder, skip: null, ct);
+
+        if (!File.Exists(Path.Combine(stagingFolder, "empire.dll")))
+            throw new InstallException("The editor in this download is incomplete (empire.dll is missing).");
+
+        // The editor starts through its own launcher; make sure it can run even if the zip didn't keep the permission.
+        if (!OperatingSystem.IsWindows())
+            foreach (var launcher in new[] { "empire", Path.Combine("Player", "Player") })
+            {
+                string path = Path.Combine(stagingFolder, launcher);
+                if (File.Exists(path))
+                    File.SetUnixFileMode(path, File.GetUnixFileMode(path) | UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute);
+            }
+        return folder;
+    }
+
+    // Unpacks the zip's entries under prefix ("" for all of them) into stagingFolder, refusing anything that could write
+    // outside it (paths with .. or a drive letter, symbolic links) and anything bigger than a release should be. Entries
+    // that skip returns true for are left out.
+    internal static void ExtractEntries(ZipArchive zip, string prefix, string stagingFolder, Func<string, bool>? skip, CancellationToken ct)
+    {
         Directory.CreateDirectory(stagingFolder);
         string stagingFull = Path.GetFullPath(stagingFolder) + Path.DirectorySeparatorChar;
         long written = 0;
@@ -163,6 +183,7 @@ public static class ReleaseInstaller
             ct.ThrowIfCancellationRequested();
             string name = Normalize(entry.FullName);
             if (!name.StartsWith(prefix, StringComparison.Ordinal) || name.Length == prefix.Length) continue;
+            if (skip?.Invoke(name) == true) continue;
 
             string relative = name[prefix.Length..];
             if (relative.Split('/').Any(part => part is ".." || part.Contains(':')) || relative.StartsWith('/'))
@@ -199,19 +220,30 @@ public static class ReleaseInstaller
             if (!OperatingSystem.IsWindows() && (unixMode & 0x1FF) != 0)
                 File.SetUnixFileMode(dest, (UnixFileMode)(unixMode & 0x1FF) | UnixFileMode.UserRead | UnixFileMode.UserWrite);
         }
+    }
 
-        if (!File.Exists(Path.Combine(stagingFolder, "empire.dll")))
-            throw new InstallException("The editor in this download is incomplete (empire.dll is missing).");
+    // Deletes an installed version: <root>/<version>/ and everything in it. It only deletes a folder directly inside the
+    // installs folder that holds an editor, so a wrong path can never take anything else with it.
+    public static void Uninstall(string root, string folder)
+    {
+        string rootFull = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        string target = Path.GetFullPath(folder).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var comparison = OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+        if (!string.Equals(Path.GetDirectoryName(target), rootFull, comparison) || string.Equals(target, rootFull, comparison))
+            throw new InstallException("That editor isn't in the Hub's installs folder, so the Hub won't delete it.");
+        if (!File.Exists(Path.Combine(target, "empire.dll")))
+            throw new InstallException("That folder doesn't hold an Empire editor, so the Hub won't delete it.");
 
-        // The editor starts through its own launcher; make sure it can run even if the zip didn't keep the permission.
-        if (!OperatingSystem.IsWindows())
-            foreach (var launcher in new[] { "empire", Path.Combine("Player", "Player") })
-            {
-                string path = Path.Combine(stagingFolder, launcher);
-                if (File.Exists(path))
-                    File.SetUnixFileMode(path, File.GetUnixFileMode(path) | UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute);
-            }
-        return folder;
+        try
+        {
+            // A link to somewhere else is removed as a link, so what it points at is never touched.
+            if (new DirectoryInfo(target).LinkTarget is not null) Directory.Delete(target);
+            else Directory.Delete(target, recursive: true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            throw new InstallException($"Couldn't delete {target}: {ex.Message} If an editor from it is open, close it and try again.");
+        }
     }
 
     private static string Normalize(string name) => name.Replace('\\', '/');

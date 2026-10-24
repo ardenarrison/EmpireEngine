@@ -6,7 +6,7 @@ Empire Engine is a 3D game engine written in C# on .NET 10. It draws with Vulkan
 scripts in C# or snap them together from blocks, press Play to try the game, and build it into a program you can hand to
 other people.
 
-> **Status: early (0.1.1).** It works and is used to make small games, but expect rough edges and changes between versions.
+> **Status: early (0.1.2).** It works and is used to make small games, but expect rough edges and changes between versions.
 
 ## What's in it
 

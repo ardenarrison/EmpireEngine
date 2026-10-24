@@ -12,8 +12,16 @@
     <Border Grid.RowSpan="2" Background="#16181E">
       <DockPanel Margin="12,20">
         <TextBlock x:Name="HubVersionText" DockPanel.Dock="Bottom" Classes="dim" Margin="8,0" />
+        <!-- Shown when GitHub has a newer Hub (found when the Hub starts, unless that is turned off on the About page) -->
+        <Border x:Name="UpdateBanner" DockPanel.Dock="Bottom" IsVisible="False" Background="#22304A" CornerRadius="6"
+                Padding="10" Margin="0,0,0,12">
+          <StackPanel Spacing="8">
+            <TextBlock x:Name="UpdateBannerText" TextWrapping="Wrap" FontSize="13" />
+            <Button Content="Update..." Classes="accent" HorizontalAlignment="Left" Click="OnUpdateBannerClick" />
+          </StackPanel>
+        </Border>
         <StackPanel Spacing="4">
-          <TextBlock Text="EMPIRE HUB" FontSize="18" FontWeight="Bold" LetterSpacing="2" Margin="8,0,0,24" />
+          <TextBlock Text="EMPIRE ENGINE HUB" FontSize="16" FontWeight="Bold" LetterSpacing="2" TextWrapping="Wrap" Margin="8,0,0,24" />
           <ListBox x:Name="Nav" SelectedIndex="0" Background="Transparent" SelectionChanged="OnNavChanged">
             <ListBoxItem Content="Projects" />
             <ListBoxItem Content="Installs" />
@@ -53,6 +61,7 @@
                   <Button Content="..." ToolTip.Tip="More">
                     <Button.Flyout>
                       <MenuFlyout>
+                        <MenuItem Header="Change editor version..." Click="OnChangeVersionClick" IsEnabled="{Binding Exists}" />
                         <MenuItem Header="Show in file manager" Click="OnRevealClick" IsEnabled="{Binding Exists}" />
                         <MenuItem Header="Remove from list" Click="OnRemoveClick" />
                       </MenuFlyout>
@@ -96,7 +105,7 @@
                 <Border Grid.Column="1" Classes="tag" Margin="12,0">
                   <TextBlock Text="{Binding Kind}" FontSize="12" />
                 </Border>
-                <Button Grid.Column="2" Content="Remove" Click="OnRemoveInstall" IsVisible="{Binding CanRemove}" />
+                <Button Grid.Column="2" Content="{Binding RemoveText}" Click="OnRemoveInstall" IsVisible="{Binding CanRemove}" />
               </Grid>
             </DataTemplate>
           </ListBox.ItemTemplate>
@@ -109,6 +118,10 @@
       <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="0,0,0,16">
         <TextBlock Classes="title" Text="About" />
         <TextBlock x:Name="AboutVersionText" FontSize="15" />
+        <StackPanel Orientation="Horizontal" Spacing="16" Margin="0,4,0,4">
+          <Button Content="Check for updates..." Click="OnCheckForUpdates" />
+          <CheckBox x:Name="AutoCheckBox" Content="Look for updates when the Hub starts" Click="OnAutoCheckChanged" />
+        </StackPanel>
         <TextBlock x:Name="BrutalNoticeText" Classes="dim" TextWrapping="Wrap" />
       </StackPanel>
       <Grid ColumnDefinitions="320,12,*">

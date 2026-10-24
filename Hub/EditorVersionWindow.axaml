@@ -1,0 +1,20 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="EmpireHub.EditorVersionWindow"
+        Icon="avares://EmpireHub/Assets/EmpireEngineIcon.ico"
+        Width="520" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner">
+  <StackPanel Margin="24,20,24,18" Spacing="10">
+    <TextBlock x:Name="TitleText" Classes="title" TextWrapping="Wrap" />
+    <TextBlock x:Name="MessageText" Classes="dim" TextWrapping="Wrap" />
+    <ComboBox x:Name="VersionBox" HorizontalAlignment="Stretch" Margin="0,4,0,0" />
+    <CheckBox x:Name="RememberBox" IsVisible="False"
+              Content="Also change this project to use that version, so I'm not asked again" />
+    <TextBlock x:Name="NoteText" Classes="dim" TextWrapping="Wrap" FontSize="12" />
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,8,0,0">
+      <Button x:Name="InstallButton" IsVisible="False" Click="OnInstall" />
+      <Button Content="Cancel" IsCancel="True" Click="OnCancel" />
+      <Button x:Name="PrimaryButton" Classes="accent" IsDefault="True" Click="OnPrimary" />
+    </StackPanel>
+  </StackPanel>
+</Window>

@@ -11,7 +11,8 @@ public sealed class EditorInstall
     public bool Downloaded { get; init; }         // put there by the hub from a GitHub release rather than shipped with it
 
     public string Kind => Downloaded ? "Downloaded from GitHub" : Bundled ? "Built with the Hub" : "Located";
-    public bool CanRemove => !Bundled;
+    public bool CanRemove => true;
+    public string RemoveText => Bundled ? "Uninstall" : "Remove";   // an editor in the hub's folder is deleted; a located one is only forgotten
 
     private const string EntryDll = "empire.dll";
 

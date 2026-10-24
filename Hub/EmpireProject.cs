@@ -27,6 +27,19 @@ public sealed class EmpireProject
         return null;
     }
 
+    // Changes which editor version a project uses (null for any version). A project without a project.empire gets one; one that
+    // exists but can't be read is left alone rather than overwritten.
+    public static EmpireProject SetEditorVersion(string folder, string? version)
+    {
+        var project = TryRead(folder);
+        if (project is null && File.Exists(Path.Combine(folder, FileName)))
+            throw new InvalidDataException($"{FileName} in {folder} couldn't be read, so it wasn't changed.");
+        project ??= new EmpireProject { Name = Path.GetFileName(folder.TrimEnd('/', '\\')) };
+        project.EditorVersion = version;
+        project.Write(folder);
+        return project;
+    }
+
     public void Write(string folder) =>
         File.WriteAllText(Path.Combine(folder, FileName), JsonSerializer.Serialize(this, HubJson.Default.EmpireProject));
 

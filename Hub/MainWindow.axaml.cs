@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Reflection;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -12,6 +13,8 @@ public partial class MainWindow : Window
     private readonly HubSettings _settings = HubSettings.Load();
     private List<EditorInstall> _installs = new();
     private List<ProjectItem> _projects = new();
+    private readonly List<(Process Process, string Folder)> _running = new();   // editors this Hub started that are still open
+    private HubUpdate? _pendingUpdate;
 
     public MainWindow()
     {
@@ -20,12 +23,16 @@ public partial class MainWindow : Window
             ?.InformationalVersion.Split('+')[0] ?? "?";
         HubVersionText.Text = "Empire Engine Hub " + version;
         AboutVersionText.Text = $"Empire Engine Hub {version}, made with the Empire Engine";
+        AutoCheckBox.IsChecked = _settings.CheckForUpdates;
         RefreshInstalls();
         RefreshProjects();
         Opened += (_, _) =>
         {
             SetDockIcon();
             ShowSplash();
+            HubUpdater.CleanOldUpdates();
+            if (HubUpdater.TakeLastError() is { } failure) Status(failure);
+            if (_settings.CheckForUpdates) _ = CheckForUpdateQuietly();
         };
     }
 
@@ -152,7 +159,7 @@ public partial class MainWindow : Window
 
     private static ProjectItem? ItemOf(object? sender) => (sender as Control)?.DataContext as ProjectItem;
 
-    private void Open(string folder)
+    private async void Open(string folder)
     {
         if (!Directory.Exists(folder))
         {
@@ -166,7 +173,22 @@ public partial class MainWindow : Window
         }
 
         string? wanted = EmpireProject.TryRead(folder)?.EditorVersion;
-        if (EditorInstall.ForProject(_installs, wanted) is not { } install)
+        string name = Path.GetFileName(folder.TrimEnd('/', '\\'));
+        EditorInstall? install;
+        if (wanted is null || _installs.Any(i => i.Version == wanted))
+            install = EditorInstall.ForProject(_installs, wanted);
+        else
+        {
+            // The version the project was made with isn't installed: ask which one to use instead of choosing for the user.
+            install = await AskForEditorAsync(folder, name, wanted);
+            if (install is null)
+            {
+                Status($"Didn't open {name}.");
+                return;
+            }
+            wanted = EmpireProject.TryRead(folder)?.EditorVersion;   // changed if they asked to switch the project over
+        }
+        if (install is null)
         {
             Status("No Empire Engine editor is installed. Open the Installs page and press Install version...");
             return;
@@ -176,8 +198,10 @@ public partial class MainWindow : Window
         {
             var process = install.Launch(scene, folder);
             process.EnableRaisingEvents = true;
+            lock (_running) _running.Add((process, install.Folder));
             process.Exited += (_, _) =>
             {
+                lock (_running) _running.RemoveAll(r => r.Process == process);
                 int code = process.ExitCode;
                 if (code != 0)
                     Dispatcher.UIThread.Post(() => Status($"Empire Engine {install.Version} exited with code {code}."));
@@ -187,7 +211,6 @@ public partial class MainWindow : Window
             _settings.Save();
             RefreshProjects();
 
-            string name = Path.GetFileName(folder.TrimEnd('/', '\\'));
             Status(wanted is not null && wanted != install.Version
                 ? $"Opened {name} with Empire Engine {install.Version} (made with {wanted}, which isn't installed)."
                 : $"Opened {name} with Empire Engine {install.Version}.");
@@ -195,6 +218,64 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             Status($"Could not start Empire Engine {install.Version}: {ex.Message}");
+        }
+    }
+
+    // Asks which installed editor to open a project with when its own version isn't installed. They can also choose to install
+    // that version (then they are asked again, with it in the list) or to switch the project to the one they pick.
+    private async Task<EditorInstall?> AskForEditorAsync(string folder, string name, string wanted)
+    {
+        for (;;)
+        {
+            var result = await EditorVersionWindow.ForMissing(name, wanted, _installs).ShowDialog<EditorVersionResult?>(this);
+            if (result is null) return null;
+
+            if (result.InstallWanted)
+            {
+                await ShowInstallVersionWindow();
+                if (_installs.FirstOrDefault(i => i.Version == wanted) is { } installed) return installed;
+                continue;
+            }
+
+            if (_installs.FirstOrDefault(i => i.Version == result.Version) is not { } chosen) continue;
+            if (result.Remember)
+            {
+                try
+                {
+                    EmpireProject.SetEditorVersion(folder, chosen.Version);
+                    RefreshProjects();
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+                {
+                    Status($"Couldn't change {name}'s editor version: {ex.Message}");
+                }
+            }
+            return chosen;
+        }
+    }
+
+    private async void OnChangeVersionClick(object? sender, RoutedEventArgs e)
+    {
+        if (ItemOf(sender) is not { Exists: true } item) return;
+        var result = await EditorVersionWindow.ForChange(item.Name, item.EditorVersion, _installs).ShowDialog<EditorVersionResult?>(this);
+        if (result is null) return;
+        if (result.Version == item.EditorVersion)
+        {
+            Status($"{item.Name} still uses {(item.EditorVersion is null ? "any version" : "Empire Engine " + item.EditorVersion)}.");
+            return;
+        }
+
+        try
+        {
+            EmpireProject.SetEditorVersion(item.Path, result.Version);
+            RefreshProjects();
+            Status(result.Version is null
+                ? $"{item.Name} now opens with the newest installed version."
+                : $"{item.Name} now opens with Empire Engine {result.Version}.");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+        {
+            Status($"Couldn't change {item.Name}'s editor version: {ex.Message}");
         }
     }
 
@@ -234,7 +315,9 @@ public partial class MainWindow : Window
     // ---- installs ------------------------------------------------------------------------
 
     // Opens the list of Empire Engine versions published on GitHub. Whatever it installs shows up in the list afterwards.
-    private async void OnInstallVersion(object? sender, RoutedEventArgs e)
+    private async void OnInstallVersion(object? sender, RoutedEventArgs e) => await ShowInstallVersionWindow();
+
+    private async Task ShowInstallVersionWindow()
     {
         var window = new InstallVersionWindow();
         await window.ShowDialog(this);
@@ -268,12 +351,69 @@ public partial class MainWindow : Window
         Status($"Added Empire Engine {install.Version}.");
     }
 
-    private void OnRemoveInstall(object? sender, RoutedEventArgs e)
+    // Remove on a located editor only forgets it. Uninstall on one in the Hub's folder deletes it, after asking.
+    private async void OnRemoveInstall(object? sender, RoutedEventArgs e)
     {
-        if ((sender as Control)?.DataContext is not EditorInstall { Bundled: false } install) return;
-        _settings.LocatedInstalls.RemoveAll(f => HubSettings.SamePath(f, install.Folder));
-        _settings.Save();
+        if ((sender as Control)?.DataContext is not EditorInstall install) return;
+
+        if (!install.Bundled)
+        {
+            _settings.LocatedInstalls.RemoveAll(f => HubSettings.SamePath(f, install.Folder));
+            _settings.Save();
+            RefreshInstalls();
+            Status($"Removed Empire Engine {install.Version} from the list. Its files are untouched.");
+            return;
+        }
+
+        bool open;
+        lock (_running) open = _running.Any(r => !r.Process.HasExited && HubSettings.SamePath(r.Folder, install.Folder));
+        if (open)
+        {
+            Status($"Empire Engine {install.Version} is open. Close it first, then uninstall it.");
+            return;
+        }
+
+        var ask = new ConfirmWindow($"Uninstall Empire Engine {install.Version}?",
+            $"This deletes {install.Folder} and everything in it. Your projects are not touched; a project made with this version " +
+            "will open with the newest installed version until you install this one again.", "Uninstall");
+        if (!await ask.ShowDialog<bool>(this)) return;
+
+        try
+        {
+            await Task.Run(() => ReleaseInstaller.Uninstall(ReleaseInstaller.DefaultRoot, install.Folder));
+            Status($"Uninstalled Empire Engine {install.Version}.");
+        }
+        catch (InstallException ex)
+        {
+            Status(ex.Message);
+        }
         RefreshInstalls();
-        Status($"Removed Empire Engine {install.Version} from the list. Its files are untouched.");
+    }
+
+    // ---- updating the hub ------------------------------------------------------------------
+
+    // Looks once for a newer Hub and shows the banner if there is one. Failures are ignored: no connection is not worth a message here.
+    private async Task CheckForUpdateQuietly()
+    {
+        try
+        {
+            using var http = ReleaseCatalog.CreateClient();
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            if (await HubUpdater.CheckAsync(http, cts.Token) is not { } update) return;
+            _pendingUpdate = update;
+            UpdateBannerText.Text = $"Empire Engine Hub {update.Version} is available.";
+            UpdateBanner.IsVisible = true;
+        }
+        catch (Exception ex) when (ex is InstallException or OperationCanceledException) { }
+    }
+
+    private async void OnUpdateBannerClick(object? sender, RoutedEventArgs e) => await new UpdateWindow(_pendingUpdate).ShowDialog(this);
+
+    private async void OnCheckForUpdates(object? sender, RoutedEventArgs e) => await new UpdateWindow(null).ShowDialog(this);
+
+    private void OnAutoCheckChanged(object? sender, RoutedEventArgs e)
+    {
+        _settings.CheckForUpdates = AutoCheckBox.IsChecked == true;
+        _settings.Save();
     }
 }
