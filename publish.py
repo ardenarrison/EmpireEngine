@@ -88,8 +88,11 @@ def package(rid, out_root, version, make_zip):
         sys.exit("The package is incomplete, these are missing:\n  " + "\n  ".join(str(path) for path in missing))
 
     problems = []
-    if rid.startswith("osx"):
-        # macOS builds carry their own Vulkan loader and MoltenVK (from ThirdParty/Vulkan). Without them the editor
+    if rid == "osx-x64":
+        problems.append("Intel Mac builds bundle no Vulkan (the repo only has the Apple Silicon copies), so people need the "
+                        "Vulkan SDK or Homebrew's vulkan-loader and molten-vk installed. Say so in the release notes.")
+    if rid == "osx-arm64":
+        # Apple Silicon builds carry their own Vulkan loader and MoltenVK (from ThirdParty/Vulkan). Without them the editor
         # and games only run on Macs that have Vulkan installed.
         for folder in (editor_dir, editor_dir / "Player"):
             if not (folder / "libvulkan.1.dylib").exists() or not (folder / "vulkan" / "icd.d" / "MoltenVK_icd.json").exists():

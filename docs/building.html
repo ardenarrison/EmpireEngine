@@ -32,7 +32,7 @@ GameData/
   EmpirePackage.*.dll        the project's installed packages
   Core/                      a copy of the project: Scenes/, Models/, Audio/ ...</code></pre>
 <ul>
-  <li><strong>Self-contained</strong>: the .NET runtime is included, so players need nothing installed. On macOS, Vulkan is bundled too; on Windows and Linux players need a graphics driver with Vulkan, which current drivers include.</li>
+  <li><strong>Self-contained</strong>: the .NET runtime is included, so players need nothing installed. On Apple Silicon Macs, Vulkan is bundled too (Intel Macs need the Vulkan SDK or Homebrew's <code>vulkan-loader</code> and <code>molten-vk</code>); on Windows and Linux players need a graphics driver with Vulkan, which current drivers include.</li>
   <li><strong>For this platform</strong>: building on a Mac makes a Mac game, on Windows a Windows game. Build on each platform you want to ship for.</li>
   <li>Scripts are compiled at build time. The game only loads <code>Scripts.dll</code> and never compiles anything. The <code>Scripts/</code> and <code>Packages/</code> folders are not copied into <code>Core/</code>.</li>
 </ul>
@@ -86,7 +86,7 @@ python3 publish.py --rid win-x64 --rid linux-x64 --zip</code></pre>
   empire                 the editor
   Player/                the game player</code></pre>
 <p>To try the Hub with an editor before a release exists, copy the <code>Empire/</code> folder from the editor package next to <code>EmpireHub</code>.</p>
-<p>macOS packages carry their own Vulkan loader and MoltenVK from <code>ThirdParty/Vulkan/</code>. If that folder is missing, the script says so; restore it, or set the <code>EmpireVulkanLoader</code> and <code>EmpireMoltenVK</code> environment variables to the paths of <code>libvulkan.1.dylib</code> and <code>libMoltenVK.dylib</code>.</p>
+<p>Apple Silicon (<code>osx-arm64</code>) packages carry their own Vulkan loader and MoltenVK from <code>ThirdParty/Vulkan/</code>. If that folder is missing, the script says so; restore it, or set the <code>EmpireVulkanLoader</code> and <code>EmpireMoltenVK</code> environment variables to the paths of <code>libvulkan.1.dylib</code> and <code>libMoltenVK.dylib</code>.</p>
 
 <h2 id="publishing-a-release">Publishing a release</h2>
 <p>The Hub's <a href="projects.html#installing-other-versions">Install version…</a> button reads the project's GitHub releases. To make a version installable:</p>
