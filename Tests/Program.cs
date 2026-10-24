@@ -1,4 +1,5 @@
 using Editor.Assistant;
+using Editor.Terminal;
 using System.IO.Compression;
 using System.Net;
 using System.Reflection;
@@ -2083,6 +2084,205 @@ Directory.CreateDirectory(Path.Combine(projectDir, "Scenes"));
     var blocks = AssistantText.CodeBlocks("Try:\n```csharp\nvar a = 1;\nvar b = 2;\n```\ntext\n```\nsecond\n```\n");
     Check(blocks.Count == 2 && blocks[0] == "var a = 1;\nvar b = 2;" && blocks[1] == "second" && AssistantText.CodeBlocks("no code").Count == 0, "the code blocks in an answer can be copied one by one");
     Check(AssistantClient.Models.Contains(AssistantClient.DefaultModel), "the default model is one of the models offered");
+}
+
+// ---- The editor's built-in terminal: the screen emulator -------------------------------------------------------------------
+{
+    TerminalEmulator Term(int cols = 20, int rows = 5, int scrollback = 100) => new(cols, rows, scrollback);
+    TerminalEmulator Fed(string text, int cols = 20, int rows = 5) { var t = Term(cols, rows); t.Write(text); return t; }
+    string Row(TerminalEmulator t, int r) => t.RowText(r);
+    const string E = "\u001b";
+
+    var t1 = Fed("Hello, world");
+    Check(Row(t1, 0) == "Hello, world" && t1.CursorX == 12 && t1.CursorY == 0, "plain text appears and the cursor follows it");
+    var t2 = Fed("one\r\ntwo\r\nthree");
+    Check(Row(t2, 0) == "one" && Row(t2, 1) == "two" && Row(t2, 2) == "three" && t2.CursorY == 2, "carriage return and line feed move to the next line");
+    var t3 = Fed("abcdefghij" + "XY", cols: 10);
+    Check(Row(t3, 0) == "abcdefghij" && Row(t3, 1) == "XY", "text wraps at the right edge");
+    var t3b = Fed("abcdefghij", cols: 10);
+    Check(t3b.CursorX == 9 && t3b.CursorY == 0, "the cursor waits at the last column until the next character, instead of wrapping early");
+    var t4 = Fed("abc\b\bX\tY");
+    Check(Row(t4, 0) == "aXc     Y" && t4.CursorX == 9, "backspace moves back and a tab goes to the next stop of 8");
+
+    // colors and styles
+    var c1 = Fed(E + "[31mR" + E + "[0mN" + E + "[1;32mG" + E + "[42mB");
+    Check(c1.GetCell(0, 0).Fg == 1 && c1.GetCell(0, 1).Fg == -1 && c1.GetCell(0, 2) is { Fg: 2, Attr: Cell.Bold } && c1.GetCell(0, 3).Bg == 2, "basic colors, reset, bold and backgrounds");
+    var c2 = Fed(E + "[91mA" + E + "[104mB" + E + "[38;5;200mC" + E + "[48;5;17mD" + E + "[38;2;10;20;30mE" + E + "[39;49mF");
+    Check(c2.GetCell(0, 0).Fg == 9 && c2.GetCell(0, 1).Bg == 12 && c2.GetCell(0, 2).Fg == 200 && c2.GetCell(0, 3).Bg == 17 &&
+          c2.GetCell(0, 4).Fg == (Cell.Rgb | (10 << 16) | (20 << 8) | 30) && c2.GetCell(0, 5) is { Fg: -1, Bg: -1 }, "bright, 256-color and true-color text, and the default colors");
+    var c3 = Fed(E + "[38:2::1:2:3mA" + E + "[38:5:99mB");
+    Check(c3.GetCell(0, 0).Fg == (Cell.Rgb | (1 << 16) | (2 << 8) | 3) && c3.GetCell(0, 1).Fg == 99, "the colon form of 256 and true color works too");
+    var c4 = Fed(E + "[1;4;7mA" + E + "[22;24;27mB");
+    Check(c4.GetCell(0, 0).Attr == (Cell.Bold | Cell.Underline | Cell.Inverse) && c4.GetCell(0, 1).Attr == 0, "bold, underline and inverse switch on and off");
+
+    // cursor movement and erasing
+    var m1 = Fed("ab\r\ncd\r\nef" + E + "[1;2HX" + E + "[3;1HY");
+    Check(Row(m1, 0) == "aX" && Row(m1, 2) == "Yf", "the cursor can be placed anywhere (row;column, starting at 1)");
+    var m2 = Fed("1234567890" + E + "[3D" + E + "[2C" + E + "[A" + E + "[B" + E + "[5G", cols: 20);
+    Check(m2.CursorX == 4 && m2.CursorY == 1, "cursor moves back, forward, up (stopping at the top), down and to a column");
+    var e1 = Fed("hello world" + E + "[6D" + E + "[K");
+    Check(Row(e1, 0) == "hello", "erase to the end of the line");
+    var e2 = Fed("hello world" + E + "[6D" + E + "[1K");
+    Check(Row(e2, 0) == "      world".TrimEnd(), "erase to the start of the line");
+    var e3 = Fed("aaa\r\nbbb\r\nccc" + E + "[2;2H" + E + "[J");
+    Check(Row(e3, 0) == "aaa" && Row(e3, 1) == "b" && Row(e3, 2) == "", "erase from the cursor to the end of the screen");
+    var e4 = Fed("aaa\r\nbbb" + E + "[2J" + E + "[H");
+    Check(Row(e4, 0) == "" && Row(e4, 1) == "" && e4.CursorX == 0 && e4.CursorY == 0, "erase the whole screen");
+    var e5 = Fed(E + "[44m" + E + "[2K");
+    Check(e5.GetCell(0, 5).Bg == 4, "erasing paints with the current background color");
+
+    // scrolling
+    var s1 = Fed("1\r\n2\r\n3\r\n4\r\n5\r\n6\r\n7", rows: 5);
+    Check(Row(s1, 0) == "3" && Row(s1, 4) == "7" && s1.ScrollbackCount == 2 && s1.GetCell(0, 0, scrollOffset: 2).Ch == '1', "text scrolls up and the lines that leave the screen go to the scrollback");
+    Check(s1.RowText(0, scrollOffset: 1) == "2" && s1.RowText(1, scrollOffset: 2) == "2", "the view can be scrolled back through them");
+    var s2 = new TerminalEmulator(10, 3, scrollback: 2); s2.Write("1\r\n2\r\n3\r\n4\r\n5\r\n6\r\n7");
+    Check(s2.ScrollbackCount == 2, "the scrollback is limited");
+    var s3 = Fed("a\r\nb\r\nc\r\nd\r\ne" + E + "[2;4r" + E + "[4;1H\n\n", rows: 5);
+    Check(Row(s3, 0) == "a" && Row(s3, 4) == "e" && Row(s3, 1) == "d" && s3.ScrollbackCount == 0, "a scrolling region scrolls only its own lines and doesn't use the scrollback");
+    var s4 = Fed("a\r\nb\r\nc" + E + "[1;1H" + E + "M", rows: 3);
+    Check(Row(s4, 0) == "" && Row(s4, 1) == "a" && Row(s4, 2) == "b", "reverse index at the top scrolls the screen down");
+
+    // inserting and deleting
+    var i1 = Fed("a\r\nb\r\nc" + E + "[2;1H" + E + "[L", rows: 5);
+    Check(Row(i1, 1) == "" && Row(i1, 2) == "b" && Row(i1, 3) == "c", "insert a line");
+    var i2 = Fed("a\r\nb\r\nc" + E + "[2;1H" + E + "[M", rows: 5);
+    Check(Row(i2, 1) == "c" && Row(i2, 2) == "", "delete a line");
+    var i3 = Fed("abcdef" + E + "[4G" + E + "[2@");
+    Check(Row(i3, 0) == "abc  def", "insert characters");
+    var i4 = Fed("abcdef" + E + "[2G" + E + "[2P");
+    Check(Row(i4, 0) == "adef", "delete characters");
+    var i5 = Fed("abcdef" + E + "[2G" + E + "[3X");
+    Check(Row(i5, 0) == "a   ef", "erase characters in place");
+
+    // the alternate screen
+    var a1 = Fed("main text\r\nline2" + E + "[?1049h" + "ALT");
+    Check(a1.AlternateScreen && Row(a1, 0) == "ALT" && Row(a1, 1) == "", "the alternate screen starts empty");
+    a1.Write(E + "[?1049l");
+    Check(!a1.AlternateScreen && Row(a1, 0) == "main text" && Row(a1, 1) == "line2" && a1.CursorY == 1 && a1.CursorX == 5, "leaving it brings back the main screen and the cursor");
+    var a2 = new TerminalEmulator(10, 2, 50); a2.Write(E + "[?1049h" + "a\r\nb\r\nc\r\nd");
+    Check(a2.ScrollbackCount == 0, "the alternate screen doesn't fill the scrollback");
+
+    // saving the cursor, and modes
+    var v1 = Fed("ab" + E + "7" + "\r\ncd" + E + "8" + "X");
+    Check(Row(v1, 0) == "abX", "ESC 7 and ESC 8 save and restore the cursor");
+    var v2 = Fed("ab" + E + "[s" + "\r\ncd" + E + "[u" + "X");
+    Check(Row(v2, 0) == "abX", "CSI s and CSI u do too");
+    var v3 = Term(); v3.Write(E + "[?25l");
+    bool hidden = !v3.CursorVisible; v3.Write(E + "[?25h" + E + "[?2004h" + E + "[?1h");
+    Check(hidden && v3.CursorVisible && v3.BracketedPaste && v3.ApplicationCursorKeys, "cursor visibility, bracketed paste and application cursor keys are tracked");
+    var v4 = Fed(E + "[?7l" + "abcdefghijklmnopqrstuvwxyz", cols: 10);
+    Check(Row(v4, 0) == "abcdefghiz" && Row(v4, 1) == "", "with wrapping off, text stays on one line");
+
+    // text from other languages and symbols
+    var u1 = Term(); var bytes = System.Text.Encoding.UTF8.GetBytes("h\u00E9llo \u2500\u2502 \u20AC");
+    u1.Write(bytes.AsSpan(0, 3)); u1.Write(bytes.AsSpan(3));
+    Check(Row(u1, 0) == "h\u00E9llo \u2500\u2502 \u20AC", "UTF-8 text is read, even when a character is split between two reads");
+    var u2 = Term(); u2.Write(new byte[] { 0x41, 0xC3, 0x42, 0xFF, 0x43 });
+    Check(Row(u2, 0).Contains('A') && Row(u2, 0).Contains('B') && Row(u2, 0).Contains('C') && Row(u2, 0).Contains('\uFFFD'), "broken UTF-8 shows replacement characters and carries on");
+
+    // sequences it ignores or answers
+    var o1 = Fed("a" + E + "]0;My title\u0007" + "b" + E + "]2;Other" + E + "\\" + "c");
+    Check(Row(o1, 0) == "abc" && o1.Title == "Other", "window titles are read and don't show as text");
+    var g1 = Fed("a" + E + "P1$r0m" + E + "\\" + "b" + E + "_Gignored" + E + "\\" + "c" + E + "[?9999h" + E + "[5 q" + E + "(B" + "d");
+    Check(Row(g1, 0) == "abcd", "device control strings, unknown modes and character-set choices are skipped");
+    var q = Term(); var answers = new List<string>(); q.Respond += answers.Add;
+    q.Write("ab" + E + "[6n" + E + "[5n" + E + "[c" + E + "[>c" + E + "[>q" + E + "[?u");
+    Check(answers.Count == 5 && answers[0] == E + "[1;3R" && answers[1] == E + "[0n" && answers[2].StartsWith(E + "[?") && answers[3].StartsWith(E + "[>") && answers[4].Contains("empire-terminal"),
+          "the questions a program asks a terminal (cursor position, status, what are you) are answered, and unknown ones are not");
+    var x = Fed("a\u001b[31");   // a sequence cut off mid-way, finished by the next write
+    x.Write("mb"); Check(Row(x, 0) == "ab" && x.GetCell(0, 1).Fg == 1, "an escape sequence split between two writes is still understood");
+    var x2 = Fed("a" + E + "[1" + E + "[31mb");   // a new ESC inside a sequence starts over
+    Check(Row(x2, 0) == "ab" && x2.GetCell(0, 1).Fg == 1, "an escape character in the middle of a sequence starts a new one");
+    var x3 = Fed("a\u0007\u0000b");
+    Check(Row(x3, 0) == "ab", "bell and NUL are ignored");
+
+    // resizing and reading text
+    var r1 = Fed("12345\r\nabcde", cols: 10, rows: 3); r1.Resize(5, 3);
+    Check(r1.Cols == 5 && Row(r1, 0) == "12345" && Row(r1, 1) == "abcde", "making the screen narrower keeps what fits");
+    var r2 = Fed("1\r\n2\r\n3\r\n4", cols: 10, rows: 4); r2.Resize(10, 2);
+    Check(r2.Rows == 2 && r2.CursorY == 1 && Row(r2, 1) == "4" && r2.ScrollbackCount == 2, "making it shorter pushes the top lines into the scrollback and keeps the cursor on screen");
+    r2.Resize(10, 6); Check(r2.Rows == 6 && Row(r2, 0) != null, "making it taller works");
+    var r3 = new TerminalEmulator(10, 3); r3.Write("x"); r3.Resize(1, 1);
+    Check(r3.Cols >= 2 && r3.Rows == 1 && r3.CursorX < r3.Cols && r3.CursorY < r3.Rows, "a tiny size is clamped, never crashing");
+    var sel = Fed("hello world\r\nsecond line   \r\nthird");
+    Check(sel.GetText(0, 6, 0, 10) == "world" && sel.GetText(0, 0, 1, 5) == "hello world\nsecond" && sel.GetText(1, 5, 0, 6) == "world\nsecond" && sel.GetText(2, 0, 2, 19) == "third",
+          "selected text is read back with line ends, trailing spaces trimmed, in either direction");
+    var sb2 = Fed("1\r\n2\r\n3\r\n4\r\n5\r\n6", rows: 3);
+    Check(sb2.GetText(-3, 0, 2, 5) == "1\n2\n3\n4\n5\n6" || sb2.GetText(-3, 0, 2, 5).Replace("\n", "") == "123456", "the scrollback can be read as text too");
+
+    // a screenful of mixed output, as a program like a pager or Claude Code writes it
+    var big = new TerminalEmulator(40, 10);
+    big.Write(E + "[?1049h" + E + "[2J" + E + "[H" + E + "[1;36m+-- Title --+" + E + "[0m\r\n| " + E + "[32mok" + E + "[0m |\r\n");
+    for (int i = 0; i < 30; i++) big.Write(E + "[" + (3 + i % 6) + ";1H" + E + "[2Kline " + i);
+    big.Write(E + "[?1049l");
+    Check(!big.AlternateScreen && big.ScrollbackCount == 0, "a full-screen program leaves the screen as it found it");
+}
+
+// ---- The editor's built-in terminal: a real program in a pseudo-terminal (macOS and Linux) ------------------------------------
+if (!OperatingSystem.IsWindows())
+{
+    string ptyDir = Path.Combine(dir, "pty-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(ptyDir);
+    async Task<bool> WaitFor(TerminalEmulator screen, PtySession session, Func<TerminalEmulator, bool> done, int ms = 8000)
+    {
+        for (int waited = 0; waited < ms; waited += 25)
+        {
+            var bytes = session.TakeOutput();
+            if (bytes.Length > 0) screen.Write(bytes);
+            if (done(screen)) return true;
+            await Task.Delay(25);
+        }
+        return false;
+    }
+    string AllText(TerminalEmulator screen) => string.Join("\n", Enumerable.Range(-screen.ScrollbackCount, screen.ScrollbackCount + screen.Rows).Select(r => screen.RowText(r)));
+
+    // a program that prints and exits
+    using (var echo = PtySession.Start(ptyDir, 60, 12, ["/bin/echo", "hello from the terminal"]))
+    {
+        var screen = new TerminalEmulator(60, 12);
+        bool saw = await WaitFor(screen, echo, s => AllText(s).Contains("hello from the terminal"));
+        for (int i = 0; i < 80 && !echo.HasExited; i++) await Task.Delay(50);
+        Check(saw && echo.HasExited && echo.ExitCode == 0, "a program run in the terminal prints its output and its exit code is reported");
+    }
+
+    // an interactive shell: it believes it is in a terminal of the size asked for, takes typed input, and can be resized
+    using (var shell = PtySession.Start(ptyDir, 70, 15, ["/bin/sh"]))
+    {
+        var screen = new TerminalEmulator(70, 15);
+        shell.Write("echo $((6*7))\r");
+        Check(await WaitFor(screen, shell, s => AllText(s).Split('\n').Any(l => l.Trim() == "42")), "typed input reaches the shell and its answer comes back");
+        shell.Write("stty size\r");
+        Check(await WaitFor(screen, shell, s => AllText(s).Split('\n').Any(l => l.Trim() == "15 70")), "the program is told the terminal's size");
+        shell.Write("[ -t 0 ] && [ -t 1 ] && echo is-a-terminal\r");
+        Check(await WaitFor(screen, shell, s => AllText(s).Split('\n').Any(l => l.Trim() == "is-a-terminal")), "the program really sees a terminal, so colors and full-screen programs work");
+        shell.Resize(100, 30);
+        await Task.Delay(300);
+        shell.Write("stty size\r");
+        Check(await WaitFor(screen, shell, s => AllText(s).Split('\n').Any(l => l.Trim() == "30 100")), "resizing the terminal changes the size the program sees");
+        shell.Write("printf '\\033[31mred\\033[0m\\n'\r");
+        Check(await WaitFor(screen, shell, s => Enumerable.Range(0, s.Rows).Any(r => s.RowText(r) == "red" && s.GetCell(r, 0).Fg == 1)), "colors a program prints show up in the screen");
+        shell.Write("exit 3\r");
+        for (int i = 0; i < 100 && !shell.HasExited; i++) await Task.Delay(50);
+        Check(shell.HasExited && shell.ExitCode == 3, "when the shell exits that is noticed, with its exit code");
+    }
+
+    // closing a terminal stops what runs in it
+    bool SleepRunning() { using var ps = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("/bin/sh") { ArgumentList = { "-c", "pgrep -f 'sleep [6]1' >/dev/null" }, UseShellExecute = false })!; ps.WaitForExit(); return ps.ExitCode == 0; }
+    var longRun = PtySession.Start(ptyDir, 60, 12, ["/bin/sleep", "61"]);
+    for (int i = 0; i < 40 && !SleepRunning(); i++) await Task.Delay(50);
+    bool wasRunning = SleepRunning();
+    longRun.Dispose();
+    for (int i = 0; i < 60 && SleepRunning(); i++) await Task.Delay(50);
+    Check(wasRunning && longRun.HasExited && !SleepRunning(), "closing the terminal stops the program in it, with nothing left running");
+
+    // text with quotes and spaces reaches the program unchanged (nothing is run by accident)
+    using (var quoted = PtySession.Start(ptyDir, 60, 12, ["/bin/echo", "it's $HOME `x` \"q\""]))
+    {
+        var screen = new TerminalEmulator(60, 12);
+        Check(await WaitFor(screen, quoted, s => AllText(s).Contains("it's $HOME `x` \"q\"")), "arguments with quotes and shell characters are passed as plain text");
+    }
+    Check(!Directory.GetFiles(Path.Combine(Path.GetTempPath(), "empire-terminal-" + Environment.UserName), "*.tty").Any(f => File.GetLastWriteTime(f) > DateTime.Now.AddMinutes(-2)),
+          "the temporary file naming the terminal is removed when the terminal closes");
 }
 
 Console.WriteLine(failures == 0 ? "\nAll checks passed." : $"\n{failures} check(s) failed.");

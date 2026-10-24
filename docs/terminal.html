@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Terminal · Empire Engine Docs</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<article>
+
+<p class="eyebrow">Using the editor</p>
+<h1>The terminal</h1>
+<p class="lead">A real terminal inside the editor, starting in your project's folder. Run <code>git</code>, <code>dotnet</code>, scripts, editors such as <code>vim</code>, or any command-line tool, without leaving the editor.</p>
+
+<h2>Opening it</h2>
+<p>Choose <strong>Window &gt; Terminal</strong>, or press <kbd>Ctrl</kbd>+<kbd>`</kbd> (the key above Tab). A panel slides up along the bottom of the editor with your shell running in it: your own shell (<code>$SHELL</code>, for example zsh or bash) on macOS and Linux, and Windows PowerShell on Windows. Close the panel with the <em>x</em> or the same shortcut; the shell keeps running while it is hidden, with everything you were doing, and comes back when you reopen it. It stops when you close the editor.</p>
+<p>Nothing runs until you open it, and it only runs what you type.</p>
+
+<h2>Typing in it</h2>
+<ul>
+  <li><strong>Click inside the panel to type.</strong> While the terminal has the keyboard, the editor's own shortcuts stand down and <kbd>Esc</kbd> goes to the program, not the editor. Click anywhere else in the editor to give the keyboard back. A solid cursor means it has the keyboard; a hollow one means it doesn't.</li>
+  <li>Arrow keys, Home, End, Page Up and Down, Delete, Tab (and Shift+Tab), the function keys, and <kbd>Ctrl</kbd> with a letter all work as in any terminal. <kbd>Ctrl</kbd>+<kbd>C</kbd> interrupts the running program and <kbd>Ctrl</kbd>+<kbd>D</kbd> ends input. The <em>Interrupt</em> button does the same as Ctrl+C.</li>
+  <li><kbd>Option</kbd> or <kbd>Alt</kbd> with a key sends Escape first, which is how terminal programs read it.</li>
+</ul>
+
+<h2>Copy, paste and scrolling</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>To</th><th>macOS</th><th>Windows and Linux</th></tr></thead>
+  <tbody>
+    <tr><td>Select text</td><td colspan="2">Drag with the mouse</td></tr>
+    <tr><td>Copy the selection</td><td><kbd>Cmd</kbd>+<kbd>C</kbd></td><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd>, or <kbd>Ctrl</kbd>+<kbd>C</kbd> while something is selected</td></tr>
+    <tr><td>Paste</td><td><kbd>Cmd</kbd>+<kbd>V</kbd></td><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd> or <kbd>Shift</kbd>+<kbd>Insert</kbd></td></tr>
+    <tr><td>Scroll back through the output</td><td colspan="2">Mouse wheel, or <kbd>Shift</kbd>+<kbd>Page Up</kbd> and <kbd>Page Down</kbd>. Typing returns to the bottom.</td></tr>
+  </tbody>
+</table></div>
+<p>The buttons along the top do the same: <em>Copy</em>, <em>Paste</em>, <em>Interrupt</em> (Ctrl+C), <em>Clear</em> (clears the screen and the history), and <em>Restart</em> (stops the shell and starts a new one). When the shell exits, the panel says so and <kbd>Enter</kbd> starts a new one. Pasting removes escape characters from the text first, so something copied from a web page can't smuggle in terminal controls, and programs that ask for it are told the text is a paste.</p>
+
+<h2>Full-screen programs</h2>
+<p>It is a full terminal emulator, not just a box of text: colors (16, 256 and true color), cursor movement, scrolling regions, the alternate screen, window resizing, and the questions programs ask a terminal. So editors, pagers, <code>git log</code>, <code>top</code> and tools with their own full-screen interfaces work. Box-drawing lines and block shapes are drawn as shapes. The editor's font only has plain English letters, though, so other characters show as a close ASCII character or <code>?</code>: accented letters are shown without the accent, and symbols such as arrows and bullets as <code>&gt;</code> and <code>*</code>.</p>
+<p>The terminal tells programs its size, and follows the panel when the editor window changes size.</p>
+
+<h2>Using Claude Code (or another AI tool) here</h2>
+<p>If you have Claude Code installed, type <code>claude</code> in the terminal and use it as you would anywhere else; sign in when it asks, with your own Claude account or API key. That is Anthropic's own program running unmodified, so signing in works the way Anthropic intends, and Empire Engine never sees your login. The same goes for any other command-line tool. Empire Engine is not made, endorsed or supported by Anthropic. See also <a href="assistant.html">the AI assistant</a>, which chats using your own API key.</p>
+
+<h2>Things to know</h2>
+<ul>
+  <li><strong>It runs as you.</strong> A command in the terminal can do whatever you can do on your computer, exactly like Terminal, PowerShell or any other terminal. Don't paste commands you don't understand.</li>
+  <li><strong>Stopping.</strong> Closing the editor stops the shell and everything running in it. If the editor is killed or crashes, the shell notices within a couple of seconds and closes too.</li>
+  <li><strong>One terminal</strong>, no tabs or split panes, and no mouse reporting to programs yet (a program can't see mouse clicks).</li>
+  <li><strong>Windows</strong> uses the system's ConPTY (Windows 10 version 1809 or newer). That part has not been tested on a Windows computer yet.</li>
+  <li><strong>macOS and Linux</strong> use the system's <code>script</code> command to make the terminal, so it needs to be installed (it is part of macOS and of util-linux on Linux).</li>
+</ul>
+
+<h2>If something doesn't work</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>You see</th><th>What it means</th></tr></thead>
+  <tbody>
+    <tr><td>Nothing happens when you type</td><td>The terminal doesn't have the keyboard. Click inside the panel.</td></tr>
+    <tr><td>"The terminal needs the 'script' command"</td><td>Install it (Linux: the util-linux package).</td></tr>
+    <tr><td>"The terminal needs Windows 10 version 1809 or newer"</td><td>ConPTY isn't available on this Windows.</td></tr>
+    <tr><td>The text looks wrong after a program crashed</td><td>Press <em>Clear</em>, or type <code>reset</code>.</td></tr>
+    <tr><td>The prompt is missing at first</td><td>A login shell loads your profile first; wait a second or two.</td></tr>
+  </tbody>
+</table></div>
+
+<h2>For people changing the editor</h2>
+<ul>
+  <li>The code is in <code>Editor/Terminal/</code>. <code>TerminalEmulator</code> (the screen), <code>PtySession</code> (the shell in a pseudo-terminal) and <code>TerminalGlyphs</code> (how characters are shown) are plain .NET and tested in <code>Tests/</code>; <code>TerminalWindow</code> is the panel.</li>
+  <li>The shell is started with <code>script</code>, inside a small watcher shell that closes it if the editor disappears. The terminal's size is changed later by running <code>stty</code> against its device.</li>
+  <li>While the terminal has the keyboard it sets <code>Gui.ExternalTyping</code>, which makes <code>Gui.IsTyping</code> true so the editor's shortcuts stand down.</li>
+</ul>
+
+</article>
+</body>
+</html>

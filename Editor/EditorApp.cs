@@ -77,6 +77,7 @@ public sealed class EditorApp
     private readonly FolderBrowser _folderBrowser = new();
     private readonly CreditsWindow _credits = new();
     private readonly Editor.Assistant.AssistantWindow _assistant = new();
+    private Editor.Terminal.TerminalWindow _terminal = null!;
     private string _buildName = "";
     private BuildStage _buildStage = BuildStage.Off;
     private string _buildFolder = "";
@@ -136,6 +137,8 @@ public sealed class EditorApp
         _vc = new VisualScriptView(Path.Combine(contentRoot, "Scripts"));
         _code = new CodeEditorView(Path.Combine(contentRoot, "Scripts"));
         _scriptFields = new ScriptFieldCache(contentRoot);
+        _terminal = new Editor.Terminal.TerminalWindow(contentRoot);
+        AppDomain.CurrentDomain.ProcessExit += (_, _) => _terminal.Shutdown();   // stops the shell, and anything running in it, with the editor
         _packages = new PackageManagerWindow(contentRoot);
         _packages.Changed += _scriptFields.Invalidate;
         // The code view checks scripts against the enabled packages too, so using their classes isn't an error.
@@ -278,6 +281,10 @@ public sealed class EditorApp
                 else if (_codeMode) { }   // the code view uses Escape itself; leave with its 3D view button
                 else RequestExit();
             }
+
+            // Ctrl+` shows and hides the terminal (it works while the terminal has the keyboard, too).
+            if (ImGui.IsKeyPressed(ImGuiKey.GraveAccent, false) && ImGui.GetIO().KeyCtrl)
+                _terminal.Toggle();
 
             bool playDown = window.GetKey(GlfwKey.P) == GlfwKeyAction.Press;
             prevPlay = playDown;
@@ -2828,6 +2835,12 @@ public sealed class EditorApp
                 RequestExit();
             g.EndMenu();
         }
+        if (g.BeginMenu("Window"))
+        {
+            if (g.MenuItem("Terminal", "Ctrl+`"))
+                _terminal.Toggle();
+            g.EndMenu();
+        }
         if (g.BeginMenu("Help"))
         {
             if (g.MenuItem("AI Assistant...", enabled: _mode == EditorMode.Edit))
@@ -2840,6 +2853,8 @@ public sealed class EditorApp
         _credits.Draw(g);
         if (_mode == EditorMode.Edit)
             _assistant.Draw(g, AssistantContext());
+        _terminal.Update();
+        _terminal.Draw(g, Environment.TickCount64 / 1000.0);
         if (_mode == EditorMode.Edit)
             _packages.Draw(g, _scene, _scriptFields.Classes, _scriptFields.Errors, _scriptFields.IsCompiling);
     }

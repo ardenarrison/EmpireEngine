@@ -6,7 +6,7 @@ Empire Engine is a 3D game engine written in C# on .NET 10. It draws with Vulkan
 scripts in C# or snap them together from blocks, press Play to try the game, and build it into a program you can hand to
 other people.
 
-> **Status: early (0.1.3).** It works and is used to make small games, but expect rough edges and changes between versions.
+> **Status: early (0.1.4).** It works and is used to make small games, but expect rough edges and changes between versions.
 
 ## What's in it
 
@@ -48,6 +48,12 @@ one from the GitHub releases (Installs > Install version...).
 
 Empire Engine is developed mainly on macOS and works on Windows. Linux builds are supported by `publish.py` but have had the
 least testing.
+
+## Terminal
+
+The editor has a built-in terminal (**Window > Terminal**, or Ctrl+`): your shell, in your project's folder, in a panel along the bottom.
+It is a real terminal, so `git`, `dotnet`, editors such as `vim`, and full-screen tools work. Nothing runs until you open it. See
+[its page](docs/terminal.html).
 
 ## AI assistant (optional)
 

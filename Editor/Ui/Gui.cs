@@ -87,6 +87,8 @@ public sealed class Gui
     public bool Shift { get; private set; }
     public bool Command { get; private set; }   // Cmd on macOS, Ctrl elsewhere (either is accepted)
     public bool EnterPressed { get; private set; }   // Return or Enter went down this frame
+    public float Wheel => _wheel;                    // this frame's vertical scroll
+    public string TypedAll { get; private set; } = "";   // every printable character typed this frame, including non-ASCII (empty while Cmd/Ctrl is held)
     public string Typed => _typed;                   // printable characters typed this frame (none while Cmd/Ctrl is held)
     private bool _doubleClicked;
     private float _wheel;
@@ -131,7 +133,8 @@ public sealed class Gui
 
     // True when the mouse is over a window, or a widget is being dragged: the 3D view should leave the mouse alone.
     public bool WantsMouse => _hovered is not null || _active is not null;
-    public bool IsTyping => _focus is not null;
+    public bool IsTyping => _focus is not null || ExternalTyping;
+    public bool ExternalTyping { get; set; }         // set while something that isn't a text field (the terminal) has the keyboard, so editor shortcuts stand down
     public bool AnyActive => _active is not null || _focus is not null;
 
     // ---- frame --------------------------------------------------------------------------------
@@ -165,6 +168,10 @@ public sealed class Gui
         for (int i = 0; i < queue.Count; i++)
             if (queue[i] is >= 32 and < 127) typed.Append((char)queue[i]);
         _typed = Command ? "" : typed.ToString();
+        var typedAll = new StringBuilder();
+        for (int i = 0; i < queue.Count; i++)
+            if (queue[i] >= 32 && queue[i] != 127 && !(queue[i] >= 0x80 && queue[i] < 0xA0) && !(queue[i] >= 0xF700 && queue[i] <= 0xF8FF)) typedAll.Append((char)queue[i]);
+        TypedAll = io.KeyCtrl || io.KeySuper ? "" : typedAll.ToString();
 
         // The window under the mouse: the topmost one from last frame, and only a modal (or something above it)
         // while a modal is open.
