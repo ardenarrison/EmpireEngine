@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  repo:
+    name: Repository checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Licenses, notices, no build output or secrets, the BRUTAL splash intact, docs links.
+      - run: python3 Tools/check_repo.py
+
+  build-and-test:
+    name: Build and test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Build the engine, editor, player and tools
+        run: dotnet build EmpireEngine.slnx -c Release --nologo
+      - name: Build the hub
+        run: dotnet build Hub -c Release --nologo
+      - name: Run the tests
+        run: dotnet run --project Tests -c Release --no-build

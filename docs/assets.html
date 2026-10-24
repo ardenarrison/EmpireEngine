@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Models and Media · Empire Engine Docs</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<article>
+
+<p class="eyebrow">Using the editor</p>
+<h1>Models, textures and sound files</h1>
+<p class="lead">Put files anywhere in the project folder and they show up in the Assets panel. These are the formats Empire Engine reads and what it reads from each.</p>
+
+<h2>Supported formats</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Kind</th><th>Formats</th><th>Used by</th></tr></thead>
+  <tbody>
+    <tr><td>Models</td><td><code>.glb</code>, <code>.gltf</code>, <code>.fbx</code> (binary 7.x), <code>.obj</code> + <code>.mtl</code></td><td>Mesh, Mesh Collider, Animator</td></tr>
+    <tr><td>Images</td><td>PNG, JPEG, BMP, TGA, Radiance <code>.hdr</code></td><td>Model textures, sky panoramas</td></tr>
+    <tr><td>Sound</td><td><code>.mp3</code>, <code>.wav</code></td><td>Audio Source</td></tr>
+    <tr><td>Animation</td><td>glTF (<code>.glb</code>, <code>.gltf</code>) only</td><td>Animator</td></tr>
+  </tbody>
+</table></div>
+
+<div class="callout tip">
+  <strong>Prefer glTF</strong>
+  <p>glTF is the most complete path: full PBR materials, transparency, a node hierarchy, skins and animations. Blender exports it with <em>File &gt; Export &gt; glTF 2.0</em>.</p>
+</div>
+
+<h2>glTF (.glb, .gltf)</h2>
+<p>Both binary <code>.glb</code> and text <code>.gltf</code> load. A <code>.gltf</code> file's buffer can be a <code>data:</code> URI or a file next to it.</p>
+<h3>Materials</h3>
+<ul>
+  <li>Base color factor and texture</li>
+  <li>Metallic and roughness factors and the metallic-roughness texture</li>
+  <li>Normal map (with its scale) and occlusion map (with its strength)</li>
+  <li>Emissive factor and texture, with <code>KHR_materials_emissive_strength</code></li>
+  <li><code>KHR_materials_ior</code> and <code>KHR_materials_specular</code></li>
+  <li>Vertex colors, which multiply the base color</li>
+</ul>
+<p>Textures can be embedded in the <code>.glb</code>, given as <code>data:</code> URIs, or sit in files next to the model. Each image is decoded once, however many materials use it.</p>
+
+<h3>Transparency</h3>
+<p>The glTF <code>alphaMode</code> decides how a material handles alpha:</p>
+<ul>
+  <li><code>OPAQUE</code> (the default): alpha is ignored.</li>
+  <li><code>MASK</code>: pixels with less alpha than <code>alphaCutoff</code> are not drawn. Good for leaves, fences and grass.</li>
+  <li><code>BLEND</code>: see-through. The surface is blended over what's behind it, after all solid surfaces are drawn, and doesn't hide what's behind it.</li>
+</ul>
+
+<h3>Animation and skins</h3>
+<p>Models with animations or skins keep their node hierarchy and joint weights, and their animation clips can be played with an <a href="animation.html">Animator</a>. In the Assets panel such a model has a small arrow; click it to list its animations.</p>
+
+<h3>Not supported yet</h3>
+<p>Sparse accessors, texture transforms (<code>KHR_texture_transform</code>) and morph targets.</p>
+
+<h2>FBX</h2>
+<p>Binary FBX version 7.x, which Blender, Maya, 3ds Max and most asset stores produce. Meshes are placed with their node transforms and converted to Y-up meters using the file's own axis and unit settings, so a model looks the same as its glTF export. Each material on a mesh becomes its own part.</p>
+<ul>
+  <li><strong>Read:</strong> diffuse color, opacity, emission, roughness (from shininess), and the diffuse, normal and emissive texture maps, embedded or next to the file.</li>
+  <li><strong>Not read:</strong> ASCII FBX, skinning, blend shapes, animation. Use glTF for animated characters.</li>
+</ul>
+
+<h2>OBJ</h2>
+<p>Wavefront <code>.obj</code> with the <code>.mtl</code> libraries it names. Coordinates are used as they are: Y up, one unit per meter (Blender's defaults). Each object/group and material pair becomes one part.</p>
+<ul>
+  <li><strong>Read from .mtl:</strong> <code>Kd</code> (base color), <code>d</code>/<code>Tr</code> (opacity), <code>Ke</code> (emission), <code>Pr</code>/<code>Pm</code> (roughness/metallic), <code>Ns</code> (roughness, when <code>Pr</code> is missing), and the maps <code>map_Kd</code>, <code>map_Bump</code>/<code>bump</code>/<code>norm</code> and <code>map_Ke</code>, found next to the <code>.mtl</code> or in a <code>textures</code> folder there.</li>
+  <li><strong>Not read:</strong> vertex colors, curves, line continuations.</li>
+</ul>
+
+<h2>Sound files</h2>
+<p>MP3 and WAV are decoded once into 16-bit samples in memory, so playing a sound never touches the disk. Sounds with more than two channels keep only the first two. See <a href="audio.html">Audio</a>.</p>
+
+<h2>Using files in the editor</h2>
+<ul>
+  <li><strong>Models</strong>: drag onto the scene to place one, or pick one with a Mesh component's model button.</li>
+  <li><strong>Sounds</strong>: drag onto an Audio Source's <em>Clip</em> field, or onto the scene to make an object that plays it.</li>
+  <li><strong>Animations</strong>: open a model's arrow in the Assets panel and drag an animation onto an Animator entry's <em>Clip</em> field.</li>
+  <li><strong>Sky images</strong>: pick one for an Environment's panorama.</li>
+</ul>
+<p>Models reload automatically within a second of their file changing, so you can keep a modelling tool open and re-export.</p>
+
+</article>
+</body>
+</html>

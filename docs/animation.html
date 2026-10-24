@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Animation · Empire Engine Docs</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<article>
+
+<p class="eyebrow">Systems</p>
+<h1>Animation</h1>
+<p class="lead">An Animator plays animation clips from glTF files on its object's model. Give each clip an id, then play it from a script with <code>animator.Play("Walk")</code>.</p>
+
+<h2>Setting up an Animator</h2>
+<ol class="steps">
+  <li>Have an object with a <strong>Mesh</strong> showing an animated <code>.glb</code> or <code>.gltf</code> model. (The Animator moves its own object's model or, failing that, the first model on an object under it.)</li>
+  <li>Add an <strong>Animator</strong> component and press <em>Add Animation</em> for each clip you want.</li>
+  <li>In the Assets panel, click the small arrow on a model file to list its animations, and drag one onto an entry's <strong>Clip</strong> field. The entry's id becomes the clip's name; change it to something short like <code>Walk</code>.</li>
+  <li>Press <strong>Preview</strong> on an entry to watch it in the editor without playing the game.</li>
+</ol>
+
+<h3>Entry settings</h3>
+<div class="table-wrap"><table>
+  <thead><tr><th>Setting</th><th>Default</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td>Id</td><td>the clip's name</td><td>What scripts call it. Not case-sensitive. If two entries share an id, the first wins (the Inspector warns you).</td></tr>
+    <tr><td>Clip</td><td></td><td>The model file and the animation's name inside it</td></tr>
+    <tr><td>Play At Start</td><td>off</td><td>Starts when the scene starts playing</td></tr>
+    <tr><td>Loop</td><td>off</td><td>Starts over at the end. Otherwise it stops on its last pose.</td></tr>
+    <tr><td>Speed</td><td>1</td><td>2 is twice as fast</td></tr>
+  </tbody>
+</table></div>
+<p><strong>Speed (all)</strong> on the Animator multiplies the speed of everything it plays.</p>
+
+<h2>Sharing animations between characters</h2>
+<p>A clip can come from a different file than the model, as long as the two use the same bone names. Keep one file of animations and use it on every character rigged the same way.</p>
+
+<h2>From scripts</h2>
+<pre data-label="Scripts/Walker.cs"><code class="language-cs">public class Walker : Behaviour
+{
+    public float speed = 3f;
+
+    public override void Update()
+    {
+        bool moving = Input.GetAxis("Vertical") != 0;
+        Translate(0, 0, -Input.GetAxis("Vertical") * speed * Time.deltaTime);
+
+        if (moving &amp;&amp; !animator.IsPlaying("Walk"))
+            animator.Play("Walk", fadeSeconds: 0.2f);    // blend in instead of cutting
+        else if (!moving &amp;&amp; !animator.IsPlaying("Idle"))
+            animator.Play("Idle", 0.2f);
+    }
+}</code></pre>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>Member</th><th>Does</th></tr></thead>
+  <tbody>
+    <tr><td><code>Play(id, fadeSeconds = 0)</code></td><td>Starts the animation from its beginning. With a fade above 0 it blends in from the current pose over that time, which looks better when switching from walking to running.</td></tr>
+    <tr><td><code>Stop()</code></td><td>Stops everything and puts the model back in its resting pose</td></tr>
+    <tr><td><code>Stop(id)</code></td><td>Stops that animation, if it's the one playing</td></tr>
+    <tr><td><code>Pause()</code>, <code>Resume()</code></td><td>Freezes and continues</td></tr>
+    <tr><td><code>IsPlaying()</code>, <code>IsPlaying(id)</code></td><td>Whether anything (or that one) is playing. A finished, non-looping animation isn't.</td></tr>
+    <tr><td><code>IsPaused</code></td><td>Whether it's paused</td></tr>
+    <tr><td><code>CurrentId</code></td><td>The id playing now, or <code>""</code></td></tr>
+    <tr><td><code>Time</code>, <code>Duration</code></td><td>Seconds into the current animation (settable, to jump) and its length</td></tr>
+    <tr><td><code>Has(id)</code></td><td>Whether an animation with that id has been added</td></tr>
+    <tr><td><code>Speed</code></td><td>Multiplies the speed of everything it plays</td></tr>
+  </tbody>
+</table></div>
+<p>Animators follow <code>Time.timeScale</code>.</p>
+
+<h2>What's supported</h2>
+<ul>
+  <li>Skinned characters (meshes with joint weights) and node animation (moving parts of a model)</li>
+  <li>Clips from <code>.glb</code> and <code>.gltf</code> only. FBX and OBJ animations are not read; export animated models as glTF.</li>
+  <li>Not yet: morph targets (blend shapes).</li>
+</ul>
+<p>If a clip can't be matched to the model's skeleton, the Animator prints one message to the console and skips it. When you re-export a model, clips that use it are matched again automatically.</p>
+
+</article>
+</body>
+</html>

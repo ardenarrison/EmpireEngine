@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Projects and Hub · Empire Engine Docs</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<article>
+
+<p class="eyebrow">Start here</p>
+<h1>Projects and Empire Engine Hub</h1>
+<p class="lead">A project is a folder. Empire Engine Hub keeps a list of your projects, makes new ones, and opens each in the editor version it was made with.</p>
+
+<h2>What's in a project</h2>
+<pre data-label="A project folder"><code>My Game/
+  project.empire          name, editor version and start scene (written by the Hub)
+  Scenes/
+    Main.empirescene      a scene: objects, components and scene settings, as JSON
+  Models/                 .glb, .gltf, .fbx and .obj files
+  Scripts/                .cs scripts and .visualcode visual scripts
+  Packages/
+    packages.json         which packages are turned on
+    EmpirePackage.Water.dll   a turned-on package, compiled by the editor
+  Audio/, Textures/ ...   any other folders you like</code></pre>
+
+<p>The project folder is the <strong>content root</strong>: every path in a scene, such as a mesh's <code>Models/Crate.glb</code> or a sound's <code>Audio/Theme.mp3</code>, is relative to it. Only <code>Scenes/</code>, <code>Scripts/</code> and <code>Packages/</code> have a fixed meaning; organise everything else however you like.</p>
+
+<div class="callout">
+  <strong>A folder without project.empire still opens</strong>
+  <p>The Hub treats any folder with a scene in <code>Scenes/</code> as a project. That is how a project made before the Hub existed, or created by hand, opens.</p>
+</div>
+
+<h2>Empire Engine Hub</h2>
+<p>Run the Hub with <code>dotnet run --project Hub</code>, or start <code>EmpireHub</code> from a packaged release. It has three pages.</p>
+
+<h3>Projects</h3>
+<ul>
+  <li><strong>New project</strong> asks for a name, a location and an Empire Engine version, and makes a project folder with a starter scene: <code>Scenes/Main.empirescene</code> with a light, a camera, a ground and a cube, the starter models, an empty <code>Scripts/</code> folder and <code>project.empire</code>.</li>
+  <li><strong>Add existing…</strong> adds a project folder you already have.</li>
+  <li><strong>Open</strong> starts the editor on the project's start scene. The <em>…</em> menu on each row has more actions.</li>
+  <li>The search box filters the list. Each row shows the project's editor version and when you last opened it.</li>
+</ul>
+<p>A project name can't start or end with a space or contain <code>/ \ : * ? " &lt; &gt; |</code>, and the folder it makes must be new or empty.</p>
+
+<h3>Installs</h3>
+<p>The editor versions the Hub knows about. Building the Hub copies the current editor into <code>&lt;hub&gt;/Empire/&lt;version&gt;/</code>, which is where it finds its bundled install. Each row says where it came from: <em>Included with Empire Engine Hub</em>, <em>Downloaded from GitHub</em>, or <em>Located</em>.</p>
+<p><strong>A project opens with the Empire Engine version it was made with when that version is installed, and with the newest installed version otherwise.</strong></p>
+<ul>
+  <li><strong>Install version…</strong> downloads a version from GitHub (see below).</li>
+  <li><strong>Locate…</strong> adds an editor folder from somewhere else, such as a build of your own. The Hub only remembers where it is.</li>
+</ul>
+
+<h3 id="installing-other-versions">Installing other versions</h3>
+<p>Press <strong>Install version…</strong> next to <em>Locate…</em> on the Installs page. The Hub asks GitHub for the project's <a href="building.html#publishing-a-release">releases</a> and lists them newest first: the current version (marked <em>Latest</em>), earlier ones, and pre-releases. Press <strong>Install</strong> on one and the Hub:</p>
+<ol>
+  <li>downloads the release's zip for your computer (<code>Empire-&lt;version&gt;-&lt;platform&gt;.zip</code>), showing progress,</li>
+  <li>checks it against the checksum GitHub lists for it,</li>
+  <li>unpacks the editor into <code>&lt;hub&gt;/Empire/&lt;version&gt;/</code>, next to the version that came with the Hub:</li>
+</ol>
+<pre data-label="&lt;hub&gt;/Empire/"><code>0.1.0/    included with the hub
+0.1.1/    downloaded from the 0.1.1 release</code></pre>
+<p>The new version appears on the Installs page and in the version list when you make a new project, and projects made with it open with it. <strong>Cancel</strong> stops a download part-way and leaves nothing behind.</p>
+<ul>
+  <li><strong>What's checked.</strong> Only github.com over https is trusted. A download that doesn't match its checksum, isn't a zip with an Empire Engine editor in it, or tries to write outside its folder (or contains a symbolic link) is refused and discarded. A version is moved into place only once it has unpacked completely.</li>
+  <li><strong>Rows you can't install:</strong> a version that's already installed reads <em>Installed</em>, and a release with no zip for your computer says <em>No download for &lt;platform&gt;</em>.</li>
+  <li><strong>Removing a version</strong> means deleting its folder in <code>&lt;hub&gt;/Empire/</code> while the Hub is closed.</li>
+  <li><strong>If the list is empty</strong> or GitHub can't be reached, the window says why. Releases of a private repository can't be listed. GitHub also limits requests that aren't signed in to 60 an hour, which is plenty for this.</li>
+  <li><strong>Write access.</strong> The Hub's own folder has to be writable. If you installed it somewhere protected (such as <code>Program Files</code>), move it to a folder you own.</li>
+</ul>
+
+<h3>About</h3>
+<p>The third-party software in the Hub and the editor, with each license. The editor shows the same list under <em>Help &gt; Credits</em>.</p>
+
+<h2>Which scene opens</h2>
+<p>The editor opens the project's <code>StartScene</code> from <code>project.empire</code> if it exists, otherwise <code>Scenes/Main.empirescene</code>, otherwise the first scene it finds.</p>
+
+<h2>Where the Hub keeps its settings</h2>
+<p>The project list and any installs you located by hand are saved in <code>settings.json</code> in the per-user app data folder: <code>AppData</code> on Windows, <code>Application Support</code> on macOS, and <code>~/.config</code> on Linux.</p>
+
+<p>For the exact contents of <code>project.empire</code> and the other files, see <a href="file-formats.html">File formats</a>.</p>
+
+</article>
+</body>
+</html>

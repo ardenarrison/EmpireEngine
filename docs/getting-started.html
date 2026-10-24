@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Getting Started · Empire Engine Docs</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<article>
+
+<p class="eyebrow">Start here</p>
+<h1>Getting started</h1>
+<p class="lead">Build Empire Engine from source, open the sample project, and make an object move with a script.</p>
+
+<h2>What you need</h2>
+<ul>
+  <li><strong>The .NET 10 SDK.</strong> Every project in the repository targets <code>net10.0</code>. Check with <code>dotnet --version</code>.</li>
+  <li><strong>A GPU that supports Vulkan.</strong>
+    <ul>
+      <li><strong>macOS:</strong> nothing to install. The repository carries the Vulkan loader and MoltenVK in <code>ThirdParty/Vulkan/osx-arm64/</code>, and the editor and built games bundle them.</li>
+      <li><strong>Windows and Linux:</strong> an up-to-date graphics driver, which includes Vulkan.</li>
+    </ul>
+  </li>
+  <li><strong>Python 3</strong>, only if you want to package a release with <code>publish.py</code>.</li>
+</ul>
+
+<h2>Run Empire Engine Hub</h2>
+<p>The Hub is the easiest way in. Building it also builds the editor and places it where the Hub looks for installed editors.</p>
+<pre data-label="Terminal, from the repository root"><code class="language-sh">dotnet run --project Hub</code></pre>
+<p>From the Hub, press <em>New project</em>, give it a name and a place, and open it. You can also add a project you already have. See <a href="projects.html">Projects and Empire Engine Hub</a>.</p>
+
+<h2>Or run the editor directly</h2>
+<p>The editor takes the scene to open, and optionally the project folder. When you leave the folder out, it is the folder above the scene's folder (so <code>My Game/Scenes/Main.empirescene</code> opens the <code>My Game</code> project).</p>
+<pre data-label="Terminal"><code class="language-sh"># usage: empire &lt;scene.empirescene&gt; [contentRoot]
+dotnet run --project Editor -- "/path/to/My Game/Scenes/Main.empirescene"</code></pre>
+
+<div class="callout tip">
+  <strong>The starter project</strong>
+  <p>A new project from the Hub has a scene with a sun, a sky, a camera and a flat green terrain for ground, plus empty <code>Models/</code> and <code>Scripts/</code> folders. Nothing is bundled: put your own <code>.glb</code>, <code>.fbx</code> or <code>.obj</code> models in <code>Models/</code> and drag them onto the scene (see <a href="assets.html">Models, textures and sound files</a>).</p>
+</div>
+
+<h2>Your first script</h2>
+<ol class="steps">
+  <li><strong>Add something to move.</strong> Right-click in the Hierarchy panel on the left and choose <em>Fire</em> (under Effects). A flame appears in front of the editor camera, and needs no model files. (With a model of your own you could instead add an object with a <em>Mesh</em> component. The script below works on anything.)</li>
+  <li><strong>Make a script.</strong> Still in Add Component, pick <em>Script</em>. Type a name, for example <code>Bob</code>, and press <em>Create and Attach</em>. The editor writes <code>Scripts/Bob.cs</code> and attaches it.</li>
+  <li><strong>Write the code.</strong> Press <em>Edit Code</em> on the script in the Inspector (or the <em>Code</em> button in the toolbar) and replace the file with:
+<pre data-label="Scripts/Bob.cs"><code class="language-cs">public class Bob : Behaviour
+{
+    public float height = 0.5f;   // shows in the Inspector as "Height"
+    public float speed = 2f;
+
+    private Vector3 _start;
+
+    public override void Start()
+    {
+        _start = Object.Position;
+    }
+
+    public override void Update()
+    {
+        float y = MathF.Sin(Time.time * speed) * height;
+        Object.Position = _start + new Vector3(0, y, 0);
+    }
+}</code></pre>
+    Errors are underlined as you type and listed under the code. Save with <kbd>Cmd</kbd>+<kbd>S</kbd> (macOS) or <kbd>Ctrl</kbd>+<kbd>S</kbd>.</li>
+  <li><strong>Play.</strong> Press <em>3D view</em> to go back to the scene, then <em>Play</em> at the top. The flame bobs up and down. Change <em>Height</em> in the Inspector and play again to see the difference.</li>
+  <li><strong>Stop.</strong> Press <em>Stop</em> or <kbd>Esc</kbd>. Everything goes back to how it was before you pressed Play.</li>
+</ol>
+
+<div class="callout">
+  <strong>No <code>using</code> lines needed</strong>
+  <p>Every script is compiled with <code>System</code>, <code>System.Collections.Generic</code>, <code>System.Linq</code>, <code>System.Numerics</code> (for <code>Vector3</code> and <code>Quaternion</code>), <code>Engine.Core.Scene</code> and <code>Engine.Core.Scripting</code> already imported. Adding them yourself does no harm.</p>
+</div>
+
+<h2>Save and build</h2>
+<ul>
+  <li><strong>Save the scene</strong> with <kbd>Cmd/Ctrl</kbd>+<kbd>S</kbd> or <em>File &gt; Save Scene</em>. Scenes are JSON files in <code>Scenes/</code>.</li>
+  <li><strong>Build a game</strong> with <em>File &gt; Build Project…</em>: pick a folder and a name, and the editor makes a standalone program. See <a href="building.html">Building and publishing</a>.</li>
+</ul>
+
+<h2>Run the tests</h2>
+<p>The engine's tests are a console program that prints <code>PASS</code> or <code>FAIL</code> for each check and covers scenes and the file format, scripting, physics, audio, animation, terrain, particles, save games and more.</p>
+<pre data-label="Terminal"><code class="language-sh">dotnet run --project Tests</code></pre>
+
+</article>
+</body>
+</html>

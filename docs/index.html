@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Empire Engine Docs</title>
+<meta name="description" content="Documentation for Empire Engine: a C# 3D game engine with a Vulkan renderer, an editor, visual scripting and a one-click game build.">
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<article>
+
+<div class="hero">
+  <p class="eyebrow">Empire Engine 0.1.0</p>
+  <h1>Make 3D games in C#, from one editor.</h1>
+  <p class="lead">Empire Engine is a 3D game engine written in C# on .NET 10. It draws with Vulkan, and its editor lets you
+  place objects, write scripts in C# or snap them together from blocks, press Play to try the game, and build it
+  into a program you can hand to other people.</p>
+</div>
+
+<div class="cards">
+  <a class="card" href="getting-started.html"><h3>Getting started</h3><p>Install, open the sample project and make your first moving object.</p></a>
+  <a class="card" href="editor.html"><h3>The editor</h3><p>Panels, camera controls, shortcuts, play mode and the build menu.</p></a>
+  <a class="card" href="scripting.html"><h3>C# scripting</h3><p>Behaviours, Inspector fields, coroutines, collisions and finding objects.</p></a>
+  <a class="card" href="visual-scripting.html"><h3>Visual scripting</h3><p>Write game logic with snap-together blocks that become C#.</p></a>
+  <a class="card" href="components.html"><h3>Component reference</h3><p>Every built-in component and each of its settings.</p></a>
+  <a class="card" href="api.html"><h3>Scripting API</h3><p>Input, Time, Physics, SceneManager, SaveGame and more.</p></a>
+</div>
+
+<h2>What's in the engine</h2>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>Area</th><th>What you get</th></tr></thead>
+  <tbody>
+    <tr><td><a href="rendering.html">Rendering</a></td><td>A Vulkan renderer with physically based materials and textures, directional, point and spot lights, sun shadows, gradient or panorama skies, sky lighting, see-through surfaces and MSAA anti-aliasing.</td></tr>
+    <tr><td><a href="assets.html">Models</a></td><td>glTF (<code>.glb</code>, <code>.gltf</code>), FBX and OBJ. Models reload in the editor as soon as you re-export them.</td></tr>
+    <tr><td><a href="scripting.html">Scripting</a></td><td>C# scripts compiled with Roslyn. Public fields show up in the Inspector. Coroutines, collision callbacks and a Unity-style API.</td></tr>
+    <tr><td><a href="visual-scripting.html">Visual scripting</a></td><td>A block editor (events, motion, control, sensing, variables, operators) that writes a C# script for you.</td></tr>
+    <tr><td><a href="physics.html">Physics</a></td><td>Rigidbodies, box, sphere and mesh colliders, friction and bounce, forces in four modes, raycasts and collision events.</td></tr>
+    <tr><td><a href="audio.html">Audio</a></td><td>MP3 and WAV playback with 2D and 3D sound, Doppler, rolloff, one-shots and a listener.</td></tr>
+    <tr><td><a href="animation.html">Animation</a></td><td>Skinned and node animation from glTF, played by id with cross-fades, and shared between characters that use the same bones.</td></tr>
+    <tr><td><a href="terrain.html">Terrain</a></td><td>Heightmap ground you sculpt with brushes, paint with up to eight color layers, or fill with generated hills. It is also a collider.</td></tr>
+    <tr><td><a href="particles.html">Particles</a></td><td>A module-based particle system with shapes, bursts, color and size over life, ground collision and presets for fire, smoke and more.</td></tr>
+    <tr><td><a href="game-ui.html">Game UI</a></td><td>Buttons, text fields, checkboxes, dropdowns and bars drawn over the game, in the editor and in built games, with <code>OnClick</code>-style events for scripts.</td></tr>
+    <tr><td><a href="scene-management.html">Scenes and saves</a></td><td>Load scenes on their own or on top of each other, stream them in the background, and save the whole game into named slots.</td></tr>
+    <tr><td><a href="packages.html">Packages</a></td><td>Optional add-ons made of ordinary scripts. The editor comes with a Water package.</td></tr>
+    <tr><td><a href="building.html">Building</a></td><td>File &gt; Build Project makes a standalone game for Windows, macOS or Linux that needs nothing installed.</td></tr>
+  </tbody>
+</table></div>
+
+<h2>The parts</h2>
+<p>Empire Engine is a handful of programs and libraries that live together in this repository:</p>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>Folder</th><th>What it is</th></tr></thead>
+  <tbody>
+    <tr><td><code>Engine.Core/</code></td><td>The engine itself, with no graphics: scenes, components, scripting runtime, physics, audio mixing, animation, asset loaders and the scene file format.</td></tr>
+    <tr><td><code>Engine.Brutal/</code></td><td>The Vulkan renderer, window, keyboard and mouse, and audio output, built on the BRUTAL libraries. Also contains <code>BrutalPlayer</code>, which runs a scene in a window.</td></tr>
+    <tr><td><code>ScriptCompiler/</code></td><td>Compiles a project's <code>Scripts/</code> folder and its packages into DLLs with Roslyn.</td></tr>
+    <tr><td><code>Editor/</code></td><td>The editor (the program is called <code>empire</code>). It uses an immediate-mode UI and includes the code view and the visual scripting view.</td></tr>
+    <tr><td><code>Player/</code></td><td>The runtime that a built game is. It reads <code>GameData/</code> and plays the start scene.</td></tr>
+    <tr><td><code>Hub/</code></td><td>Empire Engine Hub, the launcher. It lists your projects, creates new ones and opens them in the right editor version.</td></tr>
+    <tr><td><code>Packages/</code></td><td>Packages that ship with the editor (currently <code>Water</code>).</td></tr>
+    <tr><td><code>Tests/</code>, <code>Probe/</code></td><td>The engine's test program, and a small tool that opens a scene in a game window without the editor.</td></tr>
+    <tr><td><code>publish.py</code></td><td>Packages the Hub, editor and player into one folder you can zip and ship.</td></tr>
+  </tbody>
+</table></div>
+
+<p>See <a href="architecture.html">Engine architecture</a> for how these fit together and what happens in one frame.</p>
+
+<h2>Open source</h2>
+<p>Empire Engine's code is open source under the <strong>Apache License 2.0</strong>: free to use, change and share, including in commercial games. Your games are yours. Two things aren't covered by that license: the Empire Engine name and crown logo (trademarks; forks need their own name), and the <strong>BRUTAL logo</strong>, which belongs to Ahwoo Limited and must stay on the <a href="building.html#the-splash-screen">splash screen</a> every game opens with. Contributions are welcome; see <code>CONTRIBUTING.md</code> in the repository, and <code>README.md</code> for an overview.</p>
+
+<h2>Where to go next</h2>
+<ul>
+  <li>New to Empire Engine? Start with <a href="getting-started.html">Getting started</a>.</li>
+  <li>Coming from Unity? Most names will be familiar: <code>Update</code>, <code>GetComponent</code>, <code>Rigidbody.AddForce</code>, <code>Input.GetAxis</code>, <code>SceneManager.LoadScene</code>. The <a href="scripting.html#coming-from-unity">scripting page</a> lists what's different.</li>
+  <li>Looking for one setting? The <a href="components.html">Component reference</a> lists every field with its default.</li>
+</ul>
+
+</article>
+</body>
+</html>

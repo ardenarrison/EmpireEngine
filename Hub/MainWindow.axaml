@@ -1,0 +1,162 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="using:EmpireHub"
+        x:Class="EmpireHub.MainWindow"
+        Title="Empire Engine Hub"
+        Icon="avares://EmpireHub/Assets/EmpireEngineIcon.ico"
+        Width="1000" Height="640" MinWidth="760" MinHeight="460"
+        WindowStartupLocation="CenterScreen">
+  <Grid ColumnDefinitions="220,*" RowDefinitions="*,Auto">
+
+    <!-- Sidebar -->
+    <Border Grid.RowSpan="2" Background="#16181E">
+      <DockPanel Margin="12,20">
+        <TextBlock x:Name="HubVersionText" DockPanel.Dock="Bottom" Classes="dim" Margin="8,0" />
+        <StackPanel Spacing="4">
+          <TextBlock Text="EMPIRE HUB" FontSize="18" FontWeight="Bold" LetterSpacing="2" Margin="8,0,0,24" />
+          <ListBox x:Name="Nav" SelectedIndex="0" Background="Transparent" SelectionChanged="OnNavChanged">
+            <ListBoxItem Content="Projects" />
+            <ListBoxItem Content="Installs" />
+            <ListBoxItem Content="About" />
+          </ListBox>
+        </StackPanel>
+      </DockPanel>
+    </Border>
+
+    <!-- Projects page -->
+    <DockPanel x:Name="ProjectsPage" Grid.Column="1" Margin="28,24,28,12">
+      <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="0,0,0,16">
+        <TextBlock Classes="title" Text="Projects" />
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+          <Button Content="Add existing..." Click="OnAddExisting" />
+          <Button Content="New project" Classes="accent" Click="OnNewProject" />
+        </StackPanel>
+      </Grid>
+      <TextBox x:Name="SearchBox" DockPanel.Dock="Top" Watermark="Search projects" Margin="0,0,0,12"
+               TextChanged="OnSearchChanged" />
+      <Panel>
+        <TextBlock x:Name="NoProjectsText" Classes="dim" FontSize="14" HorizontalAlignment="Center"
+                   VerticalAlignment="Center" TextAlignment="Center"
+                   Text="No projects yet.&#10;Create a new project or add an existing one." />
+        <ListBox x:Name="ProjectList" Background="Transparent" DoubleTapped="OnProjectDoubleTapped">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="local:ProjectItem">
+              <Grid ColumnDefinitions="*,140,110,Auto" Margin="4,6" Opacity="{Binding RowOpacity}" Background="Transparent">
+                <StackPanel VerticalAlignment="Center" Spacing="2">
+                  <TextBlock Text="{Binding Name}" FontSize="15" FontWeight="SemiBold" />
+                  <TextBlock Text="{Binding Path}" Classes="dim" TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+                <TextBlock Grid.Column="1" Text="{Binding VersionText}" VerticalAlignment="Center" Margin="12,0" />
+                <TextBlock Grid.Column="2" Text="{Binding LastOpenedText}" Classes="dim" VerticalAlignment="Center" />
+                <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                  <Button Content="Open" Click="OnOpenClick" IsEnabled="{Binding Exists}" />
+                  <Button Content="..." ToolTip.Tip="More">
+                    <Button.Flyout>
+                      <MenuFlyout>
+                        <MenuItem Header="Show in file manager" Click="OnRevealClick" IsEnabled="{Binding Exists}" />
+                        <MenuItem Header="Remove from list" Click="OnRemoveClick" />
+                      </MenuFlyout>
+                    </Button.Flyout>
+                  </Button>
+                </StackPanel>
+              </Grid>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </Panel>
+    </DockPanel>
+
+    <!-- Installs page -->
+    <DockPanel x:Name="InstallsPage" Grid.Column="1" Margin="28,24,28,12" IsVisible="False">
+      <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="0,0,0,8">
+        <TextBlock Classes="title" Text="Installs" />
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+          <Button Content="Install version..." Click="OnInstallVersion"
+                  ToolTip.Tip="Download the current or an earlier version of Empire Engine from GitHub's releases" />
+          <Button Content="Locate..." Click="OnLocateInstall"
+                  ToolTip.Tip="Add an Empire Engine editor folder (the one containing empire.dll)" />
+        </StackPanel>
+      </Grid>
+      <TextBlock DockPanel.Dock="Top" Classes="dim" Margin="0,0,0,16" TextWrapping="Wrap"
+                 Text="Projects open with the Empire Engine version they were made with when it's installed, otherwise the newest. Install version... adds the current or an earlier version from GitHub's releases." />
+      <Panel>
+        <TextBlock x:Name="NoInstallsText" Classes="dim" FontSize="14" HorizontalAlignment="Center"
+                   VerticalAlignment="Center" TextAlignment="Center"
+                   Text="No Empire Engine editor found.&#10;Rebuild Empire Engine Hub, or locate an editor folder." />
+        <ListBox x:Name="InstallList" Background="Transparent">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="local:EditorInstall">
+              <Grid ColumnDefinitions="*,Auto,Auto" Margin="4,6" Background="Transparent">
+                <StackPanel VerticalAlignment="Center" Spacing="2">
+                  <TextBlock FontSize="15" FontWeight="SemiBold">
+                    <Run Text="Empire Engine " /><Run Text="{Binding Version}" />
+                  </TextBlock>
+                  <TextBlock Text="{Binding Folder}" Classes="dim" TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+                <Border Grid.Column="1" Classes="tag" Margin="12,0">
+                  <TextBlock Text="{Binding Kind}" FontSize="12" />
+                </Border>
+                <Button Grid.Column="2" Content="Remove" Click="OnRemoveInstall" IsVisible="{Binding CanRemove}" />
+              </Grid>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </Panel>
+    </DockPanel>
+
+    <!-- About page: version, the BRUTAL notice its license requires, and every third-party license -->
+    <DockPanel x:Name="AboutPage" Grid.Column="1" Margin="28,24,28,12" IsVisible="False">
+      <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="0,0,0,16">
+        <TextBlock Classes="title" Text="About" />
+        <TextBlock x:Name="AboutVersionText" FontSize="15" />
+        <TextBlock x:Name="BrutalNoticeText" Classes="dim" TextWrapping="Wrap" />
+      </StackPanel>
+      <Grid ColumnDefinitions="320,12,*">
+        <ListBox x:Name="CreditList" Background="Transparent" SelectionChanged="OnCreditSelected">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="local:CreditItem">
+              <StackPanel Margin="2,4" Spacing="2">
+                <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding Subtitle}" Classes="dim" TextWrapping="Wrap" />
+              </StackPanel>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+        <Border Grid.Column="2" Background="#16181E" CornerRadius="6" Padding="14">
+          <ScrollViewer HorizontalScrollBarVisibility="Auto">
+            <SelectableTextBlock x:Name="LicenseText" FontFamily="Menlo, Consolas, DejaVu Sans Mono, monospace"
+                                 FontSize="12" Text="Pick an entry to read its license." />
+          </ScrollViewer>
+        </Border>
+      </Grid>
+    </DockPanel>
+
+    <!-- Status line -->
+    <TextBlock x:Name="StatusText" Grid.Row="1" Grid.Column="1" Classes="dim" Margin="28,0,28,12"
+               TextTrimming="CharacterEllipsis" />
+
+    <!-- Opening screen: the Empire Engine and BRUTAL logos. The BRUTAL License requires the BRUTAL logo, unaltered except for
+         scaling and no less prominent than other logos, so it is the official file, drawn larger than Empire Engine's, and
+         this covers the whole window (taking every click) until it fades out. See MainWindow.axaml.cs. -->
+    <Border x:Name="Splash" Grid.RowSpan="2" Grid.ColumnSpan="2" Background="#0E0F13">
+      <Border.Transitions>
+        <Transitions>
+          <DoubleTransition Property="Opacity" Duration="0:0:0.5" />
+        </Transitions>
+      </Border.Transitions>
+      <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+        <Image Source="avares://EmpireHub/Assets/EmpireEngineCrown.png" Height="120" HorizontalAlignment="Center"
+               RenderOptions.BitmapInterpolationMode="HighQuality" />
+        <TextBlock Text="EMPIRE ENGINE" FontSize="34" LetterSpacing="3" Foreground="#F5F5FA"
+                   HorizontalAlignment="Center" Margin="0,14,0,0" />
+        <TextBlock Text="built with" Classes="dim" FontSize="14" HorizontalAlignment="Center" Margin="0,44,0,12" />
+        <Image Source="avares://EmpireHub/Assets/BrutalLogo.png" Width="560" HorizontalAlignment="Center"
+               RenderOptions.BitmapInterpolationMode="HighQuality" />
+        <TextBlock Text="BRUTAL game development framework by Ahwoo Limited" Classes="dim" FontSize="13"
+                   HorizontalAlignment="Center" Margin="0,18,0,2" />
+        <TextBlock Text="Copyright (c) 2024 Ahwoo Limited  |  ahwoo.com/brutal" Classes="dim" FontSize="13"
+                   HorizontalAlignment="Center" />
+      </StackPanel>
+    </Border>
+  </Grid>
+</Window>

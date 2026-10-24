@@ -1,0 +1,10 @@
+StbTrueTypeSharp
+https://github.com/StbSharp/StbTrueTypeSharp
+
+StbTrueTypeSharp is a C# port of stb_truetype.h by Sean Barrett. Its README states:
+
+    # License
+    Public Domain
+
+stb_truetype.h itself is offered under the MIT License or the Unlicense (public domain), at your
+choice; both texts are reproduced in ThirdParty/BRUTAL-STB-THIRD-PARTY-NOTICES.txt.

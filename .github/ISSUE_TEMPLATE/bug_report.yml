@@ -1,0 +1,48 @@
+name: Bug report
+description: Something doesn't work the way the docs or the editor say it should
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The shortest steps that show it. A small project or scene file helps a lot (zip it and attach it).
+      placeholder: |
+        1. Add a Terrain from the Hierarchy
+        2. Press Play
+        3. ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Empire Engine version
+      description: Shown in the Hub's About page, or EmpireVersion in Directory.Build.props.
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options: [macOS, Windows, Linux]
+    validations:
+      required: true
+  - type: input
+    id: gpu
+    attributes:
+      label: Graphics card and driver
+      placeholder: "Apple M2, or NVIDIA RTX 3060 (driver 560.94)"
+  - type: textarea
+    id: logs
+    attributes:
+      label: Console output or screenshots
+      description: Anything the editor or game printed to the console, and a picture if it's visual.
+      render: shell

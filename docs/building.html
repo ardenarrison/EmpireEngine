@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Building and Publishing · Empire Engine Docs</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<article>
+
+<p class="eyebrow">Extending and shipping</p>
+<h1>Building and publishing</h1>
+<p class="lead"><em>Build Project</em> turns your project into a standalone game for the computer you're on. <code>publish.py</code> packages Empire Engine itself (Hub, editor and player) for release.</p>
+
+<h2>Building a game</h2>
+<ol class="steps">
+  <li><strong>Save.</strong> The build uses the files on disk; unsaved edits are not included.</li>
+  <li>Choose <strong>File &gt; Build Project…</strong>, pick a folder <em>outside</em> the project, and enter a name for the game.</li>
+  <li>Wait while it builds (it can take a minute). When it's done, <em>Open Folder</em> shows the game. If it fails, <em>Copy Errors</em> copies the full error report, and the whole log is in <code>empire-build.log</code> in your temp folder.</li>
+</ol>
+<p>The scene open in the editor is the scene the game starts with.</p>
+
+<h3>What a build contains</h3>
+<pre data-label="&lt;folder&gt;/&lt;name&gt;/"><code>&lt;name&gt;  (or &lt;name&gt;.exe)     the game: run this
+...                          the .NET runtime and native libraries (Vulkan, GLFW, audio)
+libvulkan.1.dylib, vulkan/   macOS only: the bundled Vulkan loader and MoltenVK
+GameData/
+  game.json                  the game's name and start scene
+  Scripts.dll                your scripts, compiled
+  EmpirePackage.*.dll        the project's installed packages
+  Core/                      a copy of the project: Scenes/, Models/, Audio/ ...</code></pre>
+<ul>
+  <li><strong>Self-contained</strong>: the .NET runtime is included, so players need nothing installed. On macOS, Vulkan is bundled too; on Windows and Linux players need a graphics driver with Vulkan, which current drivers include.</li>
+  <li><strong>For this platform</strong>: building on a Mac makes a Mac game, on Windows a Windows game. Build on each platform you want to ship for.</li>
+  <li>Scripts are compiled at build time. The game only loads <code>Scripts.dll</code> and never compiles anything. The <code>Scripts/</code> and <code>Packages/</code> folders are not copied into <code>Core/</code>.</li>
+</ul>
+
+<h3>What you need to build</h3>
+<p>Building runs <code>dotnet restore</code> and <code>dotnet publish</code> on the <code>Player</code> project, so it needs:</p>
+<ul>
+  <li>the <strong>.NET 10 SDK</strong> on the computer, and</li>
+  <li><code>Player/Player.csproj</code> in a folder above the editor's own folder, which is the case when the editor runs from a checkout of this repository (with <code>dotnet run --project Editor</code> or from the Hub built from source). Otherwise the build stops with <em>Could not find Player/Player.csproj in a folder above the Editor</em>.</li>
+</ul>
+
+<h3>Running the game</h3>
+<ul>
+  <li>The game opens in a window and plays its start scene through the scene's first camera (if a scene has no camera, the view orbits the scene).</li>
+  <li><kbd>F11</kbd> switches between a window and fullscreen. Fullscreen uses the monitor's largest 16:9 mode; other shapes are letterboxed.</li>
+  <li>Save games go in <code>&lt;application data&gt;/&lt;game name&gt;/Saves/</code>.</li>
+  <li>If a script fails to load, the game prints the errors and exits.</li>
+</ul>
+<ul>
+  <li>The game uses Empire Engine's crown icon: on its <code>.exe</code> and taskbar button on Windows, its window on Linux, and in the Dock on macOS.</li>
+  <li><strong>Every game opens with a splash screen</strong> showing the Empire Engine and BRUTAL logos and BRUTAL's copyright notice, for about 3.5 seconds, before any scene loads or script runs. It can't be turned off or skipped: the BRUTAL License requires the BRUTAL logo in every product built with it. See <a href="#the-splash-screen">below</a>.</li>
+  <li>The game's <a href="game-ui.html">UI</a> is drawn over the game view and works exactly as in the editor's play mode. Its font is built into the engine, so there's nothing extra to ship.</li>
+</ul>
+
+<h2>The splash screen</h2>
+<p>Games open on a dark screen with Empire Engine's crown and name, then "built with" and the BRUTAL logo, and under it BRUTAL's copyright line and web address. It fades in over half a second, holds for two and a half, and fades out. Nothing else happens until it ends: the scene isn't loaded and no script's <code>Start</code> runs. Time spent minimized doesn't count.</p>
+<p>It's there because Empire Engine is built on BRUTAL, whose license (section 2.2) says the BRUTAL logo must be shown before gameplay in every product built with it, unaltered except for scaling, for long enough to read, and no less prominently than other logos. So the BRUTAL logo is the official one, drawn larger than Empire Engine's, and the screen has no skip. The notice file (<code>NOTICE.txt</code>) and the credits for every other library go into <code>Licenses/</code> next to the game.</p>
+<ul>
+  <li>The code is <code>Engine.Brutal/Ui/SplashScreen.cs</code>, and the logos are embedded in <code>Engine.Brutal.dll</code>, so there's nothing to ship separately.</li>
+  <li>Don't edit, recolor or crop the logo, and read <code>Engine.Brutal/Ui/Logos/README.txt</code> before changing the screen. If you ever want it gone, you need written permission from Ahwoo Limited (the BRUTAL license allows asking).</li>
+  <li>The editor and the Hub open on the same screen (the Hub's is an overlay in <code>Hub/MainWindow.axaml</code>, using the same logo files), and they carry the full credits under <em>Help &gt; Credits</em> and <em>About</em>.</li>
+</ul>
+
+<h2>Packaging Empire Engine for release</h2>
+<p><code>publish.py</code> publishes the Hub, the editor and the player and puts them in one folder ready to zip and ship. It needs the .NET SDK and Python 3.</p>
+<pre data-label="Terminal, from the repository root"><code class="language-sh"># for the platform you are on
+python3 publish.py
+
+# for several platforms, zipped
+python3 publish.py --rid win-x64 --rid linux-x64 --zip</code></pre>
+<div class="table-wrap"><table>
+  <thead><tr><th>Option</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td><code>--rid PLATFORM</code></td><td>A platform to build for: <code>osx-arm64</code>, <code>osx-x64</code>, <code>win-x64</code>, <code>win-arm64</code>, <code>linux-x64</code> or <code>linux-arm64</code>. Repeat for several. Defaults to this computer's.</td></tr>
+    <tr><td><code>--out FOLDER</code></td><td>Where packages go (default <code>Empire/</code> next to the script, which git ignores)</td></tr>
+    <tr><td><code>--zip</code></td><td>Also make <code>Empire-&lt;version&gt;-&lt;platform&gt;.zip</code></td></tr>
+  </tbody>
+</table></div>
+<pre data-label="Empire/osx-arm64/"><code>EmpireHub                the Hub: run this
+Empire/&lt;version&gt;/        the editor, where the Hub looks for installed editors
+  empire                 the editor
+  Player/                the game player</code></pre>
+<p>macOS packages carry their own Vulkan loader and MoltenVK from <code>ThirdParty/Vulkan/</code>. If that folder is missing, the script says so; restore it, or set the <code>EmpireVulkanLoader</code> and <code>EmpireMoltenVK</code> environment variables to the paths of <code>libvulkan.1.dylib</code> and <code>libMoltenVK.dylib</code>.</p>
+
+<h2 id="publishing-a-release">Publishing a release</h2>
+<p>The Hub's <a href="projects.html#installing-other-versions">Install version…</a> button reads the project's GitHub releases. To make a version installable:</p>
+<ol class="steps">
+  <li><strong>Bump the version</strong> (<code>EmpireVersion</code> in <code>Directory.Build.props</code>) and commit it.</li>
+  <li><strong>Build the zips</strong> on each platform you support: <code>python3 publish.py --zip</code> makes <code>Empire/Empire-&lt;version&gt;-&lt;platform&gt;.zip</code> (for example <code>Empire-0.1.1-osx-arm64.zip</code>). Each zip must hold <code>Empire/&lt;version&gt;/empire.dll</code>, which <code>publish.py</code> already does.</li>
+  <li><strong>Create a release</strong> on GitHub (Releases &gt; Draft a new release) with a tag that is the version, <code>v0.1.1</code> or <code>0.1.1</code>, and attach the zips as release assets. GitHub adds a checksum to each asset, and the Hub checks it.</li>
+  <li><strong>Publish it.</strong> Drafts aren't shown. Tick <em>Set as a pre-release</em> for a beta, and it appears in the list marked <em>Pre-release</em>.</li>
+</ol>
+<ul>
+  <li>Don't rely on GitHub's automatic "Source code" zips: they hold source, not a built editor, and the Hub never offers them.</li>
+  <li>A release only needs the platforms you've built. Someone on another platform sees <em>No download for &lt;platform&gt;</em>.</li>
+  <li>The repository the Hub reads is set in <code>Hub/Releases/ReleaseCatalog.cs</code> (<code>Repository</code>). A fork should change it. Setting the environment variable <code>EMPIRE_RELEASES_URL</code> to a releases-list address makes the Hub read that instead, which is how the tests and demos fake GitHub.</li>
+</ul>
+
+<h2>Versioning</h2>
+<p>The Empire Engine version (currently <strong>0.1.0</strong>) is set once, as <code>EmpireVersion</code> in <code>Directory.Build.props</code>, and shared by the editor, the player and the Hub. Bump it there for a release. New projects record the version they were made with, and the Hub opens each project with that version when it's installed.</p>
+
+</article>
+</body>
+</html>

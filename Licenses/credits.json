@@ -1,0 +1,26 @@
+{
+  "comment": "Third-party software in Empire Engine. 'usedIn' says which programs ship it: hub (Empire Engine Hub), editor, game (games built with Empire Engine). Credits screens read this file; the BRUTAL component notices in ThirdParty/ are copied from the NuGet packages at build time.",
+  "brutalNotice": "BRUTAL game development framework is Copyright (c) 2024 Ahwoo Limited. This product is built with BRUTAL, a game development framework by Ahwoo Limited, used under the BRUTAL License v1.0. www.ahwoo.com/brutal",
+  "entries": [
+    { "name": "BRUTAL", "copyright": "Copyright (c) 2024 Ahwoo Limited", "license": "BRUTAL License v1.0", "file": "BRUTAL-LICENSE.txt", "url": "https://www.ahwoo.com/brutal", "usedIn": ["hub", "editor", "game"] },
+    { "name": "JetBrains Mono typeface", "copyright": "Copyright 2020 The JetBrains Mono Project Authors", "license": "SIL Open Font License 1.1", "file": "JetBrainsMono-OFL.txt", "url": "https://github.com/JetBrains/JetBrainsMono", "usedIn": ["editor"] },
+    { "name": ".NET runtime and Microsoft.Extensions", "copyright": "Copyright (c) .NET Foundation and Contributors", "license": "MIT", "file": "DotNet-MIT.txt", "url": "https://github.com/dotnet/runtime", "usedIn": ["hub", "editor", "game"] },
+    { "name": "MoltenVK (macOS only)", "copyright": "Copyright (c) 2015-2025 The Brenwill Workshop Ltd.", "license": "Apache 2.0", "file": "MoltenVK-Apache.txt", "url": "https://github.com/KhronosGroup/MoltenVK", "usedIn": ["editor", "game"] },
+    { "name": "Vulkan Loader (macOS only)", "copyright": "Copyright (c) 2014-2025 The Khronos Group Inc., Valve Corporation and LunarG, Inc.", "license": "Apache 2.0", "file": "VulkanLoader-Apache.txt", "url": "https://github.com/KhronosGroup/Vulkan-Loader", "usedIn": ["editor", "game"] },
+    { "name": "Roslyn (Microsoft.CodeAnalysis)", "copyright": "Copyright (c) .NET Foundation and Contributors", "license": "MIT", "file": "Roslyn-MIT.txt", "url": "https://github.com/dotnet/roslyn", "usedIn": ["editor"] },
+    { "name": ".NET Community Toolkit", "copyright": "Copyright (c) .NET Foundation and Contributors", "license": "MIT", "file": "CommunityToolkit-MIT.txt", "url": "https://github.com/CommunityToolkit/dotnet", "usedIn": ["editor", "game"] },
+    { "name": "StbImageSharp", "copyright": "StbSharp contributors; stb_image by Sean Barrett", "license": "MIT or public domain", "file": "StbImageSharp-PublicDomain.txt", "url": "https://github.com/StbSharp/StbImageSharp", "usedIn": ["editor", "game"] },
+    { "name": "StbTrueTypeSharp", "copyright": "StbSharp contributors; stb_truetype by Sean Barrett", "license": "Public domain", "file": "StbTrueTypeSharp-PublicDomain.txt", "url": "https://github.com/StbSharp/StbTrueTypeSharp", "usedIn": ["editor"] },
+    { "name": "miniaudio", "copyright": "Copyright (c) David Reid", "license": "Public domain or MIT No Attribution", "file": "MiniAudio-PublicDomain.txt", "url": "https://miniaud.io", "usedIn": ["editor", "game"] },
+    { "name": "Hexa.NET.MiniAudio", "copyright": "Copyright (c) 2026 Juna Meinhold", "license": "MIT", "file": "HexaNET-MiniAudio-MIT.txt", "url": "https://github.com/HexaEngine/Hexa.NET.MiniAudio", "usedIn": ["editor", "game"] },
+    { "name": "HexaGen.Runtime", "copyright": "Copyright (c) 2023 Juna Meinhold", "license": "MIT", "file": "HexaGenRuntime-MIT.txt", "url": "https://github.com/HexaEngine/HexaGen", "usedIn": ["editor", "game"] },
+    { "name": "NLayer", "copyright": "Copyright (c) 2018 Mark Heath, Andrew Ward & Contributors", "license": "MIT", "file": "NLayer-MIT.txt", "url": "https://github.com/naudio/NLayer", "usedIn": ["editor", "game"] },
+    { "name": "Avalonia", "copyright": "Copyright (c) AvaloniaUI OÜ", "license": "MIT", "file": "Avalonia-MIT.txt", "url": "https://avaloniaui.net", "usedIn": ["hub"] },
+    { "name": "SkiaSharp and HarfBuzzSharp", "copyright": "Copyright (c) 2015-2016 Xamarin, Inc.; Copyright (c) 2017-2018 Microsoft Corporation", "license": "MIT", "file": "SkiaSharp-MIT.txt", "url": "https://github.com/mono/SkiaSharp", "usedIn": ["hub"] },
+    { "name": "Skia", "copyright": "Copyright (c) 2011 Google Inc.", "license": "BSD 3-Clause", "file": "Skia-BSD.txt", "url": "https://skia.org", "usedIn": ["hub"] },
+    { "name": "HarfBuzz", "copyright": "Copyright (c) 2010-2022 Google, Inc. and others", "license": "Old MIT", "file": "HarfBuzz-MIT.txt", "url": "https://github.com/harfbuzz/harfbuzz", "usedIn": ["hub"] },
+    { "name": "ANGLE (Windows only)", "copyright": "Copyright 2018 The ANGLE Project Authors", "license": "BSD 3-Clause", "file": "ANGLE-BSD.txt", "url": "https://chromium.googlesource.com/angle/angle", "usedIn": ["hub"] },
+    { "name": "MicroCom", "copyright": "Copyright (c) 2021 Nikita Tsukanov", "license": "MIT", "file": "MicroCom-MIT.txt", "url": "https://github.com/kekekeks/MicroCom", "usedIn": ["hub"] },
+    { "name": "Tmds.DBus (Linux only)", "copyright": "Copyright 2006 Alp Toker; 2010 Other Contributors; 2016 Tom Deseyn", "license": "MIT", "file": "TmdsDBus-MIT.txt", "url": "https://github.com/tmds/Tmds.DBus", "usedIn": ["hub"] }
+  ]
+}

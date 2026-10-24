@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Editor · Empire Engine Docs</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<article>
+
+<p class="eyebrow">Using the editor</p>
+<h1>The editor</h1>
+<p class="lead">One window with the scene in the middle, the object list on the left, the selected object's settings on the right, and the project's files along the bottom.</p>
+
+<h2>Layout</h2>
+
+<div class="diagram">
+<svg viewBox="0 0 720 400" role="img" aria-label="Editor layout: menu bar along the top, toolbar centered under it, Hierarchy on the left, tool buttons beside it, 3D view in the middle, Inspector on the right, Assets panel along the bottom">
+  <rect class="box" x="1" y="1" width="718" height="30" rx="4"/>
+  <text x="14" y="21" font-size="13">File   Help</text>
+  <text x="706" y="21" font-size="12" text-anchor="end" class="dim">menu bar</text>
+
+  <rect class="box" x="1" y="38" width="150" height="262" rx="4"/>
+  <text x="76" y="62" font-size="14" font-weight="600" text-anchor="middle">Hierarchy</text>
+  <text x="76" y="84" font-size="12" text-anchor="middle" class="dim">objects, nested</text>
+  <text x="76" y="102" font-size="12" text-anchor="middle" class="dim">right-click to add</text>
+
+  <rect class="box hot" x="158" y="38" width="404" height="262" rx="4" fill-opacity="0.35"/>
+
+  <rect class="box" x="164" y="44" width="40" height="96" rx="4"/>
+  <text x="184" y="72" font-size="11" text-anchor="middle">None</text>
+  <text x="184" y="96" font-size="11" text-anchor="middle">Move</text>
+  <text x="184" y="120" font-size="11" text-anchor="middle">Scale</text>
+  <rect class="box" x="262" y="44" width="196" height="30" rx="4"/>
+  <text x="360" y="64" font-size="12" text-anchor="middle">UI · Play · VC · Code</text>
+  <text x="360" y="180" font-size="15" font-weight="600" text-anchor="middle">3D view</text>
+  <text x="360" y="202" font-size="12" text-anchor="middle" class="dim">or the code view / visual script view</text>
+
+  <rect class="box" x="569" y="38" width="150" height="262" rx="4"/>
+  <text x="644" y="62" font-size="14" font-weight="600" text-anchor="middle">Inspector</text>
+  <text x="644" y="84" font-size="12" text-anchor="middle" class="dim">name, transform,</text>
+  <text x="644" y="102" font-size="12" text-anchor="middle" class="dim">components</text>
+
+  <rect class="box" x="1" y="307" width="718" height="92" rx="4"/>
+  <text x="360" y="348" font-size="14" font-weight="600" text-anchor="middle">Assets</text>
+  <text x="360" y="370" font-size="12" text-anchor="middle" class="dim">project files: drag models and sounds into the scene</text>
+</svg>
+</div>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>Part</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td>Menu bar</td><td><em>File</em>: Save Scene, Build Project…, Package Manager…, Save and Exit, Exit. <em>Help</em>: Credits.</td></tr>
+    <tr><td>Toolbar</td><td><em>UI</em> edits the game's UI elements, <em>Play</em> runs the game, <em>VC</em> opens the visual script view, <em>Code</em> opens the C# code view. While playing it shows only <em>Stop</em>.</td></tr>
+    <tr><td>Hierarchy</td><td>Every object in the scene, children indented under their parents. <em>Add Child</em> and <em>Delete</em> act on the selection.</td></tr>
+    <tr><td>Tool buttons</td><td><em>None</em>, <em>Move</em> and <em>Scale</em> pick the handles shown on the selected object.</td></tr>
+    <tr><td>Inspector</td><td>The selected object's name, parent, position, scale and rotation, then one section per component, then <em>Add Component</em>. Click a scene file in Assets to see that scene's settings here instead.</td></tr>
+    <tr><td>Assets</td><td>Browses the project folder. Right-click to <em>Create Scene</em>.</td></tr>
+  </tbody>
+</table></div>
+
+<h2>Moving around the scene</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Do this</th><th>To</th></tr></thead>
+  <tbody>
+    <tr><td>Hold the right mouse button and drag</td><td>Look around</td></tr>
+    <tr><td>Hold right-drag and press <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd></td><td>Fly forward, left, back, right</td></tr>
+    <tr><td>…and <kbd>Q</kbd> / <kbd>E</kbd></td><td>Fly down / up</td></tr>
+    <tr><td>…and hold <kbd>Shift</kbd></td><td>Fly faster</td></tr>
+    <tr><td>Scroll (mouse wheel or two fingers on a trackpad)</td><td>Zoom in and out along the view. Each step moves a tenth of the way to what you're looking at, so it is fine up close and quick far away. <kbd>Shift</kbd> zooms faster.</td></tr>
+  </tbody>
+</table></div>
+
+<h2>Working with objects</h2>
+
+<h3>Adding objects</h3>
+<p>Right-click in the Hierarchy for a menu of ready-made objects:</p>
+<ul>
+  <li><strong>Objects</strong>: Add Object (empty), Add Camera</li>
+  <li><strong>Lighting</strong>: Point Light, Spot Light, Directional Light, Environment (sky and ambient)</li>
+  <li><strong>World</strong>: Terrain</li>
+  <li><strong>Effects</strong>: Particle System, plus the particle presets Fire, Explosion, Embers and Smoke</li>
+  <li><strong>Audio</strong>: Audio Source</li>
+  <li><strong>UI</strong>: Button, Text Field, Checkbox, Dropdown, Bar</li>
+</ul>
+<p>You can also <strong>drag a model</strong> from the Assets panel and drop it on the scene: it lands on the ground under the cursor (or 10 units ahead when there's no ground there). <strong>Dragging a sound</strong> onto the scene makes an object that plays it.</p>
+
+<h3>Selecting</h3>
+<ul>
+  <li>Click a row to select just that object.</li>
+  <li><kbd>Shift</kbd>-click selects every row from the last one you clicked.</li>
+  <li><kbd>Cmd</kbd>-click (macOS) or <kbd>Ctrl</kbd>-click adds or removes one row.</li>
+</ul>
+<p>The row you clicked last is the <em>primary</em> selection: the Inspector shows it and the handles sit on it. Moving or scaling changes every selected object by the same amount.</p>
+
+<h3>Parenting</h3>
+<p>Drag a row onto another row to make it a child. <em>Add Child</em> makes a new empty object under the selection, and the Inspector's <em>Change Parent</em> picks a parent from a list. Reparenting keeps an object where it is in the world; its position, rotation and scale are rewritten relative to the new parent.</p>
+
+<h3>Moving and scaling</h3>
+<p>Pick <em>Move</em> or <em>Scale</em> from the tool buttons and drag a handle. Move uses the world axes (arrow tips). Scale uses the object's own axes (box tips), and the center box scales evenly: drag right to grow and left to shrink. You can also type values in the Inspector's Position, Rotation and Scale fields, or drag across them.</p>
+
+<h3>Components</h3>
+<p>Press <em>Add Component</em> for the list of built-in components, followed by components from your own scripts and turned-on packages. Each component's section has an <strong>X</strong> on its title bar that removes it. See the <a href="components.html">Component reference</a>.</p>
+
+<h2>Keyboard shortcuts</h2>
+<p>On macOS use <kbd>Cmd</kbd>; on Windows and Linux use <kbd>Ctrl</kbd>.</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>Keys</th><th>Action</th></tr></thead>
+  <tbody>
+    <tr><td><kbd>Cmd/Ctrl</kbd>+<kbd>S</kbd></td><td>Save the scene (or the open script in the code view)</td></tr>
+    <tr><td><kbd>Cmd/Ctrl</kbd>+<kbd>Z</kbd></td><td>Undo</td></tr>
+    <tr><td><kbd>Cmd/Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> or <kbd>Ctrl</kbd>+<kbd>Y</kbd></td><td>Redo</td></tr>
+    <tr><td><kbd>Cmd/Ctrl</kbd>+<kbd>D</kbd></td><td>Duplicate the selected objects and their children (in the visual script view: duplicate the selected blocks)</td></tr>
+    <tr><td><kbd>Esc</kbd></td><td>In order: stop play mode, cancel the exit prompt, stop typing in a field, close the open dialog, leave the visual script view. Otherwise it <strong>exits the editor</strong> (you're asked first if there are unsaved changes).</td></tr>
+  </tbody>
+</table></div>
+
+<p>Undo covers changes to the scene made while editing. An edit becomes one undo step when it settles (no mouse button held, no field being typed in), so a whole drag is one step. Text fields keep their own undo while you type.</p>
+
+<h2>Play mode</h2>
+<p>Press <strong>Play</strong> to run the game inside the editor. The editor:</p>
+<ol>
+  <li>saves a snapshot of the scene,</li>
+  <li>builds any turned-on packages that changed, then compiles your <code>Scripts/</code> folder (errors stop play and are shown),</li>
+  <li>hides the panels and draws through the scene's first camera, exactly as the built game would,</li>
+  <li>adds a camera and a sun if the scene has none, so there is always a view and a light.</li>
+</ol>
+<p>Press <strong>Stop</strong> or <kbd>Esc</kbd> and the scene goes back to the snapshot. Changes made while playing are not kept. If a script locked the cursor for mouse-look, <kbd>Esc</kbd> also frees it.</p>
+<p>Games played in the editor keep their <a href="scene-management.html#saving-the-game">save files</a> in your application data folder, under the project's name, so they don't mix with the project.</p>
+
+<h2>The code view</h2>
+<p>Press <strong>Code</strong> to swap the 3D view for a C# editor over the project's <code>Scripts/</code> folder. It colors C# as you type and compiles in the background a moment after each edit: problems are underlined, listed below the editor, and explained when the mouse rests on them. Scripts are checked against turned-on packages too, so using a package's classes is not an error.</p>
+<ul>
+  <li>Type a name in the header to make a new script.</li>
+  <li>Files changed outside the editor (in another IDE, say) are picked up within a second.</li>
+  <li>Generated scripts (the <code>.cs</code> files written from visual scripts) can be read and copied but not changed.</li>
+  <li>Press <em>3D view</em> to go back. <kbd>Esc</kbd> stays inside the code view.</li>
+</ul>
+
+<h2>The visual script view</h2>
+<p>Press <strong>VC</strong> to build scripts from blocks. See <a href="visual-scripting.html">Visual scripting</a>.</p>
+
+<h2>UI mode</h2>
+<p>Press <strong>UI</strong> to see every game UI element outlined over the scene. Click one to select it and edit it in the Inspector. Press <strong>Done UI</strong> to go back. See <a href="game-ui.html">Game UI</a>.</p>
+
+<h2>Live reloading</h2>
+<p>Once a second the editor reloads models whose files changed on disk, so a re-export from Blender shows up right away. Scripts edited elsewhere are picked up the same way.</p>
+
+<h2>Other windows</h2>
+<ul>
+  <li><strong>File &gt; Build Project…</strong> builds a standalone game. See <a href="building.html">Building and publishing</a>.</li>
+  <li><strong>File &gt; Package Manager…</strong> turns packages on and off. See <a href="packages.html">Packages</a>.</li>
+  <li><strong>Help &gt; Credits</strong> lists third-party software and licenses.</li>
+</ul>
+
+</article>
+</body>
+</html>

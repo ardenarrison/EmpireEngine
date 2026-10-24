@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Packages · Empire Engine Docs</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<article>
+
+<p class="eyebrow">Extending and shipping</p>
+<h1>Packages</h1>
+<p class="lead">A package is an optional add-on made of ordinary C# scripts. Install one in a project and its components appear in Add Component. Nothing in a package is part of the engine itself.</p>
+
+<h2>Installing a package</h2>
+<p>Open <strong>File &gt; Package Manager…</strong>. It lists the packages that come with the editor, each with an <em>Install</em> button for this project, what it adds, whether it built, and how many components in the scene use it. No package is installed until you install it.</p>
+<p>When you install one, the editor:</p>
+<ol>
+  <li>adds its id to <code>Packages/packages.json</code> in the project,</li>
+  <li>compiles its scripts into <code>Packages/EmpirePackage.&lt;Id&gt;.dll</code>,</li>
+  <li>compiles your scripts again against it, so they can use its classes.</li>
+</ol>
+<p>The DLL is rebuilt whenever the package's sources, its version or the engine changes; a <code>.stamp</code> file next to it records what it was built from. Play mode loads it, and <em>Build Project</em> copies it into the game.</p>
+<p><strong>Uninstalling</strong> deletes the DLL. Objects that use the package's components keep their settings and work again if you install it later. If an installed package is missing from the editor (say, a project opened with an older editor), the project keeps using the DLL it already has.</p>
+
+<h2>The Water package</h2>
+<p>Adds a <strong>Water</strong> component. Put it on an object whose Mesh is a flat plane (any plane model, such as one you exported from Blender) and, while the game plays, the plane becomes rolling, see-through water with crests, foam and sky reflections. Planes only, for now.</p>
+<p>The sea is a sum of Gerstner waves, from long swells down to short chop, mostly travelling with the wind. Foam forms where crests pinch together, and a scrolling ripple texture adds detail finer than the grid. Wave sizes are in world units, so scaling the object makes more water, not bigger waves.</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>Setting</th><th>Default</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td>Wave Height</td><td>0.25</td><td>How high the waves rise, overall</td></tr>
+    <tr><td>Wave Length</td><td>8</td><td>Distance between the longest waves' crests; shorter waves are added below it</td></tr>
+    <tr><td>Wave Speed</td><td>1</td><td>1 moves like real water of those lengths; 2 twice as fast</td></tr>
+    <tr><td>Choppiness</td><td>0.6</td><td>0 gives round swells, 1 sharp crests</td></tr>
+    <tr><td>Wind Direction</td><td>30</td><td>The way most waves travel, in degrees around the up axis</td></tr>
+    <tr><td>Quality</td><td>High</td><td>Waves added together: Low 4, Medium 8, High 16, Ultra 32. More looks less repetitive and costs more.</td></tr>
+    <tr><td>Seed</td><td>1</td><td>A different number gives a different arrangement of waves</td></tr>
+    <tr><td>Resolution</td><td>256 × 256</td><td>Grid points per side. 512 is fine on most machines, 1024 is slow on weaker ones, and above that is impractical. A size that won't fit in memory falls back to the largest that does.</td></tr>
+    <tr><td>Ripples, Ripple Size</td><td>0.6, 2</td><td>Strength of the fine ripples (0 to 1) and the width of one ripple tile in world units</td></tr>
+    <tr><td>Smoothness</td><td>0.92</td><td>1 is mirror-like, lower is duller</td></tr>
+    <tr><td>Foam</td><td>0.6</td><td>How much foam forms on pinched crests, 0 to 1</td></tr>
+    <tr><td>Opacity</td><td>0.85</td><td>1 is solid; lower shows what's under the water</td></tr>
+    <tr><td>Deep Color, Shallow Color, Foam Color</td><td>blues, white</td><td>Troughs are darker, crests lighter</td></tr>
+  </tbody>
+</table></div>
+<p>The surface is worked out on background threads across all CPU cores while the previous frame is drawn, so it adds little to the frame time.</p>
+
+<h2>Writing a package</h2>
+<p>Packages live in the repository's <code>Packages/</code> folder, one subfolder each. The editor's build copies that folder next to the editor, and the Package Manager lists every subfolder that has a <code>package.json</code>.</p>
+<pre data-label="Packages/Floaty/package.json"><code class="language-json">{
+  "id": "Floaty",
+  "name": "Floaty",
+  "version": "1.0.0",
+  "description": "Adds a Floaty component that makes objects bob on the spot."
+}</code></pre>
+<pre data-label="Packages/Floaty/Floaty.cs"><code class="language-cs">public class Floaty : Component
+{
+    public float Height = 0.3f;
+    public float Speed = 1.5f;
+    private Vector3 _start;
+
+    public override void Start() =&gt; _start = Object.Position;
+
+    public override void Update() =&gt;
+        Object.Position = _start + new Vector3(0, MathF.Sin(Time.time * Speed) * Height, 0);
+}</code></pre>
+<ul>
+  <li>The <strong>id</strong> must be letters, digits and underscores; it names the DLL. Without one, the folder's name is used. <code>version</code> defaults to <code>1.0.0</code>.</li>
+  <li>Write the scripts exactly like a project's own. Classes that extend <code>Component</code> become new components; the usual imports are already there.</li>
+  <li>Bump <code>version</code> when you change a package, so projects rebuild it.</li>
+  <li>A project script with the same class name as a package class wins.</li>
+</ul>
+<p>Use <code>Packages/Water/Water.cs</code> as a worked example of a substantial package.</p>
+
+</article>
+</body>
+</html>

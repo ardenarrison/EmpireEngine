@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rendering and Lighting · Empire Engine Docs</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<article>
+
+<p class="eyebrow">Systems</p>
+<h1>Rendering and lighting</h1>
+<p class="lead">Empire Engine draws with Vulkan using physically based shading. A scene's look comes from its models' materials, its lights, its Environment (sky and ambient light) and its camera.</p>
+
+<h2>How surfaces are shaded</h2>
+<p>Every model is shaded with the Cook-Torrance model (GGX distribution, Smith geometry, Schlick Fresnel), the same family of shading that glTF and most modern engines use. From each material it reads:</p>
+<ul>
+  <li><strong>Base color</strong>, <strong>metallic</strong> and <strong>roughness</strong>, each multiplied by its texture map</li>
+  <li>A <strong>normal map</strong>, which bends the surface normal for fine detail. Models don't need tangent data; tangents are worked out per pixel.</li>
+  <li><strong>Occlusion</strong>, which darkens creases</li>
+  <li><strong>Emission</strong>, which glows on its own and isn't affected by lights</li>
+  <li><strong>IOR</strong> and <strong>specular</strong> (from the glTF extensions), which change how much non-metals reflect</li>
+</ul>
+<p>Each surface is lit by the sun, up to 16 other lights, flat ambient light, and light from the sky (soft light from above, and reflections of the sky that blur as roughness rises). A Mesh's <strong>Tint</strong> multiplies the model's color.</p>
+<p>See <a href="assets.html">Models, textures and sound files</a> for which material settings each file format carries.</p>
+
+<h2>Lights</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Light</th><th>Shines</th><th>Settings</th></tr></thead>
+  <tbody>
+    <tr><td>Directional Light</td><td>From far away in one direction, like the sun. Its position doesn't matter.</td><td>Intensity (2), Color, Yaw and Pitch (degrees, pointing from the scene toward the light), Shadows, Shadow Strength, Shadow Distance</td></tr>
+    <tr><td>Point Light</td><td>In every direction from the object, fading smoothly to nothing at its range</td><td>Color, Intensity (3), Range (10)</td></tr>
+    <tr><td>Spot Light</td><td>A cone along the object's −Z axis. Rotate the object to aim it.</td><td>Color, Intensity (6), Range (15), Inner Angle (20°) and Outer Angle (35°): full brightness inside the inner angle, fading to nothing at the outer one (both are half-angles)</td></tr>
+  </tbody>
+</table></div>
+<p>In the editor, each light has a marker in the scene. A selected light also shows its reach: rings for a point light, the cone for a spot light, an arrow for a directional light.</p>
+
+<h3>The sun and the light limit</h3>
+<ul>
+  <li><strong>The sun is the scene's first Directional Light.</strong> It's drawn separately, and it is the only light that casts shadows.</li>
+  <li>On top of the sun, up to <strong>16</strong> point, spot and extra directional lights are drawn at once. When there are more, extra directional lights always count, and the point and spot lights nearest the camera win.</li>
+  <li>If a scene has no directional light at all, play mode and built games add a default sun so there is always light.</li>
+</ul>
+
+<h2>Shadows</h2>
+<p>The sun casts shadows into a shadow map centered a little ahead of the camera, so what's near you and what you're looking at are covered. Shadow edges are softened by blending nine shadow samples, fade out toward the edge of the covered area instead of ending in a line, and stay still as the camera moves.</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>Setting</th><th>On</th><th>Effect</th></tr></thead>
+  <tbody>
+    <tr><td>Shadows</td><td>Directional Light</td><td>Whether the sun casts shadows</td></tr>
+    <tr><td>Shadow Strength</td><td>Directional Light</td><td>1 blocks the sun completely in the shade; lower lets some through</td></tr>
+    <tr><td>Shadow Distance</td><td>Directional Light</td><td>How far from the camera shadows reach (40). Shorter is sharper; longer covers more of a big scene.</td></tr>
+    <tr><td>Shadows</td><td><a href="scenes.html#scene-settings">Scene settings</a></td><td>Turns shadows off for the whole scene</td></tr>
+    <tr><td>Shadow Resolution</td><td>Scene settings</td><td>512, 1024, 2048 (default) or 4096 texels square</td></tr>
+  </tbody>
+</table></div>
+<div class="callout tip">
+  <strong>Sharper shadows</strong>
+  <p>Lower the sun's Shadow Distance before raising the resolution. Halving the distance has the same effect on sharpness as doubling the resolution, and costs nothing.</p>
+</div>
+
+<h2>Sky and ambient light</h2>
+<p>An <strong>Environment</strong> component sets what's drawn behind the scene and how much light reaches every surface regardless of the lights. Only the first one in the scene is used. Add one from the Hierarchy's right-click menu (<em>Environment (sky and ambient)</em>).</p>
+
+<h3>Sky modes</h3>
+<ul>
+  <li><strong>Color</strong>: one flat Sky Color.</li>
+  <li><strong>Gradient</strong> (default): blends from Ground Color below the horizon, through Horizon Color, to Sky Color overhead.</li>
+  <li><strong>Panorama</strong>: an equirectangular image (PNG, JPEG or Radiance <code>.hdr</code>) picked from the project. Until it loads the sky shows Sky Color. HDR panoramas are read as linear light.</li>
+</ul>
+<p><strong>Sky Intensity</strong> brightens or dims the sky.</p>
+
+<h3>Ambient and sky lighting</h3>
+<ul>
+  <li><strong>Ambient Color × Ambient Intensity</strong> (default white × 0.08) is flat light added to every surface.</li>
+  <li><strong>Sky Lighting</strong> (default 0.5) is how much the sky itself lights the scene: soft light from above, the horizon and the ground on every surface, and reflections of the sky on shiny ones. 0 turns it off.</li>
+</ul>
+<p>A scene without an Environment draws a dark blue backdrop with a little flat ambient light and no sky lighting.</p>
+
+<h3>Presets</h3>
+<p>The Environment's preset dropdown sets the sky, ambient light, sky lighting <em>and the sun</em> (color, brightness and angle) in one step. Change anything afterwards and the dropdown reads <em>Custom</em>.</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>Preset</th><th>Look</th></tr></thead>
+  <tbody>
+    <tr><td>Day</td><td>A clear, ordinary day. The default look.</td></tr>
+    <tr><td>Light</td><td>Bright and airy, with soft shadows and a lot of fill light.</td></tr>
+    <tr><td>Dark</td><td>Night: a near-black sky and cool, dim moonlight.</td></tr>
+    <tr><td>Moody</td><td>Heavy overcast: flat gray-blue light and muted color.</td></tr>
+    <tr><td>Fun</td><td>Bright candy colors under a warm, high sun.</td></tr>
+    <tr><td>Dungeon</td><td>Underground: no sky, almost no ambient light. Add torches (point lights).</td></tr>
+    <tr><td>Castle</td><td>A hazy medieval afternoon: pale sky and a warm sun.</td></tr>
+    <tr><td>House</td><td>Bright, warm and even, like a lit interior.</td></tr>
+    <tr><td>Sunrise</td><td>Early morning: an orange horizon and a low, warm sun.</td></tr>
+  </tbody>
+</table></div>
+
+<h2>Transparency</h2>
+<p>Materials can be cut out (glTF alpha mode <code>MASK</code>, for leaves and fences) or see-through (<code>BLEND</code>, for glass and water). See-through surfaces are drawn after all solid ones, blended over what's already drawn. They're hidden behind solid surfaces but don't hide each other, so several panes of glass in a row all show.</p>
+
+<h2>Cameras</h2>
+<p><strong>Play mode and built games look through the scene's first Camera</strong>, in Hierarchy order. If there is none, play mode adds one. The camera looks along its object's −Z axis.</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>Setting</th><th>Default</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td>Focal Length</td><td>35 mm</td><td>Zoom, as on a full-frame camera (36 mm wide sensor). 35 mm gives a horizontal view of about 54°. Lower is wider.</td></tr>
+    <tr><td>Near, Far</td><td>0.1, 500</td><td>The closest and farthest distances drawn</td></tr>
+    <tr><td>Anti Aliasing</td><td>None</td><td><em>MSAA</em> smooths jagged edges by drawing several samples per pixel and averaging them</td></tr>
+    <tr><td>MSAA Samples</td><td>4</td><td>2, 4 or 8. A GPU that can't do that many uses its highest.</td></tr>
+  </tbody>
+</table></div>
+<p>The main camera's anti-aliasing also applies to the editor's view. In the editor, cameras are drawn as a small body with lines showing what they see: yellow when selected, green for the camera play mode uses, gray otherwise.</p>
+<p>The game view is 16:9. In a built game, <kbd>F11</kbd> switches between a window and fullscreen.</p>
+
+<h2>Drawing with Vulkan yourself</h2>
+<p>For effects the engine doesn't provide, a Behaviour can record its own Vulkan commands every frame. Scripts are compiled with <code>unsafe</code> allowed and with the engine's Vulkan bindings referenced. Add <code>using Engine.Brutal;</code> (and <code>using Brutal.VulkanApi;</code> for the raw Vulkan types) and implement <code>IVulkanRender</code>:</p>
+<pre><code class="language-cs">using Engine.Brutal;
+using Brutal.VulkanApi;
+
+public class MyEffect : Behaviour, IVulkanRender
+{
+    // Inside the scene's rendering pass, after the engine's models, with the 16:9 viewport and scissor set.
+    public void RenderVulkan(CommandBuffer cmd)
+    {
+        if (!Gpu.IsAvailable) return;
+        // bind your own pipeline (made for Gpu.ColorFormat, Gpu.DepthFormat and Gpu.SampleCount) and draw
+    }
+
+    // Once when play stops or the game closes, after the GPU is idle. Destroy what you created.
+    public void ReleaseVulkan() { }
+}</code></pre>
+<div class="table-wrap"><table>
+  <thead><tr><th><code>Gpu</code> member</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td><code>IsAvailable</code></td><td>False until the engine has created its Vulkan device</td></tr>
+    <tr><td><code>Device</code>, <code>PhysicalDevice</code>, <code>Queue</code>, <code>Context</code></td><td>The engine's Vulkan objects. Create your own objects from them, but never destroy these.</td></tr>
+    <tr><td><code>ColorFormat</code>, <code>DepthFormat</code>, <code>SampleCount</code></td><td>What your pipeline must be built for. Rebuild it when <code>SampleCount</code> changes (the camera's MSAA setting).</td></tr>
+    <tr><td><code>FramesInFlight</code>, <code>FrameIndex</code></td><td>Keep per-frame resources <code>FramesInFlight</code> times and index them by <code>FrameIndex</code></td></tr>
+    <tr><td><code>Width</code>, <code>Height</code></td><td>The swapchain size in pixels</td></tr>
+    <tr><td><code>ViewProjection</code>, <code>CameraPosition</code></td><td>This frame's camera. Row-major, as in System.Numerics: use <code>v * ViewProjection</code>.</td></tr>
+    <tr><td><code>WaitIdle()</code></td><td>Waits for the GPU, for example before destroying a buffer it may still read</td></tr>
+  </tbody>
+</table></div>
+<p>Most games never need this; <a href="custom-components.html#drawing-your-own-mesh">building a mesh in a component</a> covers most custom geometry.</p>
+
+</article>
+</body>
+</html>

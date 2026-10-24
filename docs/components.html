@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Component Reference · Empire Engine Docs</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<article>
+
+<p class="eyebrow">Reference</p>
+<h1>Component reference</h1>
+<p class="lead">Every built-in component, its class name for scripts, its settings and their defaults. Each section links to the page that explains it in depth.</p>
+
+<p>Component names in <em>Add Component</em> are on the left of each heading; the C# class is in brackets. Settings are properties on the class with the same name (without spaces): <em>Use Gravity</em> is <code>UseGravity</code>.</p>
+
+<h2>Mesh <small>(MeshRenderer)</small></h2>
+<p>Draws a model. <a href="assets.html">Models →</a></p>
+<table>
+  <thead><tr><th>Setting</th><th>Type</th><th>Default</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td>Model</td><td><code>string</code></td><td>first model in <code>Models/</code></td><td>Path from the project folder</td></tr>
+    <tr><td>Tint</td><td><code>Vector4</code></td><td>(1, 1, 1, 1)</td><td>Multiplies the model's color</td></tr>
+  </tbody>
+</table>
+<p>Runtime only (not saved): <code>Mesh</code>, a model built by a script and drawn instead of <code>Model</code>; <code>Pose</code>, the current animated pose.</p>
+
+<h2>Script <small>(ScriptComponent)</small></h2>
+<p>Attaches a <a href="scripting.html">Behaviour</a> or a <a href="custom-components.html">custom component</a>. <code>ScriptName</code> is the class name; <code>Fields</code> holds the Inspector values as JSON text by field name. While playing, <code>Instance</code> is the running Behaviour, or <code>ComponentInstance</code> the custom component.</p>
+
+<h2>Camera <small>(CameraComponent)</small></h2>
+<p>The viewpoint for play mode and built games (the first one in the Hierarchy). Looks along −Z. <a href="rendering.html#cameras">Cameras →</a></p>
+<table>
+  <thead><tr><th>Setting</th><th>Type</th><th>Default</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td>Focal Length</td><td><code>float</code></td><td>35</td><td>Millimeters on a 36 mm sensor; 35 ≈ 54° horizontal</td></tr>
+    <tr><td>Near</td><td><code>float</code></td><td>0.1</td><td>Closest distance drawn</td></tr>
+    <tr><td>Far</td><td><code>float</code></td><td>500</td><td>Farthest distance drawn</td></tr>
+    <tr><td>Anti Aliasing</td><td><code>AntiAliasingMode</code></td><td>None</td><td>None or Msaa</td></tr>
+    <tr><td>Msaa Samples</td><td><code>int</code></td><td>4</td><td>2, 4 or 8</td></tr>
+  </tbody>
+</table>
+
+<h2>Directional Light <small>(DirectionalLight)</small></h2>
+<p>Sunlight from one direction. The first one is the sun and casts shadows. <a href="rendering.html#lights">Lights →</a></p>
+<table>
+  <thead><tr><th>Setting</th><th>Type</th><th>Default</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td>Intensity</td><td><code>float</code></td><td>2</td><td>Brightness. 4 lights a surface facing it to about its own color.</td></tr>
+    <tr><td>Color</td><td><code>Vector3</code></td><td>white</td><td></td></tr>
+    <tr><td>Yaw, Pitch</td><td><code>float</code></td><td>33.69, 47.96</td><td>Degrees, pointing from the scene toward the light. Low pitch is a low sun.</td></tr>
+    <tr><td>Shadows</td><td><code>bool</code></td><td>true</td><td>Only the sun's count</td></tr>
+    <tr><td>Shadow Strength</td><td><code>float</code></td><td>1</td><td>1 blocks the sun fully in the shade</td></tr>
+    <tr><td>Shadow Distance</td><td><code>float</code></td><td>40</td><td>How far from the camera shadows reach</td></tr>
+  </tbody>
+</table>
+
+<h2>Point Light <small>(PointLight)</small></h2>
+<table>
+  <thead><tr><th>Setting</th><th>Type</th><th>Default</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td>Color</td><td><code>Vector3</code></td><td>white</td><td></td></tr>
+    <tr><td>Intensity</td><td><code>float</code></td><td>3</td><td></td></tr>
+    <tr><td>Range</td><td><code>float</code></td><td>10</td><td>Fades smoothly to nothing at this distance</td></tr>
+  </tbody>
+</table>
+
+<h2>Spot Light <small>(SpotLight)</small></h2>
+<p>A cone along the object's −Z axis.</p>
+<table>
+  <thead><tr><th>Setting</th><th>Type</th><th>Default</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td>Color</td><td><code>Vector3</code></td><td>white</td><td></td></tr>
+    <tr><td>Intensity</td><td><code>float</code></td><td>6</td><td></td></tr>
+    <tr><td>Range</td><td><code>float</code></td><td>15</td><td></td></tr>
+    <tr><td>Inner Angle</td><td><code>float</code></td><td>20</td><td>Half-angle in degrees of full brightness</td></tr>
+    <tr><td>Outer Angle</td><td><code>float</code></td><td>35</td><td>Half-angle in degrees where it fades to nothing</td></tr>
+  </tbody>
+</table>
+
+<h2>Environment <small>(SceneEnvironment)</small></h2>
+<p>Sky and ambient light. One per object; only the first in the scene is used. <a href="rendering.html#sky-and-ambient-light">Sky →</a></p>
+<table>
+  <thead><tr><th>Setting</th><th>Type</th><th>Default</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td>Sky</td><td><code>SkyMode</code></td><td>Gradient</td><td>Color, Gradient or Panorama</td></tr>
+    <tr><td>Sky Color</td><td><code>Vector3</code></td><td>(0.25, 0.45, 0.8)</td><td>Overhead, or the whole sky in Color mode</td></tr>
+    <tr><td>Horizon Color</td><td><code>Vector3</code></td><td>(0.75, 0.82, 0.9)</td><td></td></tr>
+    <tr><td>Ground Color</td><td><code>Vector3</code></td><td>(0.25, 0.25, 0.28)</td><td>Below the horizon</td></tr>
+    <tr><td>Panorama</td><td><code>string</code></td><td></td><td>An equirectangular image (PNG, JPEG, .hdr)</td></tr>
+    <tr><td>Sky Intensity</td><td><code>float</code></td><td>1</td><td></td></tr>
+    <tr><td>Ambient Color</td><td><code>Vector3</code></td><td>white</td><td></td></tr>
+    <tr><td>Ambient Intensity</td><td><code>float</code></td><td>0.08</td><td>Flat light on every surface</td></tr>
+    <tr><td>Sky Lighting</td><td><code>float</code></td><td>0.5</td><td>Light and reflections from the sky; 0 is off</td></tr>
+  </tbody>
+</table>
+
+<h2>Rigidbody <small>(Rigidbody)</small></h2>
+<p>Moves the object under physics. One per object. <a href="physics.html">Physics →</a></p>
+<table>
+  <thead><tr><th>Setting</th><th>Type</th><th>Default</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td>Mass</td><td><code>float</code></td><td>1</td><td>Kilograms</td></tr>
+    <tr><td>Use Gravity</td><td><code>bool</code></td><td>true</td><td></td></tr>
+    <tr><td>Is Kinematic</td><td><code>bool</code></td><td>false</td><td>Moved only by scripts</td></tr>
+    <tr><td>Freeze Rotation</td><td><code>bool</code></td><td>false</td><td>Collisions never turn it</td></tr>
+    <tr><td>Drag</td><td><code>float</code></td><td>0.05</td><td>Per second</td></tr>
+    <tr><td>Angular Drag</td><td><code>float</code></td><td>0.05</td><td>Per second</td></tr>
+  </tbody>
+</table>
+<p>Script-only: <code>Velocity</code>, <code>AngularVelocity</code>, <code>AddForce</code>, <code>AddImpulse</code>, <code>AddTorque</code>.</p>
+
+<h2>Box, Sphere and Mesh Collider <small>(BoxCollider, SphereCollider, MeshCollider)</small></h2>
+<table>
+  <thead><tr><th>Setting</th><th>On</th><th>Default</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td>Center</td><td>all</td><td>(0, 0, 0)</td><td>In the object's local space</td></tr>
+    <tr><td>Friction</td><td>all</td><td>0.5</td><td>0 ice to 1 rubber (up to 2)</td></tr>
+    <tr><td>Bounciness</td><td>all</td><td>0</td><td>0 to 1</td></tr>
+    <tr><td>Size</td><td>Box</td><td>(1, 1, 1)</td><td>Local units</td></tr>
+    <tr><td>Radius</td><td>Sphere</td><td>0.5</td><td>Scales with the largest axis</td></tr>
+    <tr><td>Model</td><td>Mesh</td><td>empty</td><td>Empty uses the object's Mesh</td></tr>
+  </tbody>
+</table>
+
+<h2>Terrain <small>(Terrain)</small></h2>
+<p>Sculptable, paintable ground that is also a collider. One per object. <a href="terrain.html">Terrain →</a></p>
+<table>
+  <thead><tr><th>Setting</th><th>Type</th><th>Default</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td>Width, Length</td><td><code>float</code></td><td>60, 60</td><td>Local units along X and Z</td></tr>
+    <tr><td>Height</td><td><code>float</code></td><td>12</td><td>Highest point above the object</td></tr>
+    <tr><td>Resolution</td><td><code>int</code></td><td>129</td><td>33, 65, 129, 257 or 513</td></tr>
+    <tr><td>Base Color</td><td><code>Vector3</code></td><td>(0.3, 0.5, 0.2)</td><td>Unpainted ground</td></tr>
+    <tr><td>Collide</td><td><code>bool</code></td><td>true</td><td></td></tr>
+    <tr><td>Friction, Bounciness</td><td><code>float</code></td><td>0.5, 0</td><td>As for colliders</td></tr>
+  </tbody>
+</table>
+
+<h2>Animator <small>(Animator)</small></h2>
+<p>Plays glTF animation clips by id. One per object. <a href="animation.html">Animation →</a></p>
+<table>
+  <thead><tr><th>Setting</th><th>Type</th><th>Default</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td>Animations</td><td><code>List&lt;AnimationEntry&gt;</code></td><td>empty</td><td>Each with Id, Model, Clip, Play At Start (false), Loop (false), Speed (1)</td></tr>
+    <tr><td>Speed</td><td><code>float</code></td><td>1</td><td>Multiplies everything it plays</td></tr>
+  </tbody>
+</table>
+
+<h2>Particle System <small>(ParticleSystem)</small></h2>
+<p>Modules: <code>Main</code>, <code>Emission</code>, <code>Shape</code>, <code>VelocityOverLifetime</code>, <code>LimitVelocityOverLifetime</code>, <code>ColorOverLifetime</code>, <code>SizeOverLifetime</code>, <code>RotationOverLifetime</code>, <code>Collision</code>, <code>Renderer</code>. Every setting is listed on the <a href="particles.html#modules">Particle systems</a> page.</p>
+
+<h2>Audio Source <small>(AudioSource)</small></h2>
+<table>
+  <thead><tr><th>Setting</th><th>Type</th><th>Default</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td>Clip</td><td><code>string</code></td><td></td><td>.mp3 or .wav, from the project folder</td></tr>
+    <tr><td>Mute</td><td><code>bool</code></td><td>false</td><td></td></tr>
+    <tr><td>Play On Awake</td><td><code>bool</code></td><td>true</td><td></td></tr>
+    <tr><td>Loop</td><td><code>bool</code></td><td>false</td><td></td></tr>
+    <tr><td>Priority</td><td><code>int</code></td><td>128</td><td>0 most important, 256 least</td></tr>
+    <tr><td>Volume</td><td><code>float</code></td><td>1</td><td>0 to 1</td></tr>
+    <tr><td>Pitch</td><td><code>float</code></td><td>1</td><td>−3 to 3</td></tr>
+    <tr><td>Stereo Pan</td><td><code>float</code></td><td>0</td><td>−1 to 1</td></tr>
+    <tr><td>Spatial Blend</td><td><code>float</code></td><td>0</td><td>0 is 2D, 1 is 3D</td></tr>
+    <tr><td>Doppler Level</td><td><code>float</code></td><td>1</td><td>0 to 5</td></tr>
+    <tr><td>Spread</td><td><code>float</code></td><td>0</td><td>0 to 360</td></tr>
+    <tr><td>Rolloff Mode</td><td><code>AudioRolloffMode</code></td><td>Logarithmic</td><td>or Linear</td></tr>
+    <tr><td>Min Distance, Max Distance</td><td><code>float</code></td><td>1, 500</td><td></td></tr>
+  </tbody>
+</table>
+<p><a href="audio.html">Audio →</a></p>
+
+<h2>Audio Listener <small>(AudioListener)</small></h2>
+<p>Where the scene is heard from; put it on the camera. One per object. No settings. Static <code>AudioListener.Volume</code> (master, 0 to 1) and <code>AudioListener.Pause</code>.</p>
+
+<h2>UI Button, Text Field, Checkbox, Dropdown, Bar <small>(UiElement)</small></h2>
+<table>
+  <thead><tr><th>Setting</th><th>Type</th><th>Default</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td>Kind</td><td><code>UiKind</code></td><td>Button</td><td>Button, TextField, Checkbox, Dropdown, Bar</td></tr>
+    <tr><td>Label</td><td><code>string</code></td><td>"Button"</td><td>Button or checkbox text, or field name</td></tr>
+    <tr><td>X, Y, W, H</td><td><code>float</code></td><td>0.4, 0.45, 0.2, 0.07</td><td>Fractions of the game view</td></tr>
+    <tr><td>Text</td><td><code>string</code></td><td>""</td><td>Text field value</td></tr>
+    <tr><td>Checked</td><td><code>bool</code></td><td>false</td><td>Checkbox state</td></tr>
+    <tr><td>Options, Selected</td><td><code>List&lt;string&gt;</code>, <code>int</code></td><td>2 options, 0</td><td>Dropdown</td></tr>
+    <tr><td>Value</td><td><code>float</code></td><td>0.5</td><td>Bar fill, 0 to 1</td></tr>
+    <tr><td>Center Text</td><td><code>bool</code></td><td>true</td><td>Buttons and dropdowns</td></tr>
+    <tr><td>Visible</td><td><code>bool</code></td><td>true</td><td>Off hides it; hidden elements take no clicks</td></tr>
+    <tr><td>Interactable</td><td><code>bool</code></td><td>true</td><td>Off dims it and ignores input</td></tr>
+  </tbody>
+</table>
+<p>Read each frame: <code>Clicked</code>, <code>Changed</code>, <code>Submitted</code>. Scripts usually use the typed controls (<code>Button</code>, <code>TextField</code>…) instead. <a href="game-ui.html">Game UI →</a></p>
+
+<h2>Spin <small>(Spin)</small></h2>
+<p>Turns the object around the world Y axis while playing, with no script. <code>Speed</code> is in <strong>radians</strong> per second (default 1). Follows <code>Time.timeScale</code>.</p>
+
+<h2>Water <small>(Water package)</small></h2>
+<p>Available after installing the Water package. See <a href="packages.html#the-water-package">Packages</a>.</p>
+
+</article>
+</body>
+</html>

@@ -1,0 +1,6 @@
+{
+  "id": "Water",
+  "name": "Water",
+  "version": "1.5.0",
+  "description": "Adds a Water component. Put it on an object with a plane Mesh and the plane becomes rolling, see-through water with crests, foam and sky reflections while the game plays. Planes only for now."
+}

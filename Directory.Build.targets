@@ -1,0 +1,93 @@
+<Project>
+  <!--
+    Projects that set EmpireLicenses=true ship the license files with their build and publish output:
+      Licenses/              the hand-checked files and credits.json from the repo's Licenses folder
+      Licenses/ThirdParty/   the notice files each BRUTAL package carries in its LICENSES folder
+      NOTICE.txt             BRUTAL's notice, which its license requires next to every copy of the product
+  -->
+  <Target Name="EmpireCollectLicenses" Condition="'$(EmpireLicenses)' == 'true'" DependsOnTargets="ResolvePackageAssets">
+    <ItemGroup>
+      <_EmpireLicenseFile Include="$(MSBuildThisFileDirectory)Licenses\*.txt;$(MSBuildThisFileDirectory)Licenses\credits.json" />
+      <_EmpirePackageDir Include="@(RuntimeCopyLocalItems->'$(NuGetPackageRoot)$([System.String]::Copy('%(NuGetPackageId)').ToLowerInvariant())\%(NuGetPackageVersion)\')"
+                         Condition="'%(RuntimeCopyLocalItems.NuGetPackageId)' != ''" />
+      <_EmpirePackageDir Include="@(NativeCopyLocalItems->'$(NuGetPackageRoot)$([System.String]::Copy('%(NuGetPackageId)').ToLowerInvariant())\%(NuGetPackageVersion)\')"
+                         Condition="'%(NativeCopyLocalItems.NuGetPackageId)' != ''" />
+    </ItemGroup>
+    <RemoveDuplicates Inputs="@(_EmpirePackageDir)">
+      <Output TaskParameter="Filtered" ItemName="_EmpireUniquePackageDir" />
+    </RemoveDuplicates>
+    <ItemGroup>
+      <_EmpireThirdPartyNotice Include="%(_EmpireUniquePackageDir.Identity)LICENSES\*.txt" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="EmpireCopyLicenses" AfterTargets="Build" DependsOnTargets="EmpireCollectLicenses" Condition="'$(EmpireLicenses)' == 'true'">
+    <Copy SourceFiles="@(_EmpireLicenseFile)" DestinationFolder="$(TargetDir)Licenses" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(_EmpireThirdPartyNotice)" DestinationFolder="$(TargetDir)Licenses\ThirdParty" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(MSBuildThisFileDirectory)Licenses\NOTICE.txt" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="EmpirePublishLicenses" AfterTargets="Publish" DependsOnTargets="EmpireCollectLicenses" Condition="'$(EmpireLicenses)' == 'true'">
+    <PropertyGroup>
+      <_EmpirePublishDir>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(PublishDir)'))</_EmpirePublishDir>
+    </PropertyGroup>
+    <Copy SourceFiles="@(_EmpireLicenseFile)" DestinationFolder="$(_EmpirePublishDir)Licenses" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(_EmpireThirdPartyNotice)" DestinationFolder="$(_EmpirePublishDir)Licenses\ThirdParty" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(MSBuildThisFileDirectory)Licenses\NOTICE.txt" DestinationFolder="$(_EmpirePublishDir)" SkipUnchangedFiles="true" />
+  </Target>
+
+  <!--
+    macOS: projects that set EmpireBundleVulkan=true ship the Vulkan loader and MoltenVK, so nothing has to be installed:
+      libvulkan.1.dylib            next to libVulkanEx.dylib, which finds it through its @loader_path rpath
+      vulkan/icd.d/libMoltenVK.dylib and MoltenVK_icd.json   the Vulkan driver; BundledVulkan points the loader at it
+    They come from ThirdParty/Vulkan/osx-arm64 in this repo, so a build never depends on what is installed on the
+    machine. Set EmpireVulkanLoader / EmpireMoltenVK (properties or environment variables) to use other copies, such as
+    the Vulkan SDK's on an Intel Mac.
+  -->
+  <!-- Whether the build is for macOS: the platform named by -r (osx-arm64...) when there is one, else the one building. -->
+  <PropertyGroup>
+    <_EmpireTargetsMac Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier.StartsWith('osx'))</_EmpireTargetsMac>
+    <_EmpireTargetsMac Condition="'$(RuntimeIdentifier)' == ''">$([MSBuild]::IsOSPlatform('OSX'))</_EmpireTargetsMac>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(EmpireBundleVulkan)' == 'true' And '$(_EmpireTargetsMac)' == 'true'">
+    <EmpireVulkanLoader Condition="'$(EmpireVulkanLoader)' == ''">$(MSBuildThisFileDirectory)ThirdParty/Vulkan/osx-arm64/libvulkan.1.dylib</EmpireVulkanLoader>
+    <EmpireMoltenVK Condition="'$(EmpireMoltenVK)' == ''">$(MSBuildThisFileDirectory)ThirdParty/Vulkan/osx-arm64/libMoltenVK.dylib</EmpireMoltenVK>
+    <_EmpireMoltenVKIcd>{
+  "file_format_version": "1.0.0",
+  "ICD": {
+    "library_path": "./libMoltenVK.dylib",
+    "api_version": "1.4.0",
+    "is_portability_driver": true
+  }
+}</_EmpireMoltenVKIcd>
+    <_EmpireCanBundleVulkan Condition="Exists('$(EmpireVulkanLoader)') And Exists('$(EmpireMoltenVK)')">true</_EmpireCanBundleVulkan>
+  </PropertyGroup>
+
+  <Target Name="EmpireWarnMissingVulkan" AfterTargets="Build" Condition="'$(EmpireBundleVulkan)' == 'true' And '$(_EmpireTargetsMac)' == 'true' And '$(_EmpireCanBundleVulkan)' != 'true'">
+    <Warning Text="The Vulkan loader or MoltenVK was not found at $(EmpireVulkanLoader) and $(EmpireMoltenVK), so they are not bundled and must be installed to run. Restore ThirdParty/Vulkan from the repo, or set EmpireVulkanLoader and EmpireMoltenVK to other copies." />
+  </Target>
+
+  <Target Name="EmpireBundleVulkanBuild" AfterTargets="Build"
+          Condition="'$(_EmpireCanBundleVulkan)' == 'true'">
+    <ItemGroup>
+      <_EmpireVulkanEx Include="$(TargetDir)**/libVulkanEx.dylib" />
+    </ItemGroup>
+    <Copy SourceFiles="$(EmpireVulkanLoader)" DestinationFolder="%(_EmpireVulkanEx.RootDir)%(_EmpireVulkanEx.Directory)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(EmpireMoltenVK)" DestinationFolder="$(TargetDir)vulkan/icd.d" SkipUnchangedFiles="true" />
+    <WriteLinesToFile File="$(TargetDir)vulkan/icd.d/MoltenVK_icd.json" Lines="$(_EmpireMoltenVKIcd)" Overwrite="true" WriteOnlyWhenDifferent="true" />
+  </Target>
+
+  <Target Name="EmpireBundleVulkanPublish" AfterTargets="Publish"
+          Condition="'$(_EmpireCanBundleVulkan)' == 'true'">
+    <PropertyGroup>
+      <_EmpireVulkanPublishDir>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(PublishDir)'))</_EmpireVulkanPublishDir>
+    </PropertyGroup>
+    <ItemGroup>
+      <_EmpireVulkanExPublished Include="$(_EmpireVulkanPublishDir)**/libVulkanEx.dylib" />
+    </ItemGroup>
+    <Copy SourceFiles="$(EmpireVulkanLoader)" DestinationFolder="%(_EmpireVulkanExPublished.RootDir)%(_EmpireVulkanExPublished.Directory)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(EmpireMoltenVK)" DestinationFolder="$(_EmpireVulkanPublishDir)vulkan/icd.d" SkipUnchangedFiles="true" />
+    <WriteLinesToFile File="$(_EmpireVulkanPublishDir)vulkan/icd.d/MoltenVK_icd.json" Lines="$(_EmpireMoltenVKIcd)" Overwrite="true" WriteOnlyWhenDifferent="true" />
+  </Target>
+</Project>

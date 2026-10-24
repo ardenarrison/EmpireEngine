@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Custom Components · Empire Engine Docs</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<article>
+
+<p class="eyebrow">Scripting</p>
+<h1>Custom components</h1>
+<p class="lead">A script class that extends <code>Component</code> instead of <code>Behaviour</code> becomes a new component, listed under its own name in Add Component. This is how packages such as Water add features.</p>
+
+<h2>Writing one</h2>
+<pre data-label="Scripts/Bobber.cs"><code class="language-cs">public class Bobber : Component
+{
+    public float Height = 0.5f;     // public fields show in the Inspector, as with scripts
+    public float Speed = 2f;
+
+    private Vector3 _start;
+
+    public override void Start() =&gt; _start = Object.Position;
+
+    public override void Update()
+    {
+        Object.Position = _start + new Vector3(0, MathF.Sin(Time.time * Speed) * Height, 0);
+    }
+}</code></pre>
+<p>Save it and it appears in <em>Add Component</em> as <em>Bobber (script)</em>. Components from packages show the package's name instead, as in <em>Water (Water package)</em>.</p>
+
+<h2>Behaviour or Component?</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th></th><th><code>Behaviour</code></th><th><code>Component</code></th></tr></thead>
+  <tbody>
+    <tr><td>Added with</td><td>Add Component &gt; Script, then pick it</td><td>Add Component, under its own name</td></tr>
+    <tr><td><code>Start</code>, <code>Update</code></td><td>Yes</td><td>Yes</td></tr>
+    <tr><td>Inspector fields</td><td>Public fields</td><td>Public fields</td></tr>
+    <tr><td>Collision events, <code>OnGameLoaded</code></td><td>Yes</td><td>No</td></tr>
+    <tr><td>Coroutines and helpers (<code>Spawn</code>, <code>Translate</code>, <code>rigidbody</code>…)</td><td>Yes</td><td>No</td></tr>
+    <tr><td>Found by other scripts with <code>GetComponent&lt;T&gt;()</code></td><td>No</td><td>Yes</td></tr>
+  </tbody>
+</table></div>
+<p>Pick <code>Component</code> for a reusable building block that other scripts look up by type (a <code>Health</code> component, a <code>Water</code> surface). Pick <code>Behaviour</code> for game logic that reacts to collisions or uses coroutines.</p>
+
+<h2>Finding a custom component</h2>
+<p>When play starts, the engine makes the component and puts it on the object right after its Script entry, so <code>GetComponent</code> finds it from any script on that object:</p>
+<pre><code class="language-cs">public class Health : Component
+{
+    public int Max = 100;
+    public int Current;
+    public override void Start() =&gt; Current = Max;
+}
+
+public class Hazard : Behaviour
+{
+    public int damage = 10;
+
+    public override void OnCollisionEnter(SceneObject other)
+    {
+        var health = other.Components.OfType&lt;Health&gt;().FirstOrDefault();
+        if (health != null) health.Current -= damage;
+    }
+}</code></pre>
+<p>Inside a component, <code>Object</code> is the object it's on and <code>GetComponent&lt;T&gt;()</code> finds its neighbours.</p>
+
+<h2>Drawing your own mesh</h2>
+<p>A component can replace what an object's Mesh draws by setting <code>MeshRenderer.Mesh</code> to a model built in code, and animate it by updating <code>MeshRenderer.Pose</code> every frame without building a new mesh. Neither is saved with the scene. The Water package does exactly this; its source in <code>Packages/Water/Water.cs</code> is a complete example, including working out the surface on background threads.</p>
+
+<h2>When it throws</h2>
+<p>As with scripts, an exception in <code>Start</code> or <code>Update</code> is printed and that component stops running. It stays on the object, so other scripts can still read its fields.</p>
+
+<p>To share components between projects, put them in a <a href="packages.html">package</a>.</p>
+
+</article>
+</body>
+</html>

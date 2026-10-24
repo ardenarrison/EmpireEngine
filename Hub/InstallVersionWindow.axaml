@@ -1,0 +1,48 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="using:EmpireHub"
+        x:Class="EmpireHub.InstallVersionWindow"
+        Title="Install an Empire version"
+        Icon="avares://EmpireHub/Assets/EmpireEngineIcon.ico"
+        Width="660" Height="520" MinWidth="520" MinHeight="380"
+        WindowStartupLocation="CenterOwner">
+  <DockPanel Margin="24,20,24,16">
+    <TextBlock DockPanel.Dock="Top" Classes="title" Text="Install an Empire version" />
+    <TextBlock DockPanel.Dock="Top" Classes="dim" TextWrapping="Wrap" Margin="0,6,0,14"
+               Text="These are the versions published as releases on GitHub. An installed version goes in the same folder as the one that came with the hub, and projects open with the version they were made with." />
+
+    <!-- Progress and buttons -->
+    <StackPanel DockPanel.Dock="Bottom" Spacing="8" Margin="0,12,0,0">
+      <ProgressBar x:Name="Progress" IsVisible="False" Height="6" Minimum="0" Maximum="1" />
+      <TextBlock x:Name="StatusText" Classes="dim" TextWrapping="Wrap" MinHeight="18" />
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+        <Button x:Name="RefreshButton" Content="Refresh" Click="OnRefresh" />
+        <Button x:Name="CloseButton" Content="Close" Click="OnCloseClick" />
+      </StackPanel>
+    </StackPanel>
+
+    <Panel>
+      <TextBlock x:Name="MessageText" Classes="dim" FontSize="14" HorizontalAlignment="Center" VerticalAlignment="Center"
+                 TextAlignment="Center" TextWrapping="Wrap" MaxWidth="460" Text="Looking for releases on GitHub..." />
+      <ListBox x:Name="ReleaseList" Background="Transparent" IsVisible="False">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="local:ReleaseItem">
+            <Grid ColumnDefinitions="*,Auto,Auto" Margin="4,6" Background="Transparent" ToolTip.Tip="{Binding Notes}">
+              <StackPanel VerticalAlignment="Center" Spacing="2">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <TextBlock Text="{Binding Title}" FontSize="15" FontWeight="SemiBold" />
+                  <Border Classes="tag" IsVisible="{Binding IsLatest}"><TextBlock Text="Latest" FontSize="12" /></Border>
+                  <Border Classes="tag" IsVisible="{Binding IsPrerelease}"><TextBlock Text="Pre-release" FontSize="12" /></Border>
+                </StackPanel>
+                <TextBlock Text="{Binding Detail}" Classes="dim" TextTrimming="CharacterEllipsis" />
+              </StackPanel>
+              <TextBlock Grid.Column="1" Text="{Binding StateText}" Classes="dim" Margin="12,0" VerticalAlignment="Center" />
+              <Button Grid.Column="2" Content="{Binding ButtonText}" IsEnabled="{Binding CanInstall}" Click="OnInstallClick"
+                      MinWidth="84" HorizontalContentAlignment="Center" />
+            </Grid>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+    </Panel>
+  </DockPanel>
+</Window>

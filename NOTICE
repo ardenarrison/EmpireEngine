@@ -1,0 +1,17 @@
+Empire Engine
+Copyright 2026 Arden Arrison
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This product includes third-party software. Each component, its copyright holder and its license are listed in
+Licenses/credits.json, with the license texts beside it in the Licenses folder.
+
+This product is built with BRUTAL, a game development framework by Ahwoo Limited, used under the BRUTAL License v1.0
+(Licenses/BRUTAL-LICENSE.txt). BRUTAL game development framework is Copyright (c) 2024 Ahwoo Limited.
+www.ahwoo.com/brutal
+
+The BRUTAL logo (Engine.Brutal/Ui/Logos/BrutalLogo.png) belongs to Ahwoo Limited. It is not covered by the Apache License;
+it is used under the BRUTAL License, which requires it to be shown, unaltered except for scaling, in every product built
+with BRUTAL.
+
+The Empire Engine name and crown logo are trademarks of Arden Arrison and are not licensed by the Apache License. See TRADEMARKS.md.

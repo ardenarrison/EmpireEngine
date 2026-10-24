@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Particle Systems · Empire Engine Docs</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<article>
+
+<p class="eyebrow">Systems</p>
+<h1>Particle systems</h1>
+<p class="lead">Fire, smoke, sparks and magic: a Particle System emits small camera-facing sprites and moves them over their lives. Its settings are grouped into modules, laid out like Unity's.</p>
+
+<h2>Adding one</h2>
+<p>Right-click in the Hierarchy and choose <strong>Particle System</strong>, or one of the presets below it. A particle system works on an empty object, and particle systems preview in the editor while you change their settings. The Inspector's <em>Play/Pause</em>, <em>Restart</em> and <em>Stop</em> buttons control the preview. The emitter's shape is drawn in orange on the selected object.</p>
+
+<h3>Presets</h3>
+<div class="table-wrap"><table>
+  <thead><tr><th>Preset</th><th>Look</th></tr></thead>
+  <tbody>
+    <tr><td>Fire</td><td>A steady flame: bright, additive and always burning</td></tr>
+    <tr><td>Explosion</td><td>A one-time fireball that bursts outward, slows quickly and fades. Press Restart to set it off again.</td></tr>
+    <tr><td>Embers</td><td>Tiny glowing sparks that drift up and away, cooling as they go</td></tr>
+    <tr><td>Smoke</td><td>Soft gray puffs that rise slowly, swell and fade</td></tr>
+  </tbody>
+</table></div>
+<p>A preset sets every module; everything can still be changed afterwards. Sizes and speeds are for an object at scale 1, so scale the object to make the effect bigger.</p>
+
+<h2>Modules</h2>
+<p>Values shown as two numbers (Min and Max) are picked at random between the two for each particle. Set both the same for a constant.</p>
+
+<h3>Main</h3>
+<div class="table-wrap"><table>
+  <thead><tr><th>Setting</th><th>Default</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td>Duration</td><td>5</td><td>Seconds in one cycle of emission</td></tr>
+    <tr><td>Looping</td><td>on</td><td>Starts another cycle when one ends</td></tr>
+    <tr><td>Prewarm</td><td>off</td><td>A looping system starts as if it had already run one cycle</td></tr>
+    <tr><td>Start Delay</td><td>0</td><td>Seconds before emission begins</td></tr>
+    <tr><td>Start Lifetime</td><td>5</td><td>Seconds each particle lives</td></tr>
+    <tr><td>Start Speed</td><td>5</td><td>Units per second, along the shape's direction</td></tr>
+    <tr><td>Start Size</td><td>1</td><td>World units across</td></tr>
+    <tr><td>Start Rotation</td><td>0</td><td>Degrees</td></tr>
+    <tr><td>Start Color, Start Color 2, Random Between Two Colors</td><td>white</td><td>Each particle's color, or a random blend of the two</td></tr>
+    <tr><td>Gravity Modifier</td><td>0</td><td>1 falls like a rigidbody; 0 floats</td></tr>
+    <tr><td>Simulation Space</td><td>Local</td><td><em>Local</em>: particles move with the object. <em>World</em>: they stay where they were born, for trails.</td></tr>
+    <tr><td>Simulation Speed</td><td>1</td><td>Runs the whole system faster or slower</td></tr>
+    <tr><td>Play On Awake</td><td>on</td><td>Starts when the scene plays</td></tr>
+    <tr><td>Max Particles</td><td>1000</td><td>No more than this many alive at once</td></tr>
+  </tbody>
+</table></div>
+
+<h3>Emission</h3>
+<p><strong>Rate Over Time</strong> (10) is particles per second. <strong>Bursts</strong> emit <em>Count</em> particles at once, <em>Time</em> seconds into each cycle, repeated <em>Cycles</em> times <em>Interval</em> seconds apart.</p>
+
+<h3>Shape</h3>
+<p>Where particles start and which way they go. Every shape points along the object's <strong>+Y</strong> axis.</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>Setting</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td>Shape</td><td>Cone (default), Sphere, Hemisphere, Box, Circle or Point</td></tr>
+    <tr><td>Angle</td><td>Cone spread in degrees (25)</td></tr>
+    <tr><td>Radius</td><td>Size of the cone's base, sphere, hemisphere or circle (1)</td></tr>
+    <tr><td>Box Size</td><td>For Box</td></tr>
+    <tr><td>Emit From Shell</td><td>Sphere and hemisphere: start on the surface, not inside</td></tr>
+    <tr><td>Position</td><td>Offset from the object, in its local space</td></tr>
+    <tr><td>Randomize Direction</td><td>0 follows the shape, 1 is fully random</td></tr>
+  </tbody>
+</table></div>
+
+<h3>Over lifetime</h3>
+<div class="table-wrap"><table>
+  <thead><tr><th>Module</th><th>Does</th></tr></thead>
+  <tbody>
+    <tr><td>Velocity over Lifetime</td><td>Adds a constant <em>Linear</em> velocity, such as wind</td></tr>
+    <tr><td>Limit Velocity over Lifetime</td><td><em>Drag</em> slows particles each second; <em>Speed Limit</em> caps their speed (0 for none)</td></tr>
+    <tr><td>Color over Lifetime</td><td>Multiplies each particle's color by a blend from Start Color to End Color. By default it fades out.</td></tr>
+    <tr><td>Size over Lifetime</td><td>Multiplies each particle's size by a blend from Start Size to End Size</td></tr>
+    <tr><td>Rotation over Lifetime</td><td>Spins particles at an Angular Velocity in degrees per second</td></tr>
+    <tr><td>Collision</td><td>Particles bounce off flat ground at a world <em>Ground Height</em>. <em>Bounce</em> is the share of speed kept, <em>Dampen</em> the share of sliding speed lost, <em>Lifetime Loss</em> the share of life used up on each hit.</td></tr>
+  </tbody>
+</table></div>
+
+<h3>Renderer</h3>
+<ul>
+  <li><strong>Blend</strong>: <em>Alpha</em> (normal) or <em>Additive</em>, which brightens what's behind. Additive suits fire, sparks and magic.</li>
+  <li><strong>Sprite</strong>: Soft Circle (default), Circle or Square.</li>
+  <li><strong>Sort By Distance</strong> (on): alpha particles draw back to front so they overlap correctly.</li>
+</ul>
+
+<h2>From scripts</h2>
+<pre><code class="language-cs">var sparks = GetComponent&lt;ParticleSystem&gt;()!;
+
+sparks.Emit(30);          // 30 particles right now, playing or not
+sparks.Play();
+sparks.Stop();            // stop emitting; live particles finish their lives
+sparks.Stop(clear: true); // and remove them
+sparks.Pause();
+sparks.Clear();
+sparks.Restart();
+
+sparks.Main.StartColor = new Vector4(1, 0.4f, 0.1f, 1);
+sparks.Emission.RateOverTime = 50;
+
+bool busy = sparks.IsPlaying;     // emitting, or any particle still alive
+int alive = sparks.ParticleCount;</code></pre>
+<p>Particle systems follow <code>Time.timeScale</code>. Play mode starts every system fresh, so Play On Awake applies again each time.</p>
+
+</article>
+</body>
+</html>

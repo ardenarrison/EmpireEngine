@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/Engine/">
+    <Project Path="Engine.Core/Engine.Core.csproj" />
+    <Project Path="Engine.Brutal/Engine.Brutal.csproj" />
+    <Project Path="ScriptCompiler/ScriptCompiler.csproj" />
+  </Folder>
+  <Project Path="Editor/Editor.csproj" />
+  <Project Path="Player/Player.csproj" />
+  <Folder Name="/Tools/">
+    <Project Path="Tests/Tests.csproj" />
+    <Project Path="Probe/Probe.csproj" />
+  </Folder>
+</Solution>

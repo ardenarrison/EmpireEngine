@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Input and Time · Empire Engine Docs</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<article>
+
+<p class="eyebrow">Scripting</p>
+<h1>Input and time</h1>
+<p class="lead">Read the keyboard and mouse with <code>Input</code>, and make movement smooth at any frame rate with <code>Time</code>.</p>
+
+<h2>Keyboard</h2>
+<pre><code class="language-cs">if (Input.GetKey(Keys.W))        { /* every frame W is held */ }
+if (Input.GetKeyDown(Keys.Space)) { /* only the frame Space went down */ }
+if (Input.GetKeyUp(Keys.E))       { /* only the frame E came up */ }
+
+// The same with key names, as visual scripts use them:
+if (Input.GetKey("Shift")) { ... }</code></pre>
+
+<h3>Key names</h3>
+<div class="table-wrap"><table>
+  <thead><tr><th><code>Keys</code> value</th><th>Name string</th></tr></thead>
+  <tbody>
+    <tr><td><code>Keys.A</code> … <code>Keys.Z</code></td><td><code>"A"</code> … <code>"Z"</code></td></tr>
+    <tr><td><code>Keys.D0</code> … <code>Keys.D9</code></td><td><code>"0"</code> … <code>"9"</code></td></tr>
+    <tr><td><code>Space</code>, <code>Enter</code>, <code>Escape</code>, <code>Tab</code>, <code>Backspace</code></td><td>the same</td></tr>
+    <tr><td><code>LeftShift</code>, <code>RightShift</code></td><td><code>"Shift"</code> means <code>LeftShift</code></td></tr>
+    <tr><td><code>LeftControl</code>, <code>RightControl</code></td><td><code>"Control"</code> means <code>LeftControl</code></td></tr>
+    <tr><td><code>LeftAlt</code>, <code>RightAlt</code></td><td><code>"Alt"</code> means <code>LeftAlt</code></td></tr>
+    <tr><td><code>Left</code>, <code>Right</code>, <code>Up</code>, <code>Down</code></td><td>the arrow keys</td></tr>
+  </tbody>
+</table></div>
+<p>Name strings ignore capital letters. An unknown name throws an error, which stops the script with a message saying which name was wrong.</p>
+
+<h2>Axes</h2>
+<p><code>Input.GetAxis</code> gives a value for the common controls, as in Unity:</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>Axis</th><th>Value</th></tr></thead>
+  <tbody>
+    <tr><td><code>"Horizontal"</code></td><td>−1 to 1 from <kbd>A</kbd>/<kbd>D</kbd> or <kbd>←</kbd>/<kbd>→</kbd></td></tr>
+    <tr><td><code>"Vertical"</code></td><td>−1 to 1 from <kbd>S</kbd>/<kbd>W</kbd> or <kbd>↓</kbd>/<kbd>↑</kbd></td></tr>
+    <tr><td><code>"Mouse X"</code></td><td>Mouse movement to the right this frame</td></tr>
+    <tr><td><code>"Mouse Y"</code></td><td>Mouse movement upward this frame</td></tr>
+    <tr><td><code>"Mouse ScrollWheel"</code></td><td>The scroll wheel this frame</td></tr>
+  </tbody>
+</table></div>
+<p>The keyboard axes jump straight to −1, 0 or 1 (there's no smoothing). The mouse axes are a tenth of the movement in screen points, so multiply by a sensitivity that feels right.</p>
+
+<h2>Mouse</h2>
+<pre><code class="language-cs">if (Input.GetMouseButtonDown(MouseButton.Left)) { ... }   // also 0, 1, 2 or "Left", "Right", "Middle"
+bool aiming = Input.GetMouseButton(1);                     // right button held
+
+Vector2 p = Input.mousePosition;     // in the game view, from its top-left corner, y down
+Vector2 d = Input.mouseDelta;        // movement since last frame
+float wheel = Input.mouseScrollDelta;  // up is positive
+Vector2 size = Input.screenSize;     // the game view's size, in the same units</code></pre>
+
+<h3>Mouse-look</h3>
+<p>Set <code>Input.cursorLocked = true</code> to hide the cursor and hold it in the window. <code>mouseDelta</code> (and the mouse axes) keep reporting movement. In the editor, <kbd>Esc</kbd> or stopping the game frees it again.</p>
+<pre data-label="Scripts/MouseLook.cs"><code class="language-cs">public class MouseLook : Behaviour
+{
+    public float sensitivity = 2f;
+    private float _yaw, _pitch;
+
+    public override void Start() =&gt; Input.cursorLocked = true;
+
+    public override void Update()
+    {
+        _yaw   -= Input.GetAxis("Mouse X") * sensitivity;
+        _pitch += Input.GetAxis("Mouse Y") * sensitivity;
+        _pitch = Math.Clamp(_pitch, -85f, 85f);
+        Object.Rotation = Quaternion.CreateFromYawPitchRoll(_yaw * MathF.PI / 180f, _pitch * MathF.PI / 180f, 0);
+    }
+}</code></pre>
+<p>Set <code>Input.cursorVisible = false</code> to hide the cursor over the game but leave it free to move.</p>
+
+<h3>What's under the mouse</h3>
+<pre><code class="language-cs">if (Input.GetMouseButtonDown(0) &amp;&amp; Physics.Raycast(Input.GetMouseRay(), out var hit))
+    Console.WriteLine($"Clicked {hit.Object.Name} at {hit.Point}");</code></pre>
+<p><code>Input.GetMouseRay()</code> is the ray from the camera through the mouse. <code>Input.ScreenPointToRay(point)</code> does the same for any point in the game view.</p>
+
+<h2>Time</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Field</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td><code>Time.deltaTime</code></td><td>Seconds since the last frame, multiplied by <code>timeScale</code>. Multiply speeds by it.</td></tr>
+    <tr><td><code>Time.unscaledDeltaTime</code></td><td>The same, not affected by <code>timeScale</code>. Use it for menus while the game is paused.</td></tr>
+    <tr><td><code>Time.timeScale</code></td><td>1 is normal. 0 freezes the game, 0.5 runs it at half speed, 2 at double. Animation, particles and coroutine waits follow it. <strong>Physics does not</strong>: it steps on real time (see below).</td></tr>
+    <tr><td><code>Time.time</code></td><td>Scaled seconds since play started. Saved with save games.</td></tr>
+    <tr><td><code>Time.fps</code></td><td>Frames per second, smoothed so it reads steadily. 0 before the first frame.</td></tr>
+  </tbody>
+</table></div>
+
+<pre><code class="language-cs">// 5 units per second, however fast the game runs:
+Translate(0, 0, -5f * Time.deltaTime);
+
+// Pause and resume:
+if (Input.GetKeyDown(Keys.Escape)) Time.timeScale = Time.timeScale == 0 ? 1 : 0;</code></pre>
+
+<div class="callout">
+  <strong>timeScale and physics</strong>
+  <p>The physics simulation is stepped with the real frame time, so <code>Time.timeScale = 0</code> does not freeze rigidbodies: they keep falling and sliding. Forces from <code>AddForce</code> are scaled by <code>Time.deltaTime</code>, so they do stop. To pause physics, set the rigidbodies to <code>IsKinematic</code> while paused.</p>
+</div>
+
+<div class="callout warn">
+  <strong>Escape in the editor</strong>
+  <p>While you play in the editor, <kbd>Esc</kbd> stops play mode, so a pause menu bound to Escape can only be tried in a built game. Use another key such as <kbd>P</kbd> or <kbd>Tab</kbd> while testing.</p>
+</div>
+
+</article>
+</body>
+</html>

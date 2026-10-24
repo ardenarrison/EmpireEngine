@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scenes and Saves · Empire Engine Docs</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<article>
+
+<p class="eyebrow">Scripting</p>
+<h1>Loading scenes and saving games</h1>
+<p class="lead"><code>SceneManager</code> moves between levels, layers scenes on top of each other and streams them in the background. <code>SaveGame</code> saves the whole game in named slots.</p>
+
+<h2>Loading a scene</h2>
+<pre><code class="language-cs">SceneManager.LoadScene("Level2");                           // replace the current scene
+SceneManager.LoadScene("Hud", LoadSceneMode.Additive);      // add to what's loaded
+SceneManager.UnloadScene("Hud");                            // take a scene's objects out again</code></pre>
+<ul>
+  <li><strong>Names</strong>: a scene in the project's <code>Scenes/</code> folder is named without its extension: <code>"Level2"</code>, or <code>"Wing/Hall"</code> for <code>Scenes/Wing/Hall.empirescene</code>. A scene anywhere else is named by its path from the project folder: <code>"Levels/Level2.empirescene"</code>.</li>
+  <li><strong>Single</strong> (the default) replaces everything that's loaded, except objects marked with <code>DontDestroyOnLoad</code>. The new scene's settings and gravity take over.</li>
+  <li><strong>Additive</strong> adds the scene's objects to the world.</li>
+  <li><strong>Loading happens at the start of the next frame</strong>, before scripts run, so it's safe to call from anywhere, including in the middle of <code>Update</code> or a collision event.</li>
+</ul>
+
+<h3>One world</h3>
+<p>All loaded scenes share one world: their objects see each other, collide with each other and are lit by the same lights. Each object remembers which scene it came from (<code>SceneObject.SceneName</code>), which is how <code>UnloadScene</code> knows what to remove. Objects a script makes while playing belong to the active scene.</p>
+
+<h3>Streaming in the background</h3>
+<p><code>LoadSceneAsync</code> reads the scene file, and loads its models and sounds, on another thread, then adds it at the start of a frame once it's ready. A big level can stream in as the player approaches without a stall.</p>
+<pre><code class="language-cs">public class HallTrigger : Behaviour
+{
+    private SceneLoadOperation? _loading;
+
+    public override void OnCollisionEnter(SceneObject other)
+    {
+        if (other.Name == "Player" &amp;&amp; _loading == null &amp;&amp; !SceneManager.IsLoaded("Hall"))
+            _loading = SceneManager.LoadSceneAsync("Hall", LoadSceneMode.Additive);
+    }
+
+    public override void Update()
+    {
+        if (_loading is { IsDone: true, Error: { } error })
+            Console.WriteLine("Could not load the hall: " + error);
+    }
+}</code></pre>
+<div class="table-wrap"><table>
+  <thead><tr><th><code>SceneLoadOperation</code></th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td><code>IsDone</code></td><td>True once the scene is in the world (or loading failed)</td></tr>
+    <tr><td><code>Progress</code></td><td>0 while reading, 0.9 when ready to add, 1 when added. For a loading bar.</td></tr>
+    <tr><td><code>Error</code></td><td>Why it failed, or null</td></tr>
+    <tr><td><code>Name</code>, <code>Mode</code></td><td>What was asked for</td></tr>
+  </tbody>
+</table></div>
+
+<h3>Keeping objects between scenes</h3>
+<pre><code class="language-cs">public override void Start() =&gt; SceneManager.DontDestroyOnLoad(Object);</code></pre>
+<p>The object and everything under it survive when a Single load replaces the scene. Good for music, a player that walks between levels, or a game manager. An object that has a parent is first moved to the top level, keeping its place in the world.</p>
+
+<h3>Asking what's loaded</h3>
+<div class="table-wrap"><table>
+  <thead><tr><th>Member</th><th>Gives</th></tr></thead>
+  <tbody>
+    <tr><td><code>SceneManager.ActiveScene</code></td><td>The scene loaded last with Single (or the one the game started with)</td></tr>
+    <tr><td><code>SceneManager.LoadedScenes</code></td><td>Every loaded scene, the active one first</td></tr>
+    <tr><td><code>SceneManager.SceneCount</code></td><td>How many are loaded</td></tr>
+    <tr><td><code>SceneManager.IsLoaded(name)</code></td><td>Whether a scene is loaded</td></tr>
+    <tr><td><code>SceneManager.SceneOf(obj)</code></td><td>The scene an object came from</td></tr>
+    <tr><td><code>SceneManager.World</code></td><td>The <code>Scene</code> that's playing, with every object in every loaded scene</td></tr>
+  </tbody>
+</table></div>
+
+<h2>Saving the game</h2>
+<pre><code class="language-cs">SaveGame.SetInt("coins", 12);     // your own values travel with the save
+SaveGame.Save("slot1");           // every loaded scene, as it is right now, plus those values
+SaveGame.Load("slot1");           // puts it all back at the start of the next frame</code></pre>
+
+<h3>What a save keeps</h3>
+<ul>
+  <li>Every object's transform and components, including a Rigidbody's velocity and an Audio Source's place in its clip</li>
+  <li>Every script's <strong>public</strong> fields</li>
+  <li>Which scenes are loaded, and which is active</li>
+  <li><code>Time.time</code></li>
+  <li>Every value set with <code>SetInt</code>, <code>SetFloat</code>, <code>SetBool</code> and <code>SetString</code></li>
+</ul>
+<p><strong>Not kept:</strong> private fields, and anything else a script made up that isn't a public field. Put that in <code>SetInt</code> and friends, and read it back in <code>OnGameLoaded</code>.</p>
+
+<h3>After loading</h3>
+<p>Scripts that had already started when the game was saved don't run <code>Start</code> again. Their public fields are put back, then <code>OnGameLoaded()</code> is called, which is the place to rebuild cached references:</p>
+<pre><code class="language-cs">public class Enemy : Behaviour
+{
+    public float health = 100f;          // restored by the save
+    private SceneObject? _player;        // not saved: find it again
+
+    public override void Start() =&gt; FindPlayer();
+    public override void OnGameLoaded() =&gt; FindPlayer();
+
+    private void FindPlayer() =&gt; _player = Scene.FindObjectWithName("Player");
+}</code></pre>
+
+<h3>Your own values</h3>
+<div class="table-wrap"><table>
+  <thead><tr><th>Method</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td><code>SetInt</code>, <code>SetFloat</code>, <code>SetBool</code>, <code>SetString</code></td><td>Store a value under a key</td></tr>
+    <tr><td><code>GetInt(key, default)</code> and friends</td><td>Read it back, or the default when it isn't set</td></tr>
+    <tr><td><code>HasKey(key)</code>, <code>DeleteKey(key)</code></td><td>Check for or forget one value</td></tr>
+    <tr><td><code>ClearData()</code></td><td>Forget every value. A new game starts with none.</td></tr>
+  </tbody>
+</table></div>
+<p>These values live in memory and are written only when you call <code>Save</code>; loading a slot replaces them with the slot's.</p>
+
+<h3>Slots</h3>
+<div class="table-wrap"><table>
+  <thead><tr><th>Method</th><th>Does</th></tr></thead>
+  <tbody>
+    <tr><td><code>Save(slot)</code></td><td>Writes the game to the slot, replacing what was there. Returns false (and prints why) if it couldn't.</td></tr>
+    <tr><td><code>Load(slot)</code></td><td>Replaces the playing game at the start of the next frame. Returns false when the slot is missing or unreadable; the game carries on.</td></tr>
+    <tr><td><code>Exists(slot)</code></td><td>Whether the slot has a save</td></tr>
+    <tr><td><code>Timestamp(slot)</code></td><td>When it was saved, in local time, or null</td></tr>
+    <tr><td><code>Delete(slot)</code></td><td>Removes it</td></tr>
+    <tr><td><code>Slots()</code></td><td>The names of every slot with a save, sorted</td></tr>
+  </tbody>
+</table></div>
+<p>Slot names are file names, so use letters, digits, spaces, dashes and underscores only.</p>
+
+<h3>Where saves go</h3>
+<ul>
+  <li><strong>Built game</strong>: <code>&lt;application data&gt;/&lt;game name&gt;/Saves/</code></li>
+  <li><strong>Playing in the editor</strong>: a folder for the project under your application data folder, so test saves don't end up in the project</li>
+  <li>You can point <code>SaveGame.Directory</code> somewhere else before saving</li>
+</ul>
+<p>Each slot is one JSON file, <code>&lt;slot&gt;.empiresave</code>.</p>
+
+</article>
+</body>
+</html>

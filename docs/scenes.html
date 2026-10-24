@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scenes and Objects · Empire Engine Docs</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<article>
+
+<p class="eyebrow">Using the editor</p>
+<h1>Scenes and objects</h1>
+<p class="lead">A scene is a tree of objects. Each object has a position, a rotation and a scale, and a list of components that give it its looks and behaviour.</p>
+
+<h2>Objects</h2>
+<p>Every object in a scene (a <code>SceneObject</code>) has:</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>Property</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td><code>Id</code></td><td>A GUID that never changes. Scene files, undo and object fields in scripts refer to objects by it.</td></tr>
+    <tr><td><code>Name</code></td><td>What the Hierarchy shows, and what <code>Scene.FindObjectWithName</code> searches for. Names don't have to be unique.</td></tr>
+    <tr><td><code>Position</code>, <code>Rotation</code>, <code>Scale</code></td><td>The transform, relative to the parent (or to the world for a top-level object). Rotation is a <code>Quaternion</code>; the Inspector shows it as degrees.</td></tr>
+    <tr><td><code>Parent</code>, <code>Children</code></td><td>Where it sits in the tree. Change these through the editor, or <code>Scene.SetParent</code> from code.</td></tr>
+    <tr><td><code>Components</code></td><td>Its components, in the order they were added.</td></tr>
+    <tr><td><code>WorldMatrix</code></td><td>The object's transform in the world, with all its parents applied. <code>WorldMatrix.Translation</code> is its world position.</td></tr>
+    <tr><td><code>SceneName</code></td><td>Which loaded scene it came from, when several are loaded. See <a href="scene-management.html">Loading scenes</a>.</td></tr>
+  </tbody>
+</table></div>
+
+<h3>Units and axes</h3>
+<ul>
+  <li>One unit is one meter. Physics, gravity (9.81 down) and sound distances all assume this.</li>
+  <li><strong>Y is up.</strong> Cameras and spot lights look along their local <strong>−Z</strong> axis, as in glTF.</li>
+  <li>Rotations in script helpers such as <code>Rotate(x, y, z)</code> are in degrees. Raw <code>Quaternion</code> math uses radians.</li>
+</ul>
+
+<h2>Components</h2>
+<p>A component is a piece of data or behaviour on an object. The engine's own components are listed in the <a href="components.html">Component reference</a>:</p>
+<ul>
+  <li><strong>Looks</strong>: Mesh, Camera, Directional / Point / Spot Light, Environment, Particle System, Terrain</li>
+  <li><strong>Movement</strong>: Rigidbody, Box / Sphere / Mesh Collider, Animator, Spin</li>
+  <li><strong>Sound</strong>: Audio Source, Audio Listener</li>
+  <li><strong>Interface</strong>: UI elements (Button, Text Field, Checkbox, Dropdown, Bar)</li>
+  <li><strong>Code</strong>: Script, which attaches a <a href="scripting.html">Behaviour</a> or a <a href="custom-components.html">custom component</a></li>
+</ul>
+<p>Some components can only appear once per object: Environment, Rigidbody, Terrain, Animator and Audio Listener. Add Component leaves them out when the object already has one.</p>
+
+<h2>Scene settings</h2>
+<p>A few settings belong to the whole scene. <strong>Click the scene file in the Assets panel</strong> and they appear in the Inspector. This works for scenes other than the open one too; their file is updated as soon as an edit settles.</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>Setting</th><th>Default</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td>Shadows</td><td>on</td><td>Off turns shadows off for the whole scene, whatever the sun says.</td></tr>
+    <tr><td>Shadow Resolution</td><td>2048</td><td>Size of the sun's shadow map: 512, 1024, 2048 or 4096. Bigger is sharper and costs more GPU memory (4096 uses 64 MB for each of the two frames in flight).</td></tr>
+    <tr><td>Gravity</td><td>(0, −9.81, 0)</td><td>The pull on rigidbodies that use gravity. <em>Reset Gravity</em> puts it back. Scripts can change it with <code>Physics.Gravity</code>.</td></tr>
+  </tbody>
+</table></div>
+
+<h2>Making scenes</h2>
+<p>Right-click anywhere in the Assets panel and choose <strong>Create Scene</strong>. The new <code>.empirescene</code> file goes in the folder being shown. Scenes in <code>Scenes/</code> are loaded from scripts by name (<code>SceneManager.LoadScene("Level2")</code>); scenes elsewhere are loaded by their path from the project folder.</p>
+
+<h2>Finding objects from a script</h2>
+<pre><code class="language-cs">var player = Scene.FindObjectWithName("Player");          // first match, or null
+List&lt;SceneObject&gt; coins = Scene.FindObjectsWithName("Coin");  // every match
+
+// The scene that's playing, for anything else:
+foreach (var obj in SceneManager.World!.All) { ... }</code></pre>
+<p>Names are matched exactly, capital letters included, in Hierarchy order. Searching takes time in a big scene, so find what you need once in <code>Start</code> and keep it. For objects you know in advance, an <a href="scripting.html#inspector-fields">object field</a> dragged in from the Hierarchy is better still.</p>
+
+<h2>Scene files</h2>
+<p>Scenes are saved as readable JSON (<code>.empirescene</code>), so they diff well in version control. See <a href="file-formats.html#scene-files-empirescene">File formats</a> for the layout.</p>
+
+</article>
+</body>
+</html>

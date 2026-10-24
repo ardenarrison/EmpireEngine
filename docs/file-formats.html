@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>File Formats · Empire Engine Docs</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<article>
+
+<p class="eyebrow">Reference</p>
+<h1>File formats</h1>
+<p class="lead">Every file Empire Engine writes is JSON, so it reads well in a diff and survives version control. These are their layouts.</p>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>File</th><th>Where</th><th>What</th></tr></thead>
+  <tbody>
+    <tr><td><code>project.empire</code></td><td>project root</td><td>The project's name, editor version and start scene</td></tr>
+    <tr><td><code>*.empirescene</code></td><td><code>Scenes/</code> (usually)</td><td>A scene</td></tr>
+    <tr><td><code>*.visualcode</code></td><td><code>Scripts/</code></td><td>A visual script</td></tr>
+    <tr><td><code>packages.json</code></td><td><code>Packages/</code></td><td>The packages a project has turned on</td></tr>
+    <tr><td><code>package.json</code></td><td>each package's folder</td><td>A package's id, name, version and description</td></tr>
+    <tr><td><code>game.json</code></td><td>a built game's <code>GameData/</code></td><td>The game's name and start scene</td></tr>
+    <tr><td><code>*.empiresave</code></td><td>the saves folder</td><td>One save-game slot</td></tr>
+  </tbody>
+</table></div>
+
+<h2>project.empire</h2>
+<pre><code class="language-json">{
+  "name": "My Game",
+  "editorVersion": "0.1.0",
+  "startScene": "Scenes/Main.empirescene"
+}</code></pre>
+<p><code>startScene</code> defaults to <code>Scenes/Main.empirescene</code>. The Hub writes this file; a folder without one still opens if it has a scene in <code>Scenes/</code>.</p>
+
+<h2>Scene files (.empirescene)</h2>
+<pre><code class="language-json">{
+  "formatVersion": 1,
+  "name": "Main",
+  "settings": {
+    "shadows": true,
+    "shadowResolution": 4096,
+    "gravity": [0, -9.81, 0]
+  },
+  "objects": [
+    {
+      "id": "a1b2c3d4-0000-4000-8000-00000000000f",
+      "name": "Sun",
+      "position": [0, 10, 0],
+      "rotation": [0, 0, 0, 1],
+      "scale": [1, 1, 1],
+      "components": [
+        { "type": "DirectionalLight", "intensity": 4, "lightColor": [1, 0.96, 0.88], "yaw": 33.69, "pitch": 47.96 }
+      ]
+    },
+    {
+      "id": "60307893-9d17-4e0a-9ce7-b39f1c5a24fd",
+      "name": "Water",
+      "position": [0, 1.5, 0],
+      "rotation": [0, 0, 0, 1],
+      "scale": [100, 1, 100],
+      "components": [
+        { "type": "MeshRenderer", "model": "Models/Sea.glb", "tint": [1, 1, 1, 1] },
+        { "type": "Script", "scriptName": "Water", "fields": { "Smoothness": "0.8" } }
+      ]
+    }
+  ]
+}</code></pre>
+<ul>
+  <li>Vectors are arrays. <code>rotation</code> is a quaternion as <code>[x, y, z, w]</code>.</li>
+  <li>Objects are listed parents first. A child names its parent's <code>id</code> in <code>parent</code>; top-level objects have no <code>parent</code> key (empty values aren't written). A parent must appear before its children, or loading fails with a clear message.</li>
+  <li>Each component has a <code>type</code>: <code>MeshRenderer</code>, <code>Script</code>, <code>Camera</code>, <code>DirectionalLight</code>, <code>PointLight</code>, <code>SpotLight</code>, <code>Environment</code>, <code>Rigidbody</code>, <code>BoxCollider</code>, <code>SphereCollider</code>, <code>MeshCollider</code>, <code>Terrain</code>, <code>Animator</code>, <code>ParticleSystem</code>, <code>AudioSource</code>, <code>AudioListener</code>, <code>Ui</code> or <code>Spin</code>.</li>
+  <li>A <code>Script</code> component's <code>fields</code> holds only values changed in the Inspector, each as JSON <em>text</em> (<code>"5"</code>, <code>"\"hi\""</code>, <code>"[1,2]"</code>). Object fields hold the target's id.</li>
+  <li>Terrain heights and paint are stored compressed (deflate, then base64), so large terrains stay compact.</li>
+  <li>Scenes saved before scene settings existed have no <code>settings</code> and get the defaults.</li>
+</ul>
+
+<h2>Visual scripts (.visualcode)</h2>
+<pre><code class="language-json">{
+  "version": 1,
+  "name": "Spinner",
+  "variables": [
+    { "name": "speed", "type": "number", "default": "1" }
+  ],
+  "nodes": [
+    { "id": "n1", "type": "when_start", "x": 40, "y": 40, "next": "n2" },
+    { "id": "n2", "type": "go_to", "x": 0, "y": 0, "next": "n3",
+      "inputs": { "x": { "literal": "0" }, "y": { "literal": "0" }, "z": { "literal": "0" } } },
+    { "id": "n3", "type": "forever", "x": 0, "y": 0, "body": "n4" },
+    { "id": "n4", "type": "turn", "x": 0, "y": 0,
+      "inputs": { "axis": { "literal": "Y" }, "degrees": { "literal": "2" } } }
+  ]
+}</code></pre>
+<p>Each node is a block. <code>next</code> is the block below it, <code>body</code> the first block inside a C-block's mouth, and each input is either a <code>literal</code> value or a <code>node</code> (a plugged-in reporter). Saving writes the matching <code>.cs</code> next to it.</p>
+
+<h2>packages.json</h2>
+<pre><code class="language-json">{
+  "enabled": [ "Water" ]
+}</code></pre>
+<p>The ids of the installed packages, in the order they were turned on. Each has a compiled <code>EmpirePackage.&lt;Id&gt;.dll</code> and a <code>.stamp</code> beside it.</p>
+
+<h2>package.json</h2>
+<pre><code class="language-json">{
+  "id": "Water",
+  "name": "Water",
+  "version": "1.5.0",
+  "description": "Adds a Water component..."
+}</code></pre>
+<p><code>id</code> (letters, digits, underscores) defaults to the folder's name, <code>name</code> to the id, and <code>version</code> to <code>1.0.0</code>.</p>
+
+<h2>game.json</h2>
+<pre><code class="language-json">{
+  "name": "My Game",
+  "startScene": "Scenes/Main.empirescene"
+}</code></pre>
+<p>Written by Build Project. <code>startScene</code> is relative to <code>GameData/Core/</code>.</p>
+
+<h2>Save games (.empiresave)</h2>
+<p>One file per slot with the format version, when it was saved, the active and loaded scenes, <code>Time.time</code>, your <code>SetInt</code>/<code>SetString</code> values, and the whole world in the same form as a scene file (plus runtime state such as velocities and audio positions).</p>
+
+</article>
+</body>
+</html>

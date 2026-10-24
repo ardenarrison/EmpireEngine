@@ -1,0 +1,29 @@
+# Build output
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+*.nupkg
+TestResults/
+
+# IDE / editor
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.swp
+*.DotSettings.user
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Per-user ImGui window layout
+imgui.ini
+
+# Packaged builds made by publish.py
+/Empire/
+
+# Local sample/test project, not part of the repository
+/MyScene/

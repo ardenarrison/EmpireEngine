@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Terrain · Empire Engine Docs</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<article>
+
+<p class="eyebrow">Systems</p>
+<h1>Terrain</h1>
+<p class="lead">Ground made from a grid of heights, for hills, valleys and plains. Sculpt it with brushes, paint it with colors, or generate hills, and it works as a collider straight away.</p>
+
+<h2>Adding terrain</h2>
+<p>Right-click in the Hierarchy and choose <strong>Terrain</strong>. You get a 60 × 60 terrain at the scene's origin with gentle generated hills and three paint layers ready to use: Dirt, Sand and Stone. You can also add a <em>Terrain</em> component to any object (one per object).</p>
+
+<h2>Size and shape</h2>
+<p>The terrain is centered on its object. It spans <strong>Width</strong> along X and <strong>Length</strong> along Z, and rises from the object's position up to <strong>Height</strong>.</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>Setting</th><th>Default</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td>Width, Length</td><td>60, 60</td><td>Size in the object's local units</td></tr>
+    <tr><td>Height</td><td>12</td><td>The highest the ground can rise above the object</td></tr>
+    <tr><td>Resolution</td><td>129 × 129</td><td>Grid points per side: 33, 65, 129, 257 or 513. More holds finer detail and costs more to draw. Changing it resamples the ground, keeping its shape.</td></tr>
+    <tr><td>Base Color</td><td>green</td><td>The color of ground with no paint on it</td></tr>
+    <tr><td>Collide</td><td>on</td><td>Off makes it scenery only: nothing collides with it and raycasts pass through</td></tr>
+    <tr><td>Friction, Bounciness</td><td>0.5, 0</td><td>As for any <a href="physics.html#surface-settings">collider</a></td></tr>
+  </tbody>
+</table></div>
+
+<h2>Sculpting</h2>
+<p>Press <strong>Sculpt Terrain</strong> in the Inspector. While it's on, hold the left mouse button over the terrain to use the brush; a ring shows its size. Right-drag and <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> still fly the camera. Press the button again to stop.</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>Brush</th><th>Does</th></tr></thead>
+  <tbody>
+    <tr><td>Raise</td><td>Lifts the ground under the brush</td></tr>
+    <tr><td>Lower</td><td>Digs it down</td></tr>
+    <tr><td>Smooth</td><td>Evens out bumps</td></tr>
+    <tr><td>Flatten</td><td>Pulls the ground toward the <em>Flatten To</em> height</td></tr>
+    <tr><td>Paint</td><td>Paints the chosen layer's color</td></tr>
+    <tr><td>Erase</td><td>Removes paint, back to the base color</td></tr>
+  </tbody>
+</table></div>
+<p><strong>Brush Size</strong> is the radius and <strong>Strength</strong> how fast it works. Each stroke is one undo step.</p>
+
+<h2>Paint layers</h2>
+<p>A layer is a named color, such as "Road" or "Snow", that you paint onto specific spots. A terrain can have up to <strong>8</strong> layers. Pick one in the list to paint with it; rename it, change its color (paint already on the ground follows), or remove it (what was painted goes back to the base color). <em>Fill With Selected</em> paints the whole terrain; <em>Clear Paint</em> removes all paint.</p>
+
+<h2>Generating hills</h2>
+<p>The Generate section fills the terrain with hills made from layered noise. The same settings always give the same hills.</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>Setting</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td>Seed</td><td>A different number gives a different landscape. <em>Random Seed</em> picks one.</td></tr>
+    <tr><td>Hill Size</td><td>Width of the biggest hills, in local units</td></tr>
+    <tr><td>Detail</td><td>How many layers of finer bumps go on top (1 to 8)</td></tr>
+    <tr><td>Roughness</td><td>How strong that finer detail is, 0 to 1</td></tr>
+    <tr><td>Amount</td><td>How much of Height the hills use, 0 to 1</td></tr>
+  </tbody>
+</table></div>
+<p><em>Generate Hills</em>, <em>Flatten All</em> and <em>Smooth All</em> replace the whole ground; <kbd>Cmd/Ctrl</kbd>+<kbd>Z</kbd> brings it back.</p>
+
+<h2>From scripts</h2>
+<pre data-label="Keep something standing on the ground"><code class="language-cs">public class StickToGround : Behaviour
+{
+    public SceneObject? ground;      // drag the terrain object here
+    private Terrain? _terrain;
+
+    public override void Start() =&gt; _terrain = ground?.Components.OfType&lt;Terrain&gt;().FirstOrDefault();
+
+    public override void Update()
+    {
+        if (_terrain == null || ground == null) return;
+        var p = Object.Position;
+        Object.Position = new Vector3(p.X, _terrain.GetHeight(ground, p), p.Z);
+    }
+}</code></pre>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>Member</th><th>Does</th></tr></thead>
+  <tbody>
+    <tr><td><code>GetHeight(owner, worldPosition)</code></td><td>The ground's world height under a world position, taking the terrain object's position, rotation and scale into account</td></tr>
+    <tr><td><code>HeightAt(localX, localZ)</code></td><td>Height above the object at a local position. Outside the terrain, the edge's height.</td></tr>
+    <tr><td><code>NormalAt(localX, localZ)</code></td><td>The ground's up direction there</td></tr>
+    <tr><td><code>LayerAt(localX, localZ)</code></td><td>The most strongly painted layer there, or −1 for none. Good for footstep sounds.</td></tr>
+    <tr><td><code>Sculpt(brush, localX, localZ, radius, strength, level, layer)</code></td><td>Applies a brush. Strength is in local units for Raise and Lower and a 0–1 blend for the others; scale it by <code>Time.deltaTime</code> for a steady effect.</td></tr>
+    <tr><td><code>Generate(seed, featureSize, octaves, roughness, amount)</code></td><td>Fills with hills, as in the Inspector</td></tr>
+    <tr><td><code>Flatten(level)</code>, <code>SmoothAll(passes)</code></td><td>Makes it all one height, or evens it out</td></tr>
+    <tr><td><code>GetHeight01(x, z)</code>, <code>SetHeight01(x, z, value)</code></td><td>Read or set one grid point, 0 to 1 of Height</td></tr>
+    <tr><td><code>AddLayer</code>, <code>SetLayer</code>, <code>RemoveLayer</code>, <code>FillLayer</code>, <code>ClearPaint</code>, <code>Layers</code></td><td>Manage paint layers</td></tr>
+    <tr><td><code>Resize(resolution)</code></td><td>Changes the number of grid points, keeping the shape</td></tr>
+  </tbody>
+</table></div>
+<p>Terrain is saved in the scene file in compressed form, so even large terrains keep scene files reasonably small.</p>
+
+</article>
+</body>
+</html>

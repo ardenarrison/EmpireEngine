@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Audio · Empire Engine Docs</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<article>
+
+<p class="eyebrow">Systems</p>
+<h1>Audio</h1>
+<p class="lead">An Audio Source plays an MP3 or WAV file from the project, either flat (2D, for music and menus) or from its object's position in the world (3D).</p>
+
+<h2>Playing a sound</h2>
+<ol class="steps">
+  <li>Put an <code>.mp3</code> or <code>.wav</code> file in the project, for example <code>Audio/Theme.mp3</code>.</li>
+  <li>Drag it from the Assets panel onto the scene. That makes an object with an Audio Source that plays it. Or add an <em>Audio Source</em> component and drop the file on its <em>Clip</em> field.</li>
+  <li>Press <em>Play</em>. With <em>Play On Awake</em> on (the default), it starts with the scene.</li>
+</ol>
+<p>In edit mode the Audio Source's <em>Play</em> and <em>Stop</em> buttons let you listen to the clip.</p>
+
+<h2>Audio Source settings</h2>
+<p>These are the same settings as Unity's Audio Source.</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>Setting</th><th>Default</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td>Clip</td><td></td><td>The sound file, relative to the project folder</td></tr>
+    <tr><td>Mute</td><td>off</td><td>Silences it but keeps it playing</td></tr>
+    <tr><td>Play On Awake</td><td>on</td><td>Starts when the scene starts playing</td></tr>
+    <tr><td>Loop</td><td>off</td><td>Starts over at the end</td></tr>
+    <tr><td>Priority</td><td>128</td><td>0 is most important, 256 least. Matters when too many sounds play at once.</td></tr>
+    <tr><td>Volume</td><td>1</td><td>0 to 1</td></tr>
+    <tr><td>Pitch</td><td>1</td><td>Playback speed, −3 to 3. A negative pitch plays backwards.</td></tr>
+    <tr><td>Stereo Pan</td><td>0</td><td>−1 all left, 1 all right, for 2D sound</td></tr>
+    <tr><td>Spatial Blend</td><td>0</td><td>0 is a 2D sound; 1 is a 3D sound heard from the object's position</td></tr>
+  </tbody>
+</table></div>
+
+<h3>3D sound</h3>
+<p>These matter as Spatial Blend rises above 0.</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>Setting</th><th>Default</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td>Doppler Level</td><td>1</td><td>How much moving sounds change pitch. 0 turns it off; 5 exaggerates it.</td></tr>
+    <tr><td>Spread</td><td>0</td><td>0 to 360. Widens the sound so it pans less; 180 and up is centered.</td></tr>
+    <tr><td>Rolloff Mode</td><td>Logarithmic</td><td><em>Logarithmic</em>: full volume inside Min Distance, then falls as 1 / distance, like real sound. <em>Linear</em>: falls in a straight line from full at Min Distance to silent at Max Distance.</td></tr>
+    <tr><td>Min Distance</td><td>1</td><td>Closer than this, the sound is at full volume</td></tr>
+    <tr><td>Max Distance</td><td>500</td><td>Where the sound stops getting quieter</td></tr>
+  </tbody>
+</table></div>
+
+<h2>The listener</h2>
+<p>3D sounds are placed relative to the <strong>Audio Listener</strong>'s position and facing. Put one on your camera. A scene without one is heard from its first camera.</p>
+<pre><code class="language-cs">AudioListener.Volume = 0.5f;   // master volume for everything, 0 to 1
+AudioListener.Pause = true;    // stop all sound where it is; false carries on</code></pre>
+
+<h2>From scripts</h2>
+<pre><code class="language-cs">audioSource.Play();               // from the start (or the end, with a negative pitch)
+audioSource.PlayDelayed(0.5f);    // after a wait
+audioSource.Pause();
+audioSource.UnPause();
+audioSource.Stop();
+
+audioSource.PlayOneShot("Audio/Step.wav", 0.8f);   // on top of whatever is playing; good for overlapping effects
+AudioSource.PlayClipAtPoint("Audio/Boom.wav", hitPoint);   // from a point in the world, no object needed
+
+bool playing = audioSource.IsPlaying;   // also true during a PlayDelayed wait
+audioSource.Time = 30f;                 // jump to 30 seconds in
+float length = audioSource.ClipLength;</code></pre>
+
+<h2>Notes</h2>
+<ul>
+  <li>Sound files are decoded once into memory, so playing them never touches the disk. A clip with more than two channels keeps only the first two.</li>
+  <li>Save games remember where each Audio Source was in its clip and carry on from there.</li>
+  <li>If the computer has no sound device, the editor runs silently instead of failing.</li>
+</ul>
+
+</article>
+</body>
+</html>

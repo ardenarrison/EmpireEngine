@@ -1,0 +1,36 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Engine.Core\Engine.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Ahwoo.BRUTAL.Core" Version="2026.10.1" />
+    <PackageReference Include="Ahwoo.BRUTAL.Glfw" Version="2026.10.4" />
+    <PackageReference Include="Ahwoo.BRUTAL.Gltf" Version="2026.10.2" />
+    <PackageReference Include="Ahwoo.BRUTAL.ShaderC" Version="2026.10.2" />
+    <PackageReference Include="Ahwoo.BRUTAL.Vulkan.Abstractions" Version="2026.10.2" />
+    <PackageReference Include="Ahwoo.BRUTAL.Vulkan.Vma" Version="2026.10.2" />
+    <PackageReference Include="Hexa.NET.MiniAudio" Version="1.0.1" />
+    <PackageReference Include="StbTrueTypeSharp" Version="1.26.12" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The UI font (Canvas2D.DefaultFont), inside the DLL so built games carry it with nothing to copy. -->
+    <EmbeddedResource Include="Ui\Fonts\JetBrainsMono-Regular.ttf" LogicalName="Engine.Brutal.Ui.Fonts.JetBrainsMono-Regular.ttf" />
+    <!-- Empire Engine's icon for the editor's and games' windows (AppIcon), and the white-backed copy for the macOS Dock. -->
+    <EmbeddedResource Include="..\EmpireEngineIcon.png" LogicalName="Engine.Brutal.EmpireEngineIcon.png" />
+    <EmbeddedResource Include="..\EmpireEngineIcon-mac.png" LogicalName="Engine.Brutal.EmpireEngineIcon-mac.png" />
+    <!-- The logos on the splash every game opens with (SplashScreen). See Ui\Logos\README.txt before changing them. -->
+    <EmbeddedResource Include="Ui\Logos\BrutalLogo.png" LogicalName="Engine.Brutal.Ui.Logos.BrutalLogo.png" />
+    <EmbeddedResource Include="Ui\Logos\EmpireEngineCrown.png" LogicalName="Engine.Brutal.Ui.Logos.EmpireEngineCrown.png" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+</Project>

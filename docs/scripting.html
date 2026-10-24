@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>C# Scripting · Empire Engine Docs</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<article>
+
+<p class="eyebrow">Scripting</p>
+<h1>C# scripting</h1>
+<p class="lead">A script is a C# class in the project's <code>Scripts/</code> folder. Attach it to an object and its <code>Start</code> and <code>Update</code> run while the game plays.</p>
+
+<h2>A first script</h2>
+<pre data-label="Scripts/Mover.cs"><code class="language-cs">public class Mover : Behaviour
+{
+    public float speed = 5f;
+
+    public override void Update()
+    {
+        float x = Input.GetAxis("Horizontal");   // -1 to 1 from A/D or the arrow keys
+        float z = -Input.GetAxis("Vertical");    // W moves along -Z, which is "forward"
+        Translate(x * speed * Time.deltaTime, 0, z * speed * Time.deltaTime);
+    }
+}</code></pre>
+
+<p>The rules:</p>
+<ul>
+  <li><strong>The class name must match the file name</strong>: <code>Mover</code> lives in <code>Scripts/Mover.cs</code>.</li>
+  <li>It extends <code>Behaviour</code>. (A class that extends <code>Component</code> instead becomes a <a href="custom-components.html">custom component</a>.)</li>
+  <li>Don't put it in a namespace: the editor finds scripts by class name.</li>
+  <li><code>System</code>, <code>System.Collections.Generic</code>, <code>System.Linq</code>, <code>System.Numerics</code>, <code>Engine.Core.Scene</code> and <code>Engine.Core.Scripting</code> are already imported.</li>
+</ul>
+
+<h3>Attaching a script</h3>
+<p>Select an object, press <em>Add Component</em> and choose <em>Script</em>. Pick an existing script, or type a new name and press <em>Create and Attach</em>, which writes a starter file:</p>
+<pre><code class="language-cs">// Runs every frame while the scene plays. The class name must match this file name.
+public class Bob : Behaviour
+{
+    public override void Update()
+    {
+    }
+}</code></pre>
+<p>The script's Inspector section has an <em>Edit Code</em> button that opens it in the code view. One object can carry any number of scripts, and one script can be on any number of objects; each gets its own instance.</p>
+
+<h2>Lifecycle</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Method</th><th>When it runs</th></tr></thead>
+  <tbody>
+    <tr><td><code>Start()</code></td><td>Once, on the first frame the script runs, right before its first <code>Update</code>.</td></tr>
+    <tr><td><code>Update()</code></td><td>Every frame while the game plays.</td></tr>
+    <tr><td><code>OnCollisionEnter(SceneObject other)</code></td><td>When this object's colliders start touching another object's.</td></tr>
+    <tr><td><code>OnCollisionExit(SceneObject other)</code></td><td>When they stop touching.</td></tr>
+    <tr><td><code>OnGameLoaded()</code></td><td>After <code>SaveGame.Load</code> put a saved game back, on scripts that had already started when it was saved. Rebuild cached references here. See <a href="scene-management.html#saving-the-game">Saving the game</a>.</td></tr>
+  </tbody>
+</table></div>
+
+<h3>What happens in one frame</h3>
+<ol>
+  <li>Time moves on (<code>Time.deltaTime</code>, <code>Time.time</code>).</li>
+  <li>The keyboard and mouse are read (<code>Input</code>).</li>
+  <li>Scenes and save games requested last frame are loaded.</li>
+  <li>The game's UI takes its clicks and typing, and <a href="game-ui.html#using-ui-from-scripts">UI handlers</a> such as <code>OnClick</code> run.</li>
+  <li>Every script's <code>Start</code> (the first time) and <code>Update</code> run, in Hierarchy order.</li>
+  <li>Spin components turn.</li>
+  <li>Physics steps (at a fixed 60 steps per second, as many as the frame needs). Collision events fire here.</li>
+  <li>Animators, particle systems and audio update.</li>
+  <li>The frame is drawn.</li>
+</ol>
+<p>There is no separate <code>FixedUpdate</code>. Forces added in <code>Update</code> are already scaled to the frame's length, so they push equally hard at any frame rate (see <a href="physics.html#forces">Forces</a>).</p>
+
+<h3>When a script throws</h3>
+<p>An exception in any of these methods prints <code>Script error in Mover on 'Player': … The script is stopped.</code> to the console and stops that one script. The rest of the game keeps running.</p>
+
+<h2>The object and its transform</h2>
+<p><code>Object</code> is the <code>SceneObject</code> the script is on. Read and set its <code>Position</code>, <code>Rotation</code> and <code>Scale</code> directly, or use the helpers:</p>
+<pre><code class="language-cs">Object.Position = new Vector3(0, 2, 0);
+Object.Rotation = Quaternion.CreateFromYawPitchRoll(MathF.PI / 2, 0, 0);   // radians
+
+Translate(0, 0, -1);   // move by x, y, z world units
+Rotate(0, 90, 0);      // turn by x, y, z degrees
+Scale(2, 2, 2);        // multiply the size (1, 1, 1 changes nothing)
+
+string name = Object.Name;
+SceneObject? parent = Object.Parent;</code></pre>
+<p>Position, rotation and scale are relative to the parent. For the world position of a child, use <code>Object.WorldMatrix.Translation</code>.</p>
+
+<h3>Which way is forward</h3>
+<p>Objects face along their local <strong>−Z</strong>. To get the world direction an object faces:</p>
+<pre><code class="language-cs">Vector3 forward = Vector3.Transform(-Vector3.UnitZ, Object.Rotation);
+Vector3 right   = Vector3.Transform(Vector3.UnitX, Object.Rotation);</code></pre>
+
+<h2>Other components</h2>
+<pre><code class="language-cs">var body = GetComponent&lt;Rigidbody&gt;();   // null when there is none
+if (body != null) body.AddForce(0, 10, 0);
+
+// Shortcuts that stop the script with a clear message when the component is missing:
+rigidbody.AddForce(0, 10, 0, ForceMode.Impulse);
+audioSource.Play();
+animator.Play("Walk");</code></pre>
+<p>The capitalised forms <code>Rigidbody</code>, <code>AudioSource</code> and <code>Animator</code> work too. <code>GetComponent&lt;T&gt;()</code> finds the first component of that type on <strong>this</strong> object; to reach another object's components, use <code>other.Components.OfType&lt;T&gt;().FirstOrDefault()</code>.</p>
+
+<h2>Inspector fields</h2>
+<p>A script's <strong>public fields</strong> appear in the Inspector, where you can change them per object. Values typed there are saved with the scene and copied into the script when play starts; fields you haven't touched keep the default your code gives them. Right-click a field to put it back to the script's default.</p>
+<pre><code class="language-cs">public class Turret : Behaviour
+{
+    public float range = 20f;                 // "Range"
+    public int maxAmmo = 30;                  // "Max Ammo"
+    public bool autoFire;                     // a checkbox
+    public string label = "Turret";
+    public Vector3 aimOffset;                 // three numbers
+    public Vector3 beamColor = new(1, 0, 0);  // a color picker: the name ends in "Color"
+    public Mode mode = Mode.Fast;             // a dropdown
+    public SceneObject? target;               // drag an object from the Hierarchy onto it
+    public List&lt;SceneObject&gt; waypoints = new();
+    public float[] damageByLevel = { 5, 8, 12 };
+
+    public enum Mode { [Label("Fast (inaccurate)")] Fast, Accurate }
+
+    private float _cooldown;                  // private: not shown, not saved
+}</code></pre>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>Type</th><th>Inspector</th></tr></thead>
+  <tbody>
+    <tr><td><code>float</code>, <code>double</code>, <code>int</code>, <code>long</code></td><td>A number field</td></tr>
+    <tr><td><code>bool</code></td><td>A checkbox</td></tr>
+    <tr><td><code>string</code></td><td>A text box</td></tr>
+    <tr><td><code>Vector3</code></td><td>Three numbers, or a color picker when the field's name ends in <code>Color</code></td></tr>
+    <tr><td>An <code>enum</code></td><td>A dropdown. <code>[Label("…")]</code> (or <code>[Description("…")]</code>) on a value changes the text shown; the value's name is what's saved.</td></tr>
+    <tr><td><code>SceneObject</code></td><td>An object slot. Drag a row from the Hierarchy onto it; the X clears it. Saved as the object's id and turned back into the object when play starts (null if it has been deleted).</td></tr>
+    <tr><td><code>Button</code>, <code>TextField</code>, <code>Checkbox</code>, <code>Dropdown</code>, <code>Bar</code></td><td>A slot that only takes a UI object of that kind. Becomes the object's control when play starts, with events such as <code>OnClick</code>. See <a href="game-ui.html#using-ui-from-scripts">Game UI</a>.</td></tr>
+    <tr><td>Arrays and <code>List&lt;T&gt;</code></td><td>Of any type above except enums. A size box, then one row per entry. A new entry copies the last one. Right-click an entry to remove it; drop a Hierarchy object on <em>Add</em> to append it.</td></tr>
+  </tbody>
+</table></div>
+<p>Names are turned into labels the way Unity does it: <code>jumpHeight</code> becomes "Jump Height", <code>_speed</code> becomes "Speed". If you change a field's type so a saved value no longer fits, play still starts: the field keeps the script's default and a note is printed.</p>
+
+<h2>Coroutines</h2>
+<p>For things that happen over time (wait two seconds, then open the door) a script can run <strong>coroutines</strong>: methods that return <code>IEnumerable&lt;Wait&gt;</code> and <code>yield</code> to pause. Start one with <code>Spawn</code>, and call <code>TickRoutines()</code> once per frame from <code>Update</code> to keep them going.</p>
+<pre><code class="language-cs">public class Door : Behaviour
+{
+    public override void Start() =&gt; Spawn(OpenLater());
+
+    public override void Update() =&gt; TickRoutines();
+
+    private IEnumerable&lt;Wait&gt; OpenLater()
+    {
+        yield return WaitSeconds(2f);                          // pause for two seconds
+        yield return GlideTo(Position + new Vector3(0, 3, 0), 1.5f);   // slide up over 1.5 s
+        yield return WaitUntil(() =&gt; Input.GetKeyDown(Keys.E));        // until E is pressed
+        yield return null;                                     // just one frame
+        Object.Position -= new Vector3(0, 3, 0);
+    }
+}</code></pre>
+<div class="table-wrap"><table>
+  <thead><tr><th>Yield</th><th>Pauses until</th></tr></thead>
+  <tbody>
+    <tr><td><code>yield return null</code></td><td>The next frame</td></tr>
+    <tr><td><code>WaitSeconds(s)</code></td><td><code>s</code> seconds of game time have passed (affected by <code>Time.timeScale</code>)</td></tr>
+    <tr><td><code>WaitUntil(() =&gt; condition)</code></td><td>The condition is true; checked once per frame</td></tr>
+    <tr><td><code>GlideTo(target, s)</code></td><td>The object has slid in a straight line to <code>target</code> over <code>s</code> seconds</td></tr>
+  </tbody>
+</table></div>
+<p>Any number of coroutines can run at once. <code>Timer</code> counts seconds since the script started (or since <code>ResetTimer()</code>). You can also make your own wait by extending <code>Wait</code> and overriding <code>bool Update(float deltaTime)</code> to return true when it's done. Visual scripts use exactly this machinery.</p>
+
+<h2>Handy helpers</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Member</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td><code>Position</code></td><td>Shorthand for <code>Object.Position</code> (protected)</td></tr>
+    <tr><td><code>MoveForward(distance)</code></td><td>Moves along the object's facing (−Z)</td></tr>
+    <tr><td><code>Turn(axis, degrees)</code></td><td>Turns around a world axis</td></tr>
+    <tr><td><code>RandomRange(min, max)</code></td><td>A random float in the range</td></tr>
+    <tr><td><code>SafeDivide(a, b)</code></td><td><code>a / b</code>, or 0 when <code>b</code> is 0</td></tr>
+    <tr><td><code>Approximately(a, b)</code></td><td>True when the two floats are within 0.00001</td></tr>
+  </tbody>
+</table></div>
+
+<h2>Collisions</h2>
+<pre><code class="language-cs">public class Coin : Behaviour
+{
+    public override void OnCollisionEnter(SceneObject other)
+    {
+        if (other.Name != "Player") return;
+        SaveGame.SetInt("coins", SaveGame.GetInt("coins") + 1);
+        AudioSource.PlayClipAtPoint("Audio/Coin.wav", Object.Position);
+        SceneManager.World!.Remove(Object);
+    }
+}</code></pre>
+<p>Collision events need colliders on both objects, and at least one of the two must have a Rigidbody. Use <a href="physics.html#raycasts">raycasts</a> to find things without touching them.</p>
+
+<h2>Making and removing objects</h2>
+<p>Scripts can add objects to the scene that's playing and remove them again:</p>
+<pre><code class="language-cs">var ball = new SceneObject { Name = "Ball", Position = Object.Position + new Vector3(0, 1, 0) };
+ball.Components.Add(new MeshRenderer { Model = "Models/Ball.glb" });
+ball.Components.Add(new SphereCollider());
+ball.Components.Add(new Rigidbody { Mass = 0.5f });
+SceneManager.World!.Add(ball);              // or .Add(ball, parent)
+
+SceneManager.World!.Remove(ball);           // takes it and its children out</code></pre>
+<p>The engine's own components work on objects made this way: the model is loaded the first time it's drawn, and physics picks up the new body on its next step. <strong>Script components are only started on objects that come from a scene</strong>, so to spawn something with behaviour, make it in its own scene and load that scene additively (<code>SceneManager.LoadScene("Enemy", LoadSceneMode.Additive)</code>).</p>
+
+<h2>How scripts are compiled</h2>
+<p>The editor compiles every <code>.cs</code> file in <code>Scripts/</code> into one DLL with Roslyn each time you press Play, and Build Project compiles it into the game. The built game only loads that DLL; it never compiles anything.</p>
+<ul>
+  <li>Scripts are compiled with optimizations on, so they run at full speed.</li>
+  <li><code>unsafe</code> code is allowed, and the engine's Vulkan bindings are referenced, so advanced scripts can talk to the GPU directly.</li>
+  <li>Scripts are compiled against the turned-on <a href="packages.html">packages</a>, so they can use the packages' classes. A script class wins over a package class with the same name.</li>
+</ul>
+
+<h2>Coming from Unity</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Unity</th><th>Empire Engine</th></tr></thead>
+  <tbody>
+    <tr><td><code>MonoBehaviour</code></td><td><code>Behaviour</code>, with <code>public override</code> on <code>Start</code> and <code>Update</code></td></tr>
+    <tr><td><code>gameObject</code>, <code>transform</code></td><td><code>Object</code>, with <code>Position</code>, <code>Rotation</code> and <code>Scale</code> on it</td></tr>
+    <tr><td><code>transform.forward</code></td><td><code>Vector3.Transform(-Vector3.UnitZ, Object.Rotation)</code></td></tr>
+    <tr><td><code>FixedUpdate</code></td><td>None: add forces in <code>Update</code></td></tr>
+    <tr><td><code>StartCoroutine</code></td><td><code>Spawn</code>, plus <code>TickRoutines()</code> in <code>Update</code></td></tr>
+    <tr><td><code>GameObject.Find</code></td><td><code>Scene.FindObjectWithName</code></td></tr>
+    <tr><td><code>Instantiate</code> / <code>Destroy</code></td><td><code>SceneManager.World.Add</code> / <code>Remove</code>, or additive scene loading</td></tr>
+    <tr><td><code>[SerializeField] private</code></td><td>Not supported: only public fields are shown and saved</td></tr>
+    <tr><td><code>PlayerPrefs</code></td><td><code>SaveGame.SetInt</code> and friends, which travel with a save slot</td></tr>
+    <tr><td><code>Vector3</code>, <code>Quaternion</code></td><td><code>System.Numerics</code> types (<code>Vector3.UnitZ</code>, <code>Quaternion.CreateFromYawPitchRoll</code>, radians)</td></tr>
+  </tbody>
+</table></div>
+
+<p>Next: <a href="input.html">Input and time</a>, then the full <a href="api.html">Scripting API reference</a>.</p>
+
+</article>
+</body>
+</html>

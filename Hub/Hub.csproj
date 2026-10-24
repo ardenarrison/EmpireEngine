@@ -1,0 +1,76 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <AssemblyName>EmpireHub</AssemblyName>
+    <RootNamespace>EmpireHub</RootNamespace>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <EmpireLicenses>true</EmpireLicenses>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <ApplicationIcon>..\EmpireEngineIcon.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <!-- Empire Engine's icon: on the hub's windows (and the taskbar) from the transparent .ico, and in the macOS Dock from the
+       white-backed PNG. MacDockIcon is compiled in from the engine's source, since the hub doesn't reference the engine. -->
+  <ItemGroup>
+    <AvaloniaResource Include="..\EmpireEngineIcon.ico" Link="Assets\EmpireEngineIcon.ico" />
+    <!-- The logos on the hub's opening screen: the same files the engine's splash uses (see Engine.Brutal\Ui\Logos\README.txt). -->
+    <AvaloniaResource Include="..\Engine.Brutal\Ui\Logos\BrutalLogo.png" Link="Assets\BrutalLogo.png" />
+    <AvaloniaResource Include="..\Engine.Brutal\Ui\Logos\EmpireEngineCrown.png" Link="Assets\EmpireEngineCrown.png" />
+    <EmbeddedResource Include="..\EmpireEngineIcon-mac.png" LogicalName="EmpireHub.EmpireEngineIcon-mac.png" />
+    <Compile Include="..\Engine.Brutal\Gfx\MacDockIcon.cs" Link="MacDockIcon.cs" />
+  </ItemGroup>
+
+  <!-- Smaller published hub: drop the parts of .NET and Avalonia it never calls. Only the hub is trimmed; the editor
+       is published by its own project and keeps everything it needs. -->
+  <PropertyGroup Condition="'$(SelfContained)' == 'true'">
+    <PublishTrimmed>true</PublishTrimmed>
+    <TrimMode>partial</TrimMode>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <UseSystemResourceKeys>true</UseSystemResourceKeys>
+    <DebuggerSupport>false</DebuggerSupport>
+    <EventSourceSupport>false</EventSourceSupport>
+    <DebugType>none</DebugType>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.3.22" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.3.22" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.22" />
+  </ItemGroup>
+
+  <!-- The hub ships with the current editor. Building the hub builds the editor first, without referencing its code. -->
+  <ItemGroup>
+    <ProjectReference Include="..\Editor\Editor.csproj" ReferenceOutputAssembly="false" Private="false" />
+  </ItemGroup>
+
+  <!-- Copies the editor's build output to <hub>/Empire/<version>/, where the hub finds its bundled install. -->
+  <Target Name="BundleEditor" AfterTargets="Build">
+    <MSBuild Projects="..\Editor\Editor.csproj" Targets="GetTargetPath" Properties="Configuration=$(Configuration)">
+      <Output TaskParameter="TargetOutputs" PropertyName="EditorTargetPath" />
+    </MSBuild>
+    <PropertyGroup>
+      <EditorOutDir>$([System.IO.Path]::GetDirectoryName('$(EditorTargetPath)'))\</EditorOutDir>
+      <EditorBundleDir>$(TargetDir)Empire\$(EmpireVersion)\</EditorBundleDir>
+    </PropertyGroup>
+    <ItemGroup>
+      <EditorFiles Include="$(EditorOutDir)**\*" Exclude="$(EditorOutDir)imgui.ini" />
+    </ItemGroup>
+    <Copy SourceFiles="@(EditorFiles)" DestinationFiles="@(EditorFiles->'$(EditorBundleDir)%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+  <!-- dotnet publish of the hub also publishes the editor into <publish>/Empire/<version>/. -->
+  <Target Name="PublishEditor" AfterTargets="Publish">
+    <PropertyGroup>
+      <EditorPublishDir>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(PublishDir)', 'Empire', '$(EmpireVersion)'))</EditorPublishDir>
+      <EditorPublishProps>Configuration=$(Configuration);PublishDir=$(EditorPublishDir)</EditorPublishProps>
+      <EditorPublishProps Condition="'$(RuntimeIdentifier)' != ''">$(EditorPublishProps);RuntimeIdentifier=$(RuntimeIdentifier);SelfContained=$(SelfContained)</EditorPublishProps>
+    </PropertyGroup>
+    <MSBuild Projects="..\Editor\Editor.csproj" Targets="Restore" Properties="$(EditorPublishProps);_Restore=1" />
+    <MSBuild Projects="..\Editor\Editor.csproj" Targets="Publish" Properties="$(EditorPublishProps)" />
+  </Target>
+</Project>

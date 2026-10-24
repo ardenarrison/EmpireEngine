@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Game UI · Empire Engine Docs</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<article>
+
+<p class="eyebrow">Systems</p>
+<h1>Game UI</h1>
+<p class="lead">Buttons, text fields, checkboxes, dropdowns and bars drawn over the game, in the editor's play mode and in built games alike. Drag a UI object onto a script's <code>Button</code> field and react to clicks with <code>OnClick</code>.</p>
+
+<h2>Adding UI</h2>
+<p>Right-click in the Hierarchy and pick one under <strong>UI</strong>: Button, Text Field, Checkbox, Dropdown or Bar. Each is its own object in the Hierarchy. You can also add a <em>UI …</em> component to any object.</p>
+<p>Press <strong>UI</strong> in the toolbar to see the UI drawn over the scene, each element outlined with its kind and name; click one to select it. Press <strong>Done UI</strong> when finished.</p>
+<p>The game's UI is drawn with the same renderer the editor uses for its own panels (Canvas2D), with its font built into the engine. The editor's play mode and a built game share the same code for drawing it and for handling clicks and typing, so a menu behaves the same in both.</p>
+
+<h2>Placement</h2>
+<p><strong>X</strong> and <strong>Y</strong> are the element's top-left corner and <strong>W</strong> and <strong>H</strong> its size, all as fractions (0 to 1) of the game view. A button at X 0.4, Y 0.45, W 0.2, H 0.07 (the default) sits near the middle, a fifth of the view wide, and stays in place at any window size. Elements later in the Hierarchy are drawn on top and take clicks first.</p>
+
+<h2>Kinds</h2>
+<table>
+  <thead><tr><th>Kind</th><th>Settings</th><th>What the player does</th></tr></thead>
+  <tbody>
+    <tr><td>Button</td><td>Label, Center Text</td><td>Clicks it: pressed and let go over it</td></tr>
+    <tr><td>Text Field</td><td>Label (shown as a hint while empty), Default text</td><td>Clicks it, types, Backspace deletes, Enter submits, Escape or a click elsewhere lets go</td></tr>
+    <tr><td>Checkbox</td><td>Label, Checked</td><td>Clicks anywhere on it to tick or untick</td></tr>
+    <tr><td>Dropdown</td><td>Options (one comma-separated line, then <em>Apply Options</em>), Selected, Center Text</td><td>Clicks to open the list, clicks an option to pick it; a click elsewhere closes it</td></tr>
+    <tr><td>Bar</td><td>Label, Value (0 to 1)</td><td>Nothing: scripts set how full it is</td></tr>
+  </tbody>
+</table>
+<p>Every kind also has <strong>Visible</strong> (off hides it, and hidden elements take no clicks) and, except bars, <strong>Interactable</strong> (off draws it dimmed and ignores the mouse and keyboard).</p>
+
+<h2>Using UI from scripts</h2>
+<p>Declare a public field of type <code>Button</code>, <code>TextField</code>, <code>Checkbox</code>, <code>Dropdown</code> or <code>Bar</code>. In the Inspector it is a slot: drag a UI object from the Hierarchy onto it. A slot only takes an object with a UI element of its kind, so a <code>Button</code> field won't accept a text field. When play starts, the field holds that object's control.</p>
+<pre data-label="Scripts/Menu.cs"><code class="language-cs">public class Menu : Behaviour
+{
+    public Button play;            // drag the Play button here
+    public TextField playerName;
+    public Checkbox sound;
+    public Dropdown difficulty;
+    public Bar health;
+
+    public override void Start()
+    {
+        play.OnClick += StartGame;
+        playerName.OnSubmit += name =&gt; play.Label = $"Play as {name}";
+        sound.OnChanged += on =&gt; AudioListener.Volume = on ? 1f : 0f;
+        difficulty.OnChanged += index =&gt; Console.WriteLine("Difficulty: " + difficulty.SelectedText);
+    }
+
+    public override void Update() =&gt; health.Value = SaveGame.GetFloat("health", 1f);
+
+    private void StartGame() =&gt; SceneManager.LoadScene("Level1");
+}</code></pre>
+<p>Add handlers in <code>Start</code>. They run on the frame the player clicks or types, before every script's <code>Update</code>. A handler that throws prints <code>UI error in OnClick of 'Play' …</code> and the other handlers still run. Lists and arrays work too: <code>public List&lt;Button&gt; levelButtons;</code>.</p>
+
+<h3>Button</h3>
+<table>
+  <thead><tr><th>Member</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>event Action OnClick</code></td><td>Runs when the button is clicked</td></tr>
+    <tr><td><code>bool Clicked</code></td><td>True on the frame it was clicked, for scripts that check every frame instead</td></tr>
+    <tr><td><code>void Click()</code></td><td>Runs the OnClick handlers from code</td></tr>
+  </tbody>
+</table>
+
+<h3>TextField</h3>
+<table>
+  <thead><tr><th>Member</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>string Text</code></td><td>The text. Setting it doesn't run OnChanged.</td></tr>
+    <tr><td><code>event Action&lt;string&gt; OnChanged</code></td><td>Runs with the new text as the player types or deletes</td></tr>
+    <tr><td><code>event Action&lt;string&gt; OnSubmit</code></td><td>Runs with the text when the player presses Enter</td></tr>
+    <tr><td><code>bool Changed</code>, <code>bool Submitted</code></td><td>True on the frame it happened</td></tr>
+    <tr><td><code>bool IsFocused</code></td><td>True while the player is typing in it</td></tr>
+  </tbody>
+</table>
+<p>A field holds up to 256 characters.</p>
+
+<h3>Checkbox</h3>
+<table>
+  <thead><tr><th>Member</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>bool IsChecked</code></td><td>Whether it is ticked. Setting it doesn't run OnChanged.</td></tr>
+    <tr><td><code>event Action&lt;bool&gt; OnChanged</code></td><td>Runs with the new state when the player clicks it</td></tr>
+    <tr><td><code>bool Changed</code></td><td>True on the frame it changed</td></tr>
+  </tbody>
+</table>
+
+<h3>Dropdown</h3>
+<table>
+  <thead><tr><th>Member</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>int Selected</code></td><td>The chosen option's index. Setting it doesn't run OnChanged.</td></tr>
+    <tr><td><code>string SelectedText</code></td><td>The chosen option's text</td></tr>
+    <tr><td><code>List&lt;string&gt; Options</code></td><td>The choices; change the list to change them</td></tr>
+    <tr><td><code>event Action&lt;int&gt; OnChanged</code></td><td>Runs with the new index when the player picks a different option</td></tr>
+    <tr><td><code>bool Changed</code>, <code>bool IsOpen</code></td><td>Changed this frame; list open now</td></tr>
+  </tbody>
+</table>
+
+<h3>Bar</h3>
+<p><code>float Value</code>: how full it is, 0 to 1.</p>
+
+<h3>On every control</h3>
+<table>
+  <thead><tr><th>Member</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>string Label</code></td><td>Button or checkbox text, or a text field's hint</td></tr>
+    <tr><td><code>bool Visible</code>, <code>bool Interactable</code></td><td>Hide it, or show it dimmed and ignore input</td></tr>
+    <tr><td><code>float X, Y, Width, Height</code></td><td>Where it is, as fractions of the game view</td></tr>
+    <tr><td><code>SceneObject Object</code>, <code>UiElement Element</code></td><td>The object it's on and its UI component</td></tr>
+    <tr><td><code>RemoveAllListeners()</code></td><td>Removes every handler (not on Bar)</td></tr>
+  </tbody>
+</table>
+
+<h3>Finding a control from code</h3>
+<pre><code class="language-cs">var quit = UiControl.From&lt;Button&gt;(Scene.FindObjectWithName("Quit"));   // null if missing or not a button
+quit?.OnClick += () =&gt; Console.WriteLine("Bye");</code></pre>
+
+<h2>UI and the rest of the game</h2>
+<table>
+  <thead><tr><th>Member</th><th>Use</th></tr></thead>
+  <tbody>
+    <tr><td><code>GameUi.PointerOverUi</code></td><td>True while the mouse is over a visible element or an open list. Skip game clicks then: <code>if (Input.GetMouseButtonDown(0) &amp;&amp; !GameUi.PointerOverUi) Shoot();</code></td></tr>
+    <tr><td><code>GameUi.IsTyping</code></td><td>True while a text field has the keyboard, so movement keys can be ignored while the player types</td></tr>
+    <tr><td><code>Input.inputString</code></td><td>The characters typed this frame, as in Unity</td></tr>
+  </tbody>
+</table>
+<p>While the cursor is locked for mouse-look, the UI ignores the mouse. Unlock it (<code>Input.cursorLocked = false</code>) when you open a menu.</p>
+
+<div class="callout">
+  <strong>Escape in the editor</strong>
+  <p>In the editor's play mode, <kbd>Esc</kbd> stops the game, so it can't be used to leave a text field there. Click elsewhere or press Enter instead. In a built game, Escape lets go of the field.</p>
+</div>
+
+</article>
+</body>
+</html>

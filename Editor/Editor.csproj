@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>empire</AssemblyName>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <EmpireLicenses>true</EmpireLicenses>
+    <EmpireBundleVulkan>true</EmpireBundleVulkan>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ApplicationIcon>..\EmpireEngineIcon.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Engine.Brutal\Engine.Brutal.csproj" />
+    <ProjectReference Include="..\Engine.Core\Engine.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Ahwoo.BRUTAL.ImGui" Version="2026.10.2" />
+    <PackageReference Include="Ahwoo.BRUTAL.ImGui.Backends" Version="2026.10.2" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Canvas2D and Box live in Engine.Brutal, shared with the game's UI. -->
+    <Using Include="Engine.Brutal.Ui" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\ScriptCompiler\ScriptCompiler.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The packages a project can turn on in the Package Manager: script sources the editor compiles into the project. -->
+    <None Include="..\Packages\**\*" LinkBase="Packages" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>
+

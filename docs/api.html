@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scripting API · Empire Engine Docs</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<article>
+
+<p class="eyebrow">Reference</p>
+<h1>Scripting API reference</h1>
+<p class="lead">The classes scripts use most, with every public member. All are in <code>Engine.Core.Scripting</code> or <code>Engine.Core.Scene</code>, which scripts import automatically. Vectors and quaternions are <code>System.Numerics</code> types.</p>
+
+<h2>Behaviour</h2>
+<p>Base class for scripts. <a href="scripting.html">Guide →</a></p>
+<table>
+  <thead><tr><th>Member</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>SceneObject Object</code></td><td>The object this script is on</td></tr>
+    <tr><td><code>virtual void Start()</code></td><td>Once, before the first <code>Update</code></td></tr>
+    <tr><td><code>virtual void Update()</code></td><td>Every frame while playing</td></tr>
+    <tr><td><code>virtual void OnCollisionEnter(SceneObject other)</code></td><td>Colliders started touching</td></tr>
+    <tr><td><code>virtual void OnCollisionExit(SceneObject other)</code></td><td>Colliders stopped touching</td></tr>
+    <tr><td><code>virtual void OnGameLoaded()</code></td><td>After a save game is loaded, on scripts that had started</td></tr>
+    <tr><td><code>T? GetComponent&lt;T&gt;()</code></td><td>First component of type <code>T</code> on this object, or null</td></tr>
+    <tr><td><code>rigidbody</code> / <code>Rigidbody</code></td><td>This object's Rigidbody; stops the script with a message if missing</td></tr>
+    <tr><td><code>audioSource</code> / <code>AudioSource</code></td><td>This object's Audio Source; the same</td></tr>
+    <tr><td><code>animator</code> / <code>Animator</code></td><td>This object's Animator; the same</td></tr>
+    <tr><td><code>void Translate(x, y, z)</code></td><td>Move by world units</td></tr>
+    <tr><td><code>void Rotate(x, y, z)</code></td><td>Turn by degrees around X, Y, Z</td></tr>
+    <tr><td><code>void Scale(x, y, z)</code></td><td>Multiply the size</td></tr>
+    <tr><td><code>protected Vector3 Position</code></td><td><code>Object.Position</code></td></tr>
+    <tr><td><code>protected void MoveForward(float distance)</code></td><td>Along the object's −Z</td></tr>
+    <tr><td><code>protected void Turn(Vector3 axis, float degrees)</code></td><td>Around a world axis</td></tr>
+    <tr><td><code>protected void Spawn(IEnumerable&lt;Wait&gt;)</code></td><td>Start a coroutine</td></tr>
+    <tr><td><code>protected void TickRoutines()</code></td><td>Run coroutines; call once per frame from <code>Update</code></td></tr>
+    <tr><td><code>protected Wait WaitSeconds(float)</code></td><td>Coroutine wait for game seconds</td></tr>
+    <tr><td><code>protected Wait WaitUntil(Func&lt;bool&gt;)</code></td><td>Coroutine wait for a condition</td></tr>
+    <tr><td><code>protected Wait GlideTo(Vector3, float seconds)</code></td><td>Slide to a position, then continue</td></tr>
+    <tr><td><code>protected float Timer</code>, <code>ResetTimer()</code></td><td>Seconds since start or last reset</td></tr>
+    <tr><td><code>protected static bool MouseDown(string button)</code></td><td>Whether "Left", "Right" or "Middle" is held</td></tr>
+    <tr><td><code>static float RandomRange(min, max)</code></td><td>Random float</td></tr>
+    <tr><td><code>static float SafeDivide(a, b)</code></td><td><code>a / b</code>, or 0 when <code>b</code> is 0</td></tr>
+    <tr><td><code>static bool Approximately(a, b)</code></td><td>Within 0.00001</td></tr>
+  </tbody>
+</table>
+
+<h3>Reaching another script</h3>
+<p>Behaviours aren't components, so <code>GetComponent</code> can't find them. Go through the object's Script components:</p>
+<pre><code class="language-cs">var mover = other.Components.OfType&lt;ScriptComponent&gt;()
+    .Select(s =&gt; s.Instance).OfType&lt;Mover&gt;().FirstOrDefault();</code></pre>
+<p>Or write the shared part as a <a href="custom-components.html">custom component</a>, which <code>GetComponent</code> does find.</p>
+
+<h2>Component</h2>
+<p>Base class of every component, and of <a href="custom-components.html">custom components</a>.</p>
+<table>
+  <thead><tr><th>Member</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>SceneObject Object</code></td><td>The object it's on (set for custom components when play starts)</td></tr>
+    <tr><td><code>T? GetComponent&lt;T&gt;()</code></td><td>Another component on the same object</td></tr>
+    <tr><td><code>virtual void Start()</code>, <code>Update()</code></td><td>For custom components</td></tr>
+  </tbody>
+</table>
+
+<h2>SceneObject</h2>
+<table>
+  <thead><tr><th>Member</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>Guid Id</code></td><td>Permanent id</td></tr>
+    <tr><td><code>string Name</code></td><td></td></tr>
+    <tr><td><code>Vector3 Position</code>, <code>Quaternion Rotation</code>, <code>Vector3 Scale</code></td><td>Relative to the parent</td></tr>
+    <tr><td><code>SceneObject? Parent</code>, <code>List&lt;SceneObject&gt; Children</code></td><td>Read these, and change them only through <code>Scene.SetParent</code>, <code>Add</code> and <code>Remove</code></td></tr>
+    <tr><td><code>List&lt;Component&gt; Components</code></td><td>In the order they were added</td></tr>
+    <tr><td><code>Matrix4x4 LocalMatrix</code>, <code>WorldMatrix</code></td><td>Transforms; <code>WorldMatrix.Translation</code> is the world position</td></tr>
+    <tr><td><code>string SceneName</code></td><td>The loaded scene it came from</td></tr>
+    <tr><td><code>bool Persistent</code></td><td>True after <code>DontDestroyOnLoad</code></td></tr>
+  </tbody>
+</table>
+
+<h2>Scene</h2>
+<p>The playing scene is <code>SceneManager.World</code>.</p>
+<table>
+  <thead><tr><th>Member</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>static SceneObject? FindObjectWithName(string)</code></td><td>First object with that exact name in the playing scene</td></tr>
+    <tr><td><code>static List&lt;SceneObject&gt; FindObjectsWithName(string)</code></td><td>Every such object</td></tr>
+    <tr><td><code>IEnumerable&lt;SceneObject&gt; All</code>, <code>Roots</code>, <code>InHierarchyOrder</code></td><td>Every object; top-level ones; parents before children</td></tr>
+    <tr><td><code>void Add(SceneObject, SceneObject? parent = null)</code></td><td>Add an object (and its children)</td></tr>
+    <tr><td><code>void Remove(SceneObject)</code></td><td>Take it and its children out</td></tr>
+    <tr><td><code>int RemoveWhere(Func&lt;SceneObject, bool&gt;)</code></td><td>Remove every match</td></tr>
+    <tr><td><code>bool SetParent(SceneObject, SceneObject? parent)</code></td><td>Reparent, keeping its place in the world. False if it would make a loop.</td></tr>
+    <tr><td><code>SceneObject? Find(Guid)</code>, <code>FindByName</code>, <code>FindAllByName</code>, <code>Contains</code></td><td>Lookups</td></tr>
+    <tr><td><code>string Name</code>, <code>SceneSettings Settings</code>, <code>PhysicsWorld Physics</code></td><td></td></tr>
+  </tbody>
+</table>
+
+<h2>Input</h2>
+<p><a href="input.html">Guide →</a></p>
+<table>
+  <thead><tr><th>Member</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>GetKey</code>, <code>GetKeyDown</code>, <code>GetKeyUp</code></td><td>Held / went down this frame / came up this frame. Take <code>Keys</code> or a name.</td></tr>
+    <tr><td><code>GetMouseButton</code>, <code>GetMouseButtonDown</code>, <code>GetMouseButtonUp</code></td><td>Take <code>MouseButton</code>, 0–2, or "Left"/"Right"/"Middle"</td></tr>
+    <tr><td><code>float GetAxis(string)</code></td><td>"Horizontal", "Vertical", "Mouse X", "Mouse Y", "Mouse ScrollWheel"</td></tr>
+    <tr><td><code>Vector2 mousePosition</code>, <code>mouseDelta</code>, <code>screenSize</code></td><td>Game-view points, y down</td></tr>
+    <tr><td><code>float mouseScrollDelta</code></td><td>Up is positive</td></tr>
+    <tr><td><code>bool cursorLocked</code>, <code>cursorVisible</code></td><td>Mouse-look and hiding the cursor</td></tr>
+    <tr><td><code>Ray GetMouseRay()</code>, <code>ScreenPointToRay(Vector2)</code></td><td>Rays from the camera</td></tr>
+    <tr><td><code>string inputString</code></td><td>Characters typed this frame</td></tr>
+    <tr><td><code>Keys ParseKey(string)</code>, <code>MouseButton ParseButton(string)</code></td><td>Names to values</td></tr>
+  </tbody>
+</table>
+
+<h2>Time</h2>
+<table>
+  <thead><tr><th>Field</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>deltaTime</code></td><td>Scaled seconds since the last frame</td></tr>
+    <tr><td><code>unscaledDeltaTime</code></td><td>Real seconds since the last frame</td></tr>
+    <tr><td><code>timeScale</code></td><td>1 normal, 0 frozen (not physics)</td></tr>
+    <tr><td><code>time</code></td><td>Scaled seconds since play started</td></tr>
+    <tr><td><code>fps</code></td><td>Smoothed frames per second</td></tr>
+  </tbody>
+</table>
+
+<h2>Physics</h2>
+<p><a href="physics.html">Guide →</a></p>
+<table>
+  <thead><tr><th>Member</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>Vector3 Gravity</code></td><td>The playing scene's gravity</td></tr>
+    <tr><td><code>bool Raycast(origin, direction, out RaycastHit hit, maxDistance = ∞, ignore = null)</code></td><td>Nearest hit</td></tr>
+    <tr><td><code>bool Raycast(origin, direction, maxDistance = ∞, ignore = null)</code></td><td>Yes or no</td></tr>
+    <tr><td><code>bool Raycast(Ray ray, out RaycastHit hit, …)</code>, <code>Raycast(Ray ray, …)</code></td><td>The same along a <code>Ray</code></td></tr>
+    <tr><td><code>RaycastHit[] RaycastAll(origin, direction, maxDistance = ∞, ignore = null)</code></td><td>Every hit, nearest first</td></tr>
+  </tbody>
+</table>
+<p><code>RaycastHit</code>: <code>Object</code>, <code>Collider</code>, <code>Point</code>, <code>Normal</code>, <code>Distance</code>. <code>Ray</code>: <code>Origin</code>, <code>Direction</code>, <code>GetPoint(distance)</code>.</p>
+
+<h2>Rigidbody</h2>
+<table>
+  <thead><tr><th>Member</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>AddForce(Vector3 or x, y, z, ForceMode mode = Force)</code></td><td>Push; see <a href="physics.html#forces">ForceMode</a></td></tr>
+    <tr><td><code>AddImpulse(Vector3)</code></td><td>Instant kick</td></tr>
+    <tr><td><code>AddTorque(Vector3 or x, y, z, ForceMode mode = Force)</code></td><td>Spin around a world axis</td></tr>
+    <tr><td><code>Velocity</code>, <code>AngularVelocity</code></td><td>Units/s and radians/s, world space</td></tr>
+    <tr><td><code>Mass</code>, <code>UseGravity</code>, <code>IsKinematic</code>, <code>FreezeRotation</code>, <code>Drag</code>, <code>AngularDrag</code></td><td>Settings</td></tr>
+  </tbody>
+</table>
+
+<h2>SceneManager</h2>
+<p><a href="scene-management.html">Guide →</a></p>
+<table>
+  <thead><tr><th>Member</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>LoadScene(name, LoadSceneMode mode = Single)</code></td><td>At the start of the next frame</td></tr>
+    <tr><td><code>SceneLoadOperation LoadSceneAsync(name, mode = Single)</code></td><td>Read on another thread, then add</td></tr>
+    <tr><td><code>UnloadScene(name)</code></td><td>Remove a scene's objects</td></tr>
+    <tr><td><code>DontDestroyOnLoad(SceneObject)</code></td><td>Keep across Single loads</td></tr>
+    <tr><td><code>Scene? World</code></td><td>The playing scene</td></tr>
+    <tr><td><code>ActiveScene</code>, <code>LoadedScenes</code>, <code>SceneCount</code>, <code>IsLoaded(name)</code>, <code>SceneOf(obj)</code></td><td>What's loaded</td></tr>
+  </tbody>
+</table>
+
+<h2>SaveGame</h2>
+<p><a href="scene-management.html#saving-the-game">Guide →</a></p>
+<table>
+  <thead><tr><th>Member</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>bool Save(slot)</code>, <code>bool Load(slot)</code></td><td>Write the game / restore it next frame</td></tr>
+    <tr><td><code>Exists(slot)</code>, <code>Timestamp(slot)</code>, <code>Delete(slot)</code>, <code>Slots()</code></td><td>Manage slots</td></tr>
+    <tr><td><code>SetInt</code>, <code>SetFloat</code>, <code>SetBool</code>, <code>SetString</code></td><td>Your own values</td></tr>
+    <tr><td><code>GetInt</code>, <code>GetFloat</code>, <code>GetBool</code>, <code>GetString</code> (with defaults)</td><td></td></tr>
+    <tr><td><code>HasKey</code>, <code>DeleteKey</code>, <code>ClearData</code></td><td></td></tr>
+    <tr><td><code>string Directory</code></td><td>Where slots are written</td></tr>
+  </tbody>
+</table>
+
+<h2>AudioSource</h2>
+<p><a href="audio.html">Guide →</a></p>
+<table>
+  <thead><tr><th>Member</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>Play()</code>, <code>PlayDelayed(seconds)</code>, <code>Stop()</code>, <code>Pause()</code>, <code>UnPause()</code></td><td>Playback</td></tr>
+    <tr><td><code>PlayOneShot(clip, volumeScale = 1)</code></td><td>Overlapping effect</td></tr>
+    <tr><td><code>static PlayClipAtPoint(clip, position, volume = 1)</code></td><td>Sound in the world, no object</td></tr>
+    <tr><td><code>bool IsPlaying</code>, <code>float Time</code>, <code>float ClipLength</code></td><td>State</td></tr>
+  </tbody>
+</table>
+
+<h2>Animator</h2>
+<p><code>Play(id, fadeSeconds = 0)</code>, <code>Stop()</code>, <code>Stop(id)</code>, <code>Pause()</code>, <code>Resume()</code>, <code>IsPlaying()</code>, <code>IsPlaying(id)</code>, <code>IsPaused</code>, <code>CurrentId</code>, <code>Time</code>, <code>Duration</code>, <code>Has(id)</code>, <code>Speed</code>. <a href="animation.html#from-scripts">Guide →</a></p>
+
+<h2>ParticleSystem</h2>
+<p><code>Play()</code>, <code>Stop(clear = false)</code>, <code>Pause()</code>, <code>Clear()</code>, <code>Restart()</code>, <code>Emit(count)</code>, <code>IsPlaying</code>, <code>IsPaused</code>, <code>IsEmitting</code>, <code>ParticleCount</code>, <code>Time</code>, and the module properties. <a href="particles.html#from-scripts">Guide →</a></p>
+
+<h2>Terrain</h2>
+<p><code>GetHeight(owner, worldPos)</code>, <code>HeightAt</code>, <code>NormalAt</code>, <code>LayerAt</code>, <code>Sculpt</code>, <code>Generate</code>, <code>Flatten</code>, <code>SmoothAll</code>, <code>GetHeight01</code>, <code>SetHeight01</code>, <code>PointAt</code>, <code>Raycast</code>, <code>Resize</code>, and the layer methods. <a href="terrain.html#from-scripts">Guide →</a></p>
+
+<h2>UI controls</h2>
+<p><code>Button</code> (<code>OnClick</code>, <code>Clicked</code>, <code>Click()</code>), <code>TextField</code> (<code>Text</code>, <code>OnChanged</code>, <code>OnSubmit</code>, <code>IsFocused</code>), <code>Checkbox</code> (<code>IsChecked</code>, <code>OnChanged</code>), <code>Dropdown</code> (<code>Selected</code>, <code>SelectedText</code>, <code>Options</code>, <code>OnChanged</code>, <code>IsOpen</code>) and <code>Bar</code> (<code>Value</code>), all with <code>Label</code>, <code>Visible</code>, <code>Interactable</code>, <code>X</code>, <code>Y</code>, <code>Width</code>, <code>Height</code>. <code>UiControl.From&lt;T&gt;(obj)</code> finds one on an object. <code>GameUi.PointerOverUi</code> and <code>GameUi.IsTyping</code> tell the rest of the game what the UI is doing. <a href="game-ui.html#using-ui-from-scripts">Guide →</a></p>
+
+<h2>Attributes</h2>
+<table>
+  <thead><tr><th>Attribute</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>[Label("text")]</code></td><td>On an enum value: what the Inspector's dropdown shows. <code>[Description]</code> works too.</td></tr>
+  </tbody>
+</table>
+
+<h2>Enums</h2>
+<table>
+  <thead><tr><th>Enum</th><th>Values</th></tr></thead>
+  <tbody>
+    <tr><td><code>Keys</code></td><td>A–Z, D0–D9, Space, Enter, Escape, Tab, Backspace, LeftShift, RightShift, LeftControl, RightControl, LeftAlt, RightAlt, Left, Right, Up, Down</td></tr>
+    <tr><td><code>MouseButton</code></td><td>Left, Right, Middle</td></tr>
+    <tr><td><code>ForceMode</code></td><td>Force, Acceleration, Impulse, VelocityChange</td></tr>
+    <tr><td><code>LoadSceneMode</code></td><td>Single, Additive</td></tr>
+    <tr><td><code>SkyMode</code></td><td>Color, Gradient, Panorama</td></tr>
+    <tr><td><code>AntiAliasingMode</code></td><td>None, Msaa</td></tr>
+    <tr><td><code>AudioRolloffMode</code></td><td>Logarithmic, Linear</td></tr>
+    <tr><td><code>TerrainBrush</code></td><td>Raise, Lower, Smooth, Flatten, Paint, Erase</td></tr>
+    <tr><td><code>UiKind</code></td><td>Button, TextField, Checkbox, Dropdown, Bar</td></tr>
+    <tr><td><code>ParticleShapeType</code></td><td>Cone, Sphere, Hemisphere, Box, Circle, Point</td></tr>
+    <tr><td><code>ParticleSimulationSpace</code>, <code>ParticleBlend</code>, <code>ParticleSprite</code></td><td>Local/World; Alpha/Additive; SoftCircle/Circle/Square</td></tr>
+  </tbody>
+</table>
+
+</article>
+</body>
+</html>

@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Physics · Empire Engine Docs</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<article>
+
+<p class="eyebrow">Systems</p>
+<h1>Physics</h1>
+<p class="lead">Give an object a collider and things bump into it. Add a Rigidbody too and it falls, slides, bounces and can be pushed.</p>
+
+<h2>Bodies and colliders</h2>
+<ul>
+  <li><strong>An object with a collider and no Rigidbody is static.</strong> It never moves under physics: ground, walls, level geometry.</li>
+  <li><strong>An object with a Rigidbody is a body.</strong> Its colliders, and the colliders of children that have no Rigidbody of their own, are its shapes. Put several colliders on children to build a compound shape.</li>
+  <li><strong>A kinematic Rigidbody</strong> (<code>IsKinematic</code>) is moved only by your scripts. It pushes other bodies but is never pushed.</li>
+</ul>
+<p>Physics rebuilds its bodies from the scene on every step, so scripts may move objects or add and remove components at any time.</p>
+
+<h2>Collider shapes</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Collider</th><th>Shape</th></tr></thead>
+  <tbody>
+    <tr><td>Box Collider</td><td>A box of <code>Size</code> around <code>Center</code>, both in the object's own space. Scales and turns with the object.</td></tr>
+    <tr><td>Sphere Collider</td><td>A ball of <code>Radius</code> around <code>Center</code>. Scales with the object's largest scale axis.</td></tr>
+    <tr><td>Mesh Collider</td><td>A model's shape. Leave <code>Model</code> empty to use the object's Mesh, or pick a simpler model (<em>Choose collision model</em>) for speed.</td></tr>
+    <tr><td><a href="terrain.html">Terrain</a></td><td>The terrain's ground. Turn <code>Collide</code> off to make it scenery only.</td></tr>
+  </tbody>
+</table></div>
+<p>A new Box or Sphere Collider is fitted to the object's model when it has one. In the editor, colliders are drawn as green outlines, brighter on the selected object.</p>
+
+<h3>Mesh colliders</h3>
+<p>On a <strong>static</strong> object or a <strong>kinematic</strong> body, a mesh collider uses the model's exact triangles, which is right for ground, ramps and buildings. On a <strong>moving</strong> body it uses the mesh's <strong>convex hull</strong>, the shape a shrink-wrap would make, so hollows and dents are filled in. Big meshes are simplified first so collision stays fast. The editor draws the hull a moving mesh collider uses.</p>
+
+<h3>Surface settings</h3>
+<p>Every collider has <strong>Friction</strong> (0 is ice, 1 is rubber, up to 2; default 0.5) and <strong>Bounciness</strong> (0 stops dead, 1 bounces back at full speed; default 0). When two colliders touch, their frictions are multiplied and square-rooted, and the bouncier of the two wins.</p>
+
+<h2>Rigidbody settings</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Setting</th><th>Default</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td>Mass</td><td>1</td><td>Kilograms. Heavier bodies are harder to push.</td></tr>
+    <tr><td>Use Gravity</td><td>on</td><td>Whether the scene's gravity pulls on it</td></tr>
+    <tr><td>Is Kinematic</td><td>off</td><td>Moved only by scripts</td></tr>
+    <tr><td>Freeze Rotation</td><td>off</td><td>Collisions never turn it. Good for characters.</td></tr>
+    <tr><td>Drag</td><td>0.05</td><td>Slows movement, per second</td></tr>
+    <tr><td>Angular Drag</td><td>0.05</td><td>Slows spinning, per second</td></tr>
+  </tbody>
+</table></div>
+<p>From scripts you can also read and set <code>Velocity</code> (units per second, world space) and <code>AngularVelocity</code> (radians per second). They aren't saved with the scene, but they are kept in save games.</p>
+
+<h2>Forces</h2>
+<pre><code class="language-cs">rigidbody.AddForce(0, 0, -20);                                  // a steady push: call every frame
+rigidbody.AddForce(new Vector3(0, 5, 0), ForceMode.Impulse);    // a jump
+rigidbody.AddTorque(0, 2, 0);                                   // spin around Y
+rigidbody.Velocity = Vector3.Zero;                              // stop dead</code></pre>
+<div class="table-wrap"><table>
+  <thead><tr><th><code>ForceMode</code></th><th>Meaning</th><th>Mass matters?</th></tr></thead>
+  <tbody>
+    <tr><td><code>Force</code> (default)</td><td>A push over time, in newtons. Call it every frame for a steady push.</td><td>Yes</td></tr>
+    <tr><td><code>Acceleration</code></td><td>A push over time</td><td>No</td></tr>
+    <tr><td><code>Impulse</code></td><td>An instant kick, like a jump or a hit. Same as <code>AddImpulse(v)</code>.</td><td>Yes</td></tr>
+    <tr><td><code>VelocityChange</code></td><td>An instant change of speed</td><td>No</td></tr>
+  </tbody>
+</table></div>
+<div class="callout">
+  <strong>No Time.deltaTime with Force</strong>
+  <p><code>Force</code> and <code>Acceleration</code> are multiplied by the frame's length when you add them, so a push called every frame from <code>Update</code> is equally strong at any frame rate. Don't multiply by <code>Time.deltaTime</code> yourself. Forces are applied at the start of the next physics step.</p>
+</div>
+
+<h2>Stepping</h2>
+<p>Physics runs at a fixed <strong>60 steps per second</strong>, however fast frames come, and at most 5 steps per frame so one slow frame can't snowball. Contacts are solved with sequential impulses and remember last step's results, so stacks settle instead of jittering. Physics steps on real time and isn't slowed by <code>Time.timeScale</code>.</p>
+
+<h2>Gravity</h2>
+<p>Each scene has its own gravity, (0, −9.81, 0) by default, set in the <a href="scenes.html#scene-settings">scene settings</a>. Scripts can change it:</p>
+<pre><code class="language-cs">Physics.Gravity = new Vector3(0, -1.6f, 0);   // the moon</code></pre>
+
+<h2>Collision events</h2>
+<pre><code class="language-cs">public override void OnCollisionEnter(SceneObject other) { ... }   // started touching
+public override void OnCollisionExit(SceneObject other)  { ... }   // stopped touching</code></pre>
+<p>Both objects' scripts are told. Events fire after each physics step, so it's safe to remove objects or load scenes from them.</p>
+
+<h2>Raycasts</h2>
+<pre><code class="language-cs">var forward = Vector3.Transform(-Vector3.UnitZ, Object.Rotation);
+
+if (Physics.Raycast(Object.Position, forward, out var hit, 20f, ignore: Object))
+    Console.WriteLine($"{hit.Object.Name} is {hit.Distance:0.0} m ahead");
+
+bool blocked = Physics.Raycast(Object.Position, forward, 2f, ignore: Object);
+
+foreach (var h in Physics.RaycastAll(Object.Position, forward, 50f))
+    Console.WriteLine(h.Object.Name);   // every hit, nearest first
+
+if (Physics.Raycast(Input.GetMouseRay(), out var under))   // what the mouse is over
+    Console.WriteLine(under.Point);</code></pre>
+<div class="table-wrap"><table>
+  <thead><tr><th><code>RaycastHit</code></th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td><code>Object</code></td><td>The object hit</td></tr>
+    <tr><td><code>Collider</code></td><td>The collider hit</td></tr>
+    <tr><td><code>Point</code></td><td>Where the ray touched, in the world</td></tr>
+    <tr><td><code>Normal</code></td><td>The surface's direction there</td></tr>
+    <tr><td><code>Distance</code></td><td>How far along the ray</td></tr>
+  </tbody>
+</table></div>
+<ul>
+  <li>The direction doesn't need to be normalized. <code>maxDistance</code> defaults to infinity.</li>
+  <li><code>ignore</code> skips an object and everything under it, which keeps a shooter from hitting itself.</li>
+  <li>As in Unity, a ray that starts inside a box or sphere doesn't hit it.</li>
+  <li>Mesh colliders are tested against their real triangles from both sides, even on moving bodies that collide as a hull.</li>
+</ul>
+
+</article>
+</body>
+</html>

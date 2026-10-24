@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Engine Architecture · Empire Engine Docs</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<article>
+
+<p class="eyebrow">Reference</p>
+<h1>Engine architecture</h1>
+<p class="lead">How the projects in the repository depend on each other, what runs in one frame, and how the editor and a built game share the same code. For people working on Empire Engine itself.</p>
+
+<h2>Projects and dependencies</h2>
+
+<div class="diagram">
+<svg viewBox="0 0 720 300" role="img" aria-label="Engine.Core at the bottom. Engine.Brutal and ScriptCompiler depend on it. Editor depends on Engine.Brutal, ScriptCompiler and Engine.Core. Player and Probe depend on Engine.Brutal. Hub builds the Editor without referencing its code. Tests depend on Engine.Core and ScriptCompiler.">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="arrowhead" d="M0,0 L10,5 L0,10 z"/>
+    </marker>
+  </defs>
+
+  <rect class="box" x="20"  y="20" width="120" height="44" rx="6"/><text x="80"  y="47" font-size="14" text-anchor="middle">Hub</text>
+  <rect class="box hot" x="200" y="20" width="140" height="44" rx="6"/><text x="270" y="47" font-size="14" text-anchor="middle" font-weight="600">Editor</text>
+  <rect class="box" x="400" y="20" width="120" height="44" rx="6"/><text x="460" y="47" font-size="14" text-anchor="middle">Player</text>
+  <rect class="box" x="580" y="20" width="120" height="44" rx="6"/><text x="640" y="47" font-size="14" text-anchor="middle">Probe</text>
+
+  <rect class="box" x="120" y="128" width="160" height="44" rx="6"/><text x="200" y="155" font-size="14" text-anchor="middle">ScriptCompiler</text>
+  <rect class="box hot" x="380" y="128" width="160" height="44" rx="6"/><text x="460" y="155" font-size="14" text-anchor="middle" font-weight="600">Engine.Brutal</text>
+  <rect class="box" x="580" y="128" width="120" height="44" rx="6"/><text x="640" y="155" font-size="14" text-anchor="middle">Tests</text>
+
+  <rect class="box hot" x="260" y="236" width="200" height="44" rx="6"/><text x="360" y="263" font-size="14" text-anchor="middle" font-weight="600">Engine.Core</text>
+
+  <path class="line" d="M140,42 L196,42" stroke-dasharray="4 3" marker-end="url(#arr)"/>
+  <text x="168" y="34" font-size="10" text-anchor="middle" class="dim">builds</text>
+  <path class="line" d="M240,64 L210,124" marker-end="url(#arr)"/>
+  <path class="line" d="M300,64 L440,124" marker-end="url(#arr)"/>
+  <path class="line" d="M280,64 L340,232" marker-end="url(#arr)"/>
+  <path class="line" d="M460,64 L460,124" marker-end="url(#arr)"/>
+  <path class="line" d="M640,64 L520,124" marker-end="url(#arr)"/>
+  <path class="line" d="M200,172 L300,232" marker-end="url(#arr)"/>
+  <path class="line" d="M460,172 L400,232" marker-end="url(#arr)"/>
+  <path class="line" d="M620,172 L464,246" marker-end="url(#arr)"/>
+  <path class="line" d="M660,172 L660,204 L200,204 L200,176" marker-end="url(#arr)"/>
+</svg>
+</div>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>Project</th><th>Role</th><th>Built on</th></tr></thead>
+  <tbody>
+    <tr><td><code>Engine.Core</code></td><td>Everything that isn't drawing or windows: scenes, components, serialization, scripting runtime, physics, audio mixing, animation, particles, terrain, asset loaders. Defines <code>IRenderer</code>, so it never depends on Vulkan.</td><td>.NET only</td></tr>
+    <tr><td><code>Engine.Brutal</code></td><td><code>BrutalRenderer</code> (Vulkan), shaders, window and input (GLFW), audio output (miniaudio), the <code>Gpu</code> API for scripts, <code>Canvas2D</code> (the 2D renderer the editor's panels and the game's UI share, with its font embedded), <code>UiRenderer</code>, and <code>BrutalPlayer</code>, which runs a scene in a window.</td><td>BRUTAL Vulkan, GLFW, glTF and ShaderC packages; Hexa.NET.MiniAudio; StbTrueTypeSharp</td></tr>
+    <tr><td><code>ScriptCompiler</code></td><td>Compiles <code>Scripts/</code> and packages with Roslyn; checks code for the code view; builds and tracks package DLLs.</td><td>Roslyn</td></tr>
+    <tr><td><code>Editor</code></td><td>The editor (<code>empire</code>): panels, gizmos, code view, visual scripting, Package Manager, Build Project.</td><td>BRUTAL ImGui (for keyboard and clipboard input only; everything is drawn with Canvas2D)</td></tr>
+    <tr><td><code>Player</code></td><td>The built game's program. Reads <code>GameData/game.json</code>, loads <code>Scripts.dll</code> and packages, runs <code>BrutalPlayer</code>.</td><td></td></tr>
+    <tr><td><code>Hub</code></td><td>Empire Engine Hub. Builds and bundles the editor, but doesn't reference its code.</td><td>Avalonia</td></tr>
+    <tr><td><code>Tests</code></td><td>A console test program: <code>dotnet run --project Tests</code>.</td><td></td></tr>
+    <tr><td><code>Probe</code></td><td>Opens a scene in a game window without the editor: <code>dotnet run --project Probe -- &lt;scene&gt; [contentRoot]</code>.</td><td></td></tr>
+  </tbody>
+</table></div>
+<p>All projects target <code>net10.0</code>. The version lives in <code>Directory.Build.props</code>; <code>Directory.Build.targets</code> handles platform details such as bundling Vulkan on macOS.</p>
+
+<h2>One frame</h2>
+<p><code>SceneUpdate.Update(scene, dt)</code> in <code>Engine.Core</code> is the whole simulation for one frame. The editor's play mode and the built game both call it, which is why they behave the same:</p>
+<pre data-label="Engine.Core/Scene/SceneUpdate.cs"><code class="language-cs">Time.Advance(dt);
+Input.Advance();
+SceneManager.Process(scene);   // scenes and saved games asked for last frame arrive before scripts run
+GameUi.Update(scene);          // clicks and typing on the game's UI, and their OnClick-style handlers
+ScriptRuntime.Run(scene);      // Start (once), then Update, for every script
+// Spin components turn
+scene.Physics.Update(scene, dt);
+Animators.Update(scene, Time.deltaTime);
+Particles.Update(scene, Time.deltaTime);
+Audio.AudioEngine.Update(scene, dt);</code></pre>
+<p>The host then draws: <code>SceneLighting.Collect</code> gathers the sun, the Environment and up to 16 other lights; the host calls <code>IRenderer.SetShadows</code>, <code>SetLighting</code>, <code>BeginFrame</code>, <code>DrawModel</code> for every Mesh (with its animation pose), <code>DrawParticles</code>, and <code>EndFrame</code>. <code>BrutalRenderer</code> queues the draws so it can render the sun's shadow map from them first, then draws the sky, the solid models and then the see-through ones. Particles are drawn after the models with blending, and <code>IVulkanRender</code> scripts record their commands inside the same scene pass.</p>
+
+<h2>Scripts from source to running</h2>
+<ol>
+  <li><strong>Visual scripts</strong>: <code>VisualScriptSync</code> turns each <code>.visualcode</code> into a <code>.cs</code> next to it.</li>
+  <li><strong>Packages</strong>: <code>Packages.Build</code> compiles each turned-on package whose stamp is out of date into <code>Packages/EmpirePackage.&lt;Id&gt;.dll</code>.</li>
+  <li><strong>Scripts</strong>: <code>ScriptBuilder.Compile</code> compiles every <code>.cs</code> in <code>Scripts/</code>, plus a file of global usings, into one DLL (optimized, unsafe allowed), referencing the engine and the package DLLs.</li>
+  <li><strong>Loading</strong>: <code>ScriptRuntime.Load</code> looks up each Script component's class by name (the project's DLL first, then the packages), creates an instance, and copies the Inspector values in with <code>ScriptFields.Apply</code>. A Behaviour stays on its Script component; a custom component is inserted on the object right after it.</li>
+  <li><strong>Running</strong>: <code>ScriptRuntime.Run</code> calls <code>Start</code> once and <code>Update</code> every frame, catching exceptions per script.</li>
+</ol>
+<p>In the editor the DLL goes in a temp folder with a fresh name each play, and package DLLs are read into memory first so they can be rebuilt while the editor runs. Built games compile once, at build time.</p>
+
+<h2>Play mode in the editor</h2>
+<p>Pressing Play saves a snapshot of the scene to a temp file, compiles and loads scripts, resets time, input, animators and particles, and switches to drawing through the scene camera. Stop reloads the snapshot, so nothing that happened while playing sticks. Undo works the same way: each settled edit stores the scene's JSON.</p>
+
+<h2>Assets</h2>
+<p><code>AssetCache</code> loads each model, image and sound once by its path in the project. <code>ModelLoader</code> picks <code>GlbLoader</code>, <code>FbxLoader</code> or <code>ObjLoader</code> by extension; all produce the same <code>GlbModel</code> (meshes, materials, nodes, skins, clips). The editor checks file times once a second and re-uploads models that changed. When a scene loads in the background, <code>SceneManager.AssetWarmer</code> loads its assets on that thread.</p>
+
+<h2>Physics</h2>
+<p><code>PhysicsWorld</code> steps at 60 Hz, up to 5 steps a frame. Each step rebuilds bodies from the scene, integrates forces, finds contacts (sphere, box with a 15-axis separating axis test, convex hulls, and triangle meshes through a tree), solves them with warm-started sequential impulses, moves the objects, then raises collision events by comparing this step's touching pairs with the last.</p>
+
+</article>
+</body>
+</html>

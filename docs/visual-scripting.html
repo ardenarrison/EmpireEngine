@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Visual Scripting · Empire Engine Docs</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<article>
+
+<p class="eyebrow">Scripting</p>
+<h1>Visual scripting</h1>
+<p class="lead">Snap blocks together to make a script, without typing code. Each visual script is turned into an ordinary C# script, so it runs just as fast and you can read the code it makes.</p>
+
+<h2>The VC view</h2>
+<p>Press <strong>VC</strong> in the toolbar. The 3D view is replaced by three areas:</p>
+<ul>
+  <li><strong>The palette</strong> on the left, with the blocks grouped by category: Events, Motion, Control, Sensing, Variables and Operators.</li>
+  <li><strong>The canvas</strong> in the middle, where you build scripts.</li>
+  <li><strong>The block inspector</strong> on the right. Click a block to edit its values, see what's plugged into it, or press <em>Duplicate block</em> or <em>Delete block</em>.</li>
+</ul>
+<p>The header has <strong>New</strong>, <strong>Save</strong> and <strong>Check</strong>, a name box for the script, a button for each visual script in the project to open it, and <strong>3D view</strong> to go back.</p>
+
+<h3>Building a script</h3>
+<ul>
+  <li>Drag a block from the palette onto the canvas.</li>
+  <li>Drop a block just under another to stack them; they run top to bottom.</li>
+  <li>Drop blocks into the mouth of a C-shaped block (<em>forever</em>, <em>repeat</em>, <em>if</em>) to run them inside it.</li>
+  <li>Drop a round <em>reporter</em> block (a value, like <em>x position</em> or <em>a + b</em>) into a value box of another block.</li>
+  <li>Type numbers and pick keys right in the blocks, or in the block inspector.</li>
+  <li>Drag a block back onto the palette to delete it, with everything below it.</li>
+  <li><kbd>Cmd/Ctrl</kbd>+<kbd>D</kbd> copies the selected block and the blocks below it.</li>
+</ul>
+<p>Every script starts with an <strong>event</strong> (hat) block. A visual script can hold several, and they all run side by side.</p>
+
+<h3>Saving and attaching</h3>
+<p><strong>Save</strong> writes <code>Scripts/&lt;Name&gt;.visualcode</code> and, next to it, the C# script it turns into, <code>Scripts/&lt;Name&gt;.cs</code>. Attach it to an object like any script: <em>Add Component &gt; Script</em>, then pick its name. <strong>Check</strong> reports problems without saving. Visual scripts are also converted again each time you press Play.</p>
+<div class="callout warn">
+  <strong>Edit the blocks, not the .cs</strong>
+  <p>The generated <code>.cs</code> is rewritten on every save and every Play, so changes made to it are lost. The code view shows it read-only. To turn a visual script into hand-written C#, copy the code into a new script with a different name.</p>
+</div>
+
+<h2>Blocks</h2>
+
+<h3>Events</h3>
+<div class="table-wrap"><table>
+  <thead><tr><th>Block</th><th>Runs the blocks under it</th></tr></thead>
+  <tbody>
+    <tr><td><em>when scene starts</em></td><td>Once, when play starts</td></tr>
+    <tr><td><em>every frame</em></td><td>Again and again, every frame</td></tr>
+    <tr><td><em>when [key] pressed</em></td><td>Each time the key goes down</td></tr>
+    <tr><td><em>while [key] held</em></td><td>Every frame the key is held</td></tr>
+    <tr><td><em>when [button] mouse pressed</em></td><td>Each time the mouse button goes down</td></tr>
+  </tbody>
+</table></div>
+
+<h3>Motion</h3>
+<div class="table-wrap"><table>
+  <thead><tr><th>Block</th><th>Does</th></tr></thead>
+  <tbody>
+    <tr><td><em>move (distance) units forward</em></td><td>Moves along the way the object faces</td></tr>
+    <tr><td><em>go to x: () y: () z: ()</em></td><td>Jumps to a position</td></tr>
+    <tr><td><em>glide to x: () y: () z: () in () s</em></td><td>Slides to a position over some seconds; the script waits until it arrives</td></tr>
+    <tr><td><em>change [axis] by ()</em></td><td>Adds to X, Y or Z of the position</td></tr>
+    <tr><td><em>set [axis] to ()</em></td><td>Sets X, Y or Z of the position</td></tr>
+    <tr><td><em>turn [axis] by () degrees</em></td><td>Turns around the X, Y or Z axis</td></tr>
+    <tr><td><em>x position</em>, <em>y position</em>, <em>z position</em></td><td>Reporters: the current position</td></tr>
+  </tbody>
+</table></div>
+
+<h3>Control</h3>
+<div class="table-wrap"><table>
+  <thead><tr><th>Block</th><th>Does</th></tr></thead>
+  <tbody>
+    <tr><td><em>wait () seconds</em></td><td>Pauses this script</td></tr>
+    <tr><td><em>wait one frame</em></td><td>Pauses until the next frame</td></tr>
+    <tr><td><em>wait until &lt;condition&gt;</em></td><td>Pauses until the condition is true</td></tr>
+    <tr><td><em>repeat () times</em></td><td>Runs the blocks inside a number of times</td></tr>
+    <tr><td><em>forever</em></td><td>Runs the blocks inside until the game stops</td></tr>
+    <tr><td><em>repeat until &lt;condition&gt;</em></td><td>Runs the blocks inside until the condition is true</td></tr>
+    <tr><td><em>if &lt;condition&gt; then</em></td><td>Runs the blocks inside only when the condition is true</td></tr>
+    <tr><td><em>if &lt;condition&gt; then … else</em></td><td>One set of blocks or the other</td></tr>
+    <tr><td><em>stop this script</em></td><td>Ends this script (other scripts keep going)</td></tr>
+  </tbody>
+</table></div>
+<p><em>forever</em> and <em>repeat until</em> wait one frame between rounds, so they never freeze the game. <em>repeat () times</em> does not: all its rounds happen in the same frame unless you put a <em>wait</em> inside. To animate something over several frames with <em>repeat</em>, add <em>wait one frame</em> as its last block.</p>
+
+<h3>Sensing</h3>
+<div class="table-wrap"><table>
+  <thead><tr><th>Block</th><th>Gives</th></tr></thead>
+  <tbody>
+    <tr><td><em>key [key] is pressed?</em></td><td>True on the frame the key goes down</td></tr>
+    <tr><td><em>key [key] held?</em></td><td>True while the key is held</td></tr>
+    <tr><td><em>[button] mouse pressed?</em></td><td>True while the mouse button is held</td></tr>
+    <tr><td><em>distance to x: () y: () z: ()</em></td><td>How far the object is from a point</td></tr>
+    <tr><td><em>timer</em>, <em>reset timer</em></td><td>Seconds since the script started or the timer was last reset</td></tr>
+    <tr><td><em>delta time</em></td><td>Seconds since the last frame (multiply speeds by it)</td></tr>
+    <tr><td><em>fps</em></td><td>Frames per second</td></tr>
+  </tbody>
+</table></div>
+
+<h3>Variables</h3>
+<p>Type a name under Variables in the palette and press <strong>Add</strong>. Then use <em>set [var] to ()</em>, <em>change [var] by ()</em>, and the variable's own reporter block. Variables belong to the script on one object, start at their set value each time play starts, and are not shown in the Inspector.</p>
+
+<h3>Operators</h3>
+<p><em>+</em>, <em>−</em>, <em>×</em>, <em>/</em>, <em>mod</em>, <em>&gt;</em>, <em>&lt;</em>, <em>=</em>, <em>and</em>, <em>or</em>, <em>not</em>, and <em>pick random () to ()</em>. Division by zero gives 0 rather than an error, and <em>=</em> treats numbers within 0.00001 of each other as equal, so small rounding differences don't matter.</p>
+
+<h2>What the blocks turn into</h2>
+<p>Each event block becomes a <a href="scripting.html#coroutines">coroutine</a> started in <code>Start</code>, and <code>Update</code> keeps them all running. For example, this visual script from the sample project:</p>
+<pre data-label="Spinner.visualcode, as blocks"><code>when scene starts
+    go to x: 0 y: 0 z: 0
+    forever
+        turn Y by 2 degrees
+
+when W pressed
+    move (speed) units forward</code></pre>
+<p>becomes:</p>
+<pre data-label="Scripts/Spinner.cs (generated)"><code class="language-cs">public class Spinner : Behaviour
+{
+    private float _v_speed = 1f;
+
+    public override void Start()
+    {
+        Spawn(Script0());
+        Spawn(Script1());
+    }
+
+    public override void Update()
+    {
+        TickRoutines();
+    }
+
+    private IEnumerable&lt;Wait&gt; Script0()
+    {
+        Position = new Vector3(0f, 0f, 0f);
+        while (true)
+        {
+            Turn(new Vector3(0f, 1f, 0f), 2f);
+            yield return null;
+        }
+    }
+
+    private IEnumerable&lt;Wait&gt; Script1()
+    {
+        while (true)
+        {
+            if (Input.GetKeyDown("W"))
+            {
+                MoveForward(_v_speed);
+            }
+            yield return null;
+        }
+    }
+}</code></pre>
+<p>When you outgrow blocks, this is a good starting point for a hand-written script.</p>
+
+</article>
+</body>
+</html>

@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <EmpireLicenses>true</EmpireLicenses>
+    <EmpireBundleVulkan>true</EmpireBundleVulkan>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- The .exe icon of games built from the editor (Windows). -->
+    <ApplicationIcon>..\EmpireEngineIcon.ico</ApplicationIcon>
+    <GameName Condition="'$(GameName)' == ''">Game</GameName>
+    <AssemblyName>$(GameName)</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Engine.Brutal\Engine.Brutal.csproj" />
+  </ItemGroup>
+</Project>
