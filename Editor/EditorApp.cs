@@ -37,6 +37,8 @@ public sealed class EditorApp
     private readonly AssetCache _assets;
     private readonly EditorCamera _camera = new();
     private readonly TransformGizmo _gizmo = new();
+    private readonly SelectionOutline _outline = new();
+    private bool _prevLeftInScene;      // whether the left mouse button was down last frame, to see a new click in the scene
     private readonly ScriptFieldCache _scriptFields;
     private readonly UndoHistory _history = new();
     private readonly VisualScriptView _vc;
@@ -414,12 +416,18 @@ public sealed class EditorApp
                 DrawParticleShapeGizmos(uiCanvas, viewProj, ctx.SceneViewport);
                 DrawCameraGizmos(uiCanvas, viewProj, ctx.SceneViewport);
                 DrawLightGizmos(uiCanvas, viewProj, ctx.SceneViewport);
+                DrawSelectionOutline(uiCanvas, viewProj, eye, ctx.SceneViewport);
             }
 
             bool sculptingNow = _mode == EditorMode.Edit && !FullView && !_uiMode &&
                                 UpdateTerrainSculpt(window, uiCanvas, viewProj, SceneArea(ctx), uiWantsMouse, dt);
             if (_mode == EditorMode.Edit && !FullView && !_uiMode && !sculptingNow)
                 _gizmo.Update(window, uiCanvas, _selected, SelectedExtras(), viewProj, eye, SceneArea(ctx), uiWantsMouse);
+            bool leftDown = window.GetMouseButton(GlfwMouseButton.Left) == GlfwButtonAction.Press;
+            if (leftDown && !_prevLeftInScene && _mode == EditorMode.Edit && !FullView && !_uiMode && !sculptingNow &&
+                !_gizmo.IsDragging && !uiWantsMouse && !_gui.AnyActive && _hierDragId is null)
+                SelectInScene(window, viewProj, eye, SceneArea(ctx));
+            _prevLeftInScene = leftDown;
             uiCanvas.Layer = Canvas2D.PanelLayer;
 
             // An edit becomes an undo step once it has settled: no button held, no field or drag in progress.
@@ -3567,6 +3575,143 @@ public sealed class EditorApp
         float distance = MathF.Max(radius * 2.5f, _camera.Near * 4f);
         _camera.Position = center - _camera.Forward * distance;
         _camera.Focus = center;
+    }
+
+    // A left click in the scene view selects the object under the mouse, as a click on its row in the Hierarchy would
+    // (hold Ctrl or Cmd to add to the selection). Clicking nothing clears the selection. Objects with a model are hit
+    // where their model's bounding box is; a terrain where its ground is; others (cameras, lights, empty objects) by their
+    // marker, within a few pixels of where they are drawn. The nearest hit wins.
+    private void SelectInScene(GlfwWindow window, Matrix4x4 viewProj, Vector3 eye, float4 area)
+    {
+        var cursor = window.CursorPos;
+        var mouse = new float2((float)cursor.X, (float)cursor.Y);
+        if (mouse.X < area.X || mouse.Y < area.Y || mouse.X > area.X + area.Z || mouse.Y > area.Y + area.W) return;
+
+        var picked = PickObject(mouse, viewProj, eye, area);
+        bool add = IsSaveShortcutHeld(window);
+        if (picked is not null)
+            ClickHierarchyRow(picked, shift: false, toggle: add);
+        else if (!add)
+        {
+            _selectedId = null;
+            _extraSelected.Clear();
+            _extraFor = null;
+            _selected = null;
+        }
+    }
+
+    private SceneObject? PickObject(float2 mouse, Matrix4x4 viewProj, Vector3 eye, float4 area)
+    {
+        if (!Matrix4x4.Invert(viewProj, out var inverse)) return null;
+        float ndcX = (mouse.X - area.X) / area.Z * 2f - 1f;
+        float ndcY = (mouse.Y - area.Y) / area.W * 2f - 1f;
+        var nearH = Vector4.Transform(new Vector4(ndcX, ndcY, 0f, 1f), inverse);
+        var farH = Vector4.Transform(new Vector4(ndcX, ndcY, 1f, 1f), inverse);
+        var origin = new Vector3(nearH.X, nearH.Y, nearH.Z) / nearH.W;
+        var direction = new Vector3(farH.X, farH.Y, farH.Z) / farH.W - origin;
+        if (direction.LengthSquared() < 1e-12f) return null;
+        direction = Vector3.Normalize(direction);
+
+        SceneObject? best = null;
+        float bestDistance = float.MaxValue;
+        foreach (var obj in _scene.All)
+        {
+            float distance = float.MaxValue;
+            var world = obj.WorldMatrix;
+            if (Matrix4x4.Invert(world, out var toLocal))
+            {
+                var localOrigin = Vector3.Transform(origin, toLocal);
+                var localDir = Vector3.TransformNormal(direction, toLocal);
+
+                if (obj.Components.OfType<Terrain>().FirstOrDefault() is { } terrain)
+                {
+                    float reach = (terrain.Width + terrain.Length + terrain.Height) * 4f;
+                    if (localDir.LengthSquared() > 1e-12f && terrain.Raycast(localOrigin, localDir, reach, out float t))
+                        distance = Vector3.Distance(origin, Vector3.Transform(localOrigin + Vector3.Normalize(localDir) * t, world));
+                }
+
+                if (obj.Components.OfType<MeshRenderer>().FirstOrDefault() is { Model.Length: > 0 } mr)
+                {
+                    try
+                    {
+                        var model = _assets.GetModel(mr.Model);
+                        if (model.BoundsMax.X >= model.BoundsMin.X &&
+                            RayBox(localOrigin, localDir, model.BoundsMin, model.BoundsMax, out float t))
+                            distance = MathF.Min(distance, Vector3.Distance(origin, Vector3.Transform(localOrigin + localDir * t, world)));
+                    }
+                    catch (Exception)
+                    {
+                        // a model that can't be read can't be hit; the marker below still lets it be picked
+                    }
+                }
+            }
+
+            if (distance == float.MaxValue && !obj.Components.OfType<Terrain>().Any() &&
+                !obj.Components.OfType<MeshRenderer>().Any(m => m.Model.Length > 0) &&
+                ProjectToScreen(world.Translation, viewProj, area) is { } screen &&
+                MathF.Abs(screen.X - mouse.X) < 14f && MathF.Abs(screen.Y - mouse.Y) < 14f)
+                distance = Vector3.Distance(eye, world.Translation);
+
+            if (distance < bestDistance)
+            {
+                bestDistance = distance;
+                best = obj;
+            }
+        }
+        return best;
+    }
+
+    // Where a ray (in the object's local space) first meets an axis-aligned box, as a multiple of the direction.
+    private static bool RayBox(Vector3 origin, Vector3 dir, Vector3 min, Vector3 max, out float t)
+    {
+        float t0 = 0f, t1 = float.MaxValue;
+        for (int axis = 0; axis < 3; axis++)
+        {
+            float o = axis == 0 ? origin.X : axis == 1 ? origin.Y : origin.Z;
+            float d = axis == 0 ? dir.X : axis == 1 ? dir.Y : dir.Z;
+            float lo = axis == 0 ? min.X : axis == 1 ? min.Y : min.Z;
+            float hi = axis == 0 ? max.X : axis == 1 ? max.Y : max.Z;
+            if (MathF.Abs(d) < 1e-9f)
+            {
+                if (o < lo || o > hi) { t = 0f; return false; }
+                continue;
+            }
+            float a = (lo - o) / d, b = (hi - o) / d;
+            if (a > b) (a, b) = (b, a);
+            t0 = MathF.Max(t0, a);
+            t1 = MathF.Min(t1, b);
+            if (t0 > t1) { t = 0f; return false; }
+        }
+        t = t0;
+        return true;
+    }
+
+    private static float2? ProjectToScreen(Vector3 point, Matrix4x4 viewProj, float4 area)
+    {
+        var clip = Vector4.Transform(new Vector4(point, 1f), viewProj);
+        if (clip.W <= 0.01f) return null;
+        return new float2(area.X + (clip.X / clip.W * 0.5f + 0.5f) * area.Z, area.Y + (clip.Y / clip.W * 0.5f + 0.5f) * area.W);
+    }
+
+    // The gold glow around every selected object (the one the Inspector shows is brightest).
+    private void DrawSelectionOutline(Canvas2D draw, Matrix4x4 viewProj, Vector3 eye, float4 viewport)
+    {
+        if (_selected is null) return;
+        float2 display = ImGui.GetIO().DisplaySize;
+        var size = new float4(viewport.X * display.X, viewport.Y * display.Y, viewport.Z * display.X, viewport.W * display.Y);
+        float seconds = (float)(Environment.TickCount64 % 100000) / 1000f;
+
+        foreach (var obj in new[] { _selected }.Concat(SelectedExtras()).Distinct())
+        {
+            GlbModel? model = null;
+            if (obj.Components.OfType<MeshRenderer>().FirstOrDefault() is { Model.Length: > 0 } mr)
+            {
+                try { model = _assets.GetModel(mr.Model); }
+                catch (Exception) { /* drawn as a marker */ }
+            }
+            _outline.Draw(draw, obj, model, obj.Components.OfType<Terrain>().FirstOrDefault(), obj == _selected, viewProj,
+                          size, eye, seconds);
+        }
     }
 
     private void FitCamera()
