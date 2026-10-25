@@ -40,10 +40,9 @@
     macOS: projects that set EmpireBundleVulkan=true ship the Vulkan loader and MoltenVK, so nothing has to be installed:
       libvulkan.1.dylib            next to libVulkanEx.dylib, which finds it through its @loader_path rpath
       vulkan/icd.d/libMoltenVK.dylib and MoltenVK_icd.json   the Vulkan driver; BundledVulkan points the loader at it
-    They come from ThirdParty/Vulkan/osx-arm64 in this repo, so a build never depends on what is installed on the
-    machine. Set EmpireVulkanLoader / EmpireMoltenVK (properties or environment variables) to use other copies, such as
-    the Vulkan SDK's on an Intel Mac. The repo only has the Apple Silicon copies, so Intel Mac builds bundle nothing and
-    need the Vulkan SDK (or Homebrew's vulkan-loader and molten-vk) installed.
+    They come from ThirdParty/Vulkan/osx-arm64 or osx-x64 in this repo (by the platform being built), so a build never
+    depends on what is installed on the machine. Set EmpireVulkanLoader / EmpireMoltenVK (properties or environment
+    variables) to use other copies.
   -->
   <!-- Whether the build is for macOS: the platform named by -r (osx-arm64...) when there is one, else the one building. -->
   <PropertyGroup>
@@ -51,16 +50,17 @@
     <_EmpireTargetsMac Condition="'$(RuntimeIdentifier)' == ''">$([MSBuild]::IsOSPlatform('OSX'))</_EmpireTargetsMac>
   </PropertyGroup>
 
-  <!-- Whether the build is for Apple Silicon, which is what the bundled Vulkan files are for. -->
+  <!-- Which bundled Vulkan copies to use: the Mac platform named by -r (osx-arm64 or osx-x64) when there is one, else the one
+       building. Empty when the build isn't for a Mac. -->
   <PropertyGroup>
-    <_EmpireTargetsArmMac Condition="'$(RuntimeIdentifier)' != ''">$([System.String]::Equals('$(RuntimeIdentifier)', 'osx-arm64'))</_EmpireTargetsArmMac>
-    <_EmpireTargetsArmMac Condition="'$(RuntimeIdentifier)' == ''">$([MSBuild]::IsOSPlatform('OSX'))</_EmpireTargetsArmMac>
-    <_EmpireTargetsArmMac Condition="'$(RuntimeIdentifier)' == '' And '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' != 'Arm64'">false</_EmpireTargetsArmMac>
+    <_EmpireVulkanArch Condition="'$(RuntimeIdentifier)' == 'osx-arm64' Or '$(RuntimeIdentifier)' == 'osx-x64'">$(RuntimeIdentifier)</_EmpireVulkanArch>
+    <_EmpireVulkanArch Condition="'$(RuntimeIdentifier)' == '' And $([MSBuild]::IsOSPlatform('OSX')) And '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'Arm64'">osx-arm64</_EmpireVulkanArch>
+    <_EmpireVulkanArch Condition="'$(RuntimeIdentifier)' == '' And $([MSBuild]::IsOSPlatform('OSX')) And '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' != 'Arm64'">osx-x64</_EmpireVulkanArch>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(EmpireBundleVulkan)' == 'true' And '$(_EmpireTargetsArmMac)' == 'true'">
-    <EmpireVulkanLoader Condition="'$(EmpireVulkanLoader)' == ''">$(MSBuildThisFileDirectory)ThirdParty/Vulkan/osx-arm64/libvulkan.1.dylib</EmpireVulkanLoader>
-    <EmpireMoltenVK Condition="'$(EmpireMoltenVK)' == ''">$(MSBuildThisFileDirectory)ThirdParty/Vulkan/osx-arm64/libMoltenVK.dylib</EmpireMoltenVK>
+  <PropertyGroup Condition="'$(EmpireBundleVulkan)' == 'true' And '$(_EmpireVulkanArch)' != ''">
+    <EmpireVulkanLoader Condition="'$(EmpireVulkanLoader)' == ''">$(MSBuildThisFileDirectory)ThirdParty/Vulkan/$(_EmpireVulkanArch)/libvulkan.1.dylib</EmpireVulkanLoader>
+    <EmpireMoltenVK Condition="'$(EmpireMoltenVK)' == ''">$(MSBuildThisFileDirectory)ThirdParty/Vulkan/$(_EmpireVulkanArch)/libMoltenVK.dylib</EmpireMoltenVK>
     <_EmpireMoltenVKIcd>{
   "file_format_version": "1.0.0",
   "ICD": {
@@ -72,7 +72,7 @@
     <_EmpireCanBundleVulkan Condition="Exists('$(EmpireVulkanLoader)') And Exists('$(EmpireMoltenVK)')">true</_EmpireCanBundleVulkan>
   </PropertyGroup>
 
-  <Target Name="EmpireWarnMissingVulkan" AfterTargets="Build" Condition="'$(EmpireBundleVulkan)' == 'true' And '$(_EmpireTargetsArmMac)' == 'true' And '$(_EmpireCanBundleVulkan)' != 'true'">
+  <Target Name="EmpireWarnMissingVulkan" AfterTargets="Build" Condition="'$(EmpireBundleVulkan)' == 'true' And '$(_EmpireVulkanArch)' != '' And '$(_EmpireCanBundleVulkan)' != 'true'">
     <Warning Text="The Vulkan loader or MoltenVK was not found at $(EmpireVulkanLoader) and $(EmpireMoltenVK), so they are not bundled and must be installed to run. Restore ThirdParty/Vulkan from the repo, or set EmpireVulkanLoader and EmpireMoltenVK to other copies." />
   </Target>
 

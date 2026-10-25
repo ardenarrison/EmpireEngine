@@ -19,7 +19,7 @@
   <li><strong>The .NET 10 SDK.</strong> Every project in the repository targets <code>net10.0</code>. Check with <code>dotnet --version</code>.</li>
   <li><strong>A GPU that supports Vulkan.</strong>
     <ul>
-      <li><strong>macOS:</strong> nothing to install. The repository carries the Vulkan loader and MoltenVK in <code>ThirdParty/Vulkan/osx-arm64/</code>, and the editor and built games bundle them.</li>
+      <li><strong>macOS:</strong> Apple Silicon only for now (BRUTAL, the framework underneath, has no Intel Mac native libraries); nothing to install. The repository carries the Vulkan loader and MoltenVK in <code>ThirdParty/Vulkan/osx-arm64/</code> and <code>osx-x64/</code> (Apple Silicon and Intel), and the editor and built games bundle them.</li>
       <li><strong>Windows and Linux:</strong> an up-to-date graphics driver, which includes Vulkan.</li>
     </ul>
   </li>
