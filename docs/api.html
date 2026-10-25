@@ -20,6 +20,7 @@
   <thead><tr><th>Member</th><th>Description</th></tr></thead>
   <tbody>
     <tr><td><code>SceneObject Object</code></td><td>The object this script is on</td></tr>
+    <tr><td><code>SceneObject sceneObject</code></td><td>The same object as <code>Object</code>; <code>sceneObject.transform.position</code>, <code>.rotation</code> and <code>.scale</code> read and set where it is</td></tr>
     <tr><td><code>virtual void Start()</code></td><td>Once, before the first <code>Update</code></td></tr>
     <tr><td><code>virtual void Update()</code></td><td>Every frame while playing</td></tr>
     <tr><td><code>virtual void OnCollisionEnter(SceneObject other)</code></td><td>Colliders started touching</td></tr>

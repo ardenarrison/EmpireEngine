@@ -2531,10 +2531,62 @@ if (!OperatingSystem.IsWindows())
           "the terminal's basic colors have a set that can be read on white, and the 256-color cube is the same in both");
 }
 
+// A script reaches its object's position, rotation and scale through sceneObject.transform.
+{
+    var box = new Engine.Core.Scene.SceneObject();
+    var probe = new TransformProbe();
+    typeof(Engine.Core.Scripting.Behaviour).GetProperty("Object")!.SetValue(probe, box);
+    probe.sceneObject.transform.position = new System.Numerics.Vector3(1, 2, 3);
+    probe.sceneObject.transform.scale *= 2f;
+    probe.sceneObject.transform.rotation = System.Numerics.Quaternion.CreateFromAxisAngle(System.Numerics.Vector3.UnitY, 1f);
+    Check(ReferenceEquals(probe.sceneObject, box), "sceneObject is the object the script is on");
+    Check(box.Position == new System.Numerics.Vector3(1, 2, 3) && box.Scale == new System.Numerics.Vector3(2, 2, 2), "transform.position and scale write the object");
+    box.Position = new System.Numerics.Vector3(9, 0, 0);
+    Check(probe.sceneObject.transform.position.X == 9f && box.Rotation == probe.sceneObject.transform.rotation, "transform reads the object's current values");
+    Check(ReferenceEquals(box.transform, box.transform), "an object has one transform");
+}
+
+// The same, from a script a user would write, compiled and run like in a game.
+{
+    string sdir = Path.Combine(Path.GetTempPath(), "empire-sceneobject-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(sdir);
+    File.WriteAllText(Path.Combine(sdir, "Mover.cs"), """
+        public class Mover : Behaviour
+        {
+            public float Seen;
+            public override void Start() { sceneObject.transform.scale = new Vector3(3, 3, 3); }
+            public override void Update()
+            {
+                sceneObject.transform.position += new Vector3(1, 0, 0);
+                sceneObject.transform.rotation = Quaternion.CreateFromAxisAngle(Vector3.UnitY, 0.5f);
+                Seen = this.sceneObject.transform.position.X;
+            }
+        }
+        """);
+    string sdll = Path.Combine(sdir, "scripts.dll");
+    Check(Engine.Scripting.Build.ScriptBuilder.Compile(sdir, sdll,
+              Engine.Scripting.Build.ScriptBuilder.DefaultReferences(typeof(Behaviour).Assembly.Location), out string serr),
+          "a script that uses sceneObject.transform compiles" + (serr.Length > 0 ? ": " + serr : ""));
+    var sasm = Assembly.LoadFrom(sdll);
+    var sscene = new Scene();
+    var mover = new SceneObject { Name = "Mover" };
+    mover.Components.Add(new ScriptComponent { ScriptName = "Mover" });
+    sscene.Add(mover);
+    ScriptRuntime.Load(sscene, new[] { sasm });
+    SceneUpdate.Update(sscene, 1f / 60f);
+    SceneUpdate.Update(sscene, 1f / 60f);
+    var inst = mover.Components.OfType<ScriptComponent>().Single().Instance!;
+    Check(mover.Position.X == 2f && mover.Scale == new Vector3(3, 3, 3) && MathF.Abs(mover.Rotation.Y - MathF.Sin(0.25f)) < 1e-5f &&
+          (float)inst.GetType().GetField("Seen")!.GetValue(inst)! == 2f,
+          "a running script moves, turns and scales its object through sceneObject.transform");
+    Directory.Delete(sdir, true);
+}
+
 Console.WriteLine(failures == 0 ? "\nAll checks passed." : $"\n{failures} check(s) failed.");
 return failures == 0 ? 0 : 1;
 
 // A stand-in for GitHub: answers every request with whatever the test says.
+
 sealed class FakeGitHub(Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler
 {
     public int Calls;
@@ -2574,3 +2626,5 @@ public class FieldsScript : Behaviour
 #pragma warning restore CS0414
     public readonly int fixedValue = 2;
 }
+
+class TransformProbe : Engine.Core.Scripting.Behaviour { }

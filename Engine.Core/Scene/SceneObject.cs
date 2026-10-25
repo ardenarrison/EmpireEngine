@@ -17,6 +17,9 @@ public abstract class Component
     // The object a component written in a script is on. Set when the game starts; null for the engine's own components.
     public SceneObject Object { get; internal set; } = null!;
 
+    // The same as Object.
+    public SceneObject sceneObject => Object;
+
     // Another component on the same object, e.g. GetComponent<MeshRenderer>(). Null when there is none.
     public T? GetComponent<T>() where T : Component => Object?.Components.OfType<T>().FirstOrDefault();
 
@@ -38,6 +41,19 @@ public sealed class MeshRenderer : Component
 
     // How an Animator has posed the model right now. Runtime only: it is never saved, and null means the resting pose.
     public Animation.ModelPose? Pose { get; set; }
+}
+
+// A script's way into an object's position, rotation and scale (local to its parent). Get it from
+// sceneObject.transform; changing a value here moves the object.
+public sealed class Transform
+{
+    private readonly SceneObject _owner;
+
+    internal Transform(SceneObject owner) => _owner = owner;
+
+    public Vector3 position { get => _owner.Position; set => _owner.Position = value; }
+    public Quaternion rotation { get => _owner.Rotation; set => _owner.Rotation = value; }
+    public Vector3 scale { get => _owner.Scale; set => _owner.Scale = value; }
 }
 
 public sealed class SceneObject
@@ -62,6 +78,11 @@ public sealed class SceneObject
     public bool Persistent { get; internal set; }
 
     public SceneObject(Guid? id = null) => Id = id ?? Guid.NewGuid();
+
+    // This object's position, rotation and scale, as in sceneObject.transform.position. It reads and writes the
+    // object itself, so there is nothing to keep in step.
+    public Transform transform => _transform ??= new Transform(this);
+    private Transform? _transform;
 
     public Matrix4x4 LocalMatrix =>
         Matrix4x4.CreateScale(Scale) *
