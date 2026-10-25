@@ -1,7 +1,7 @@
 <Project>
   <!-- The Empire Engine version, shared by the editor, the player and Empire Engine Hub. Bump it here for a release. -->
   <PropertyGroup>
-    <EmpireVersion>0.2.0</EmpireVersion>
+    <EmpireVersion>0.2.1</EmpireVersion>
     <Version>$(EmpireVersion)</Version>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
