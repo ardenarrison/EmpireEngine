@@ -40,6 +40,7 @@
     macOS: projects that set EmpireBundleVulkan=true ship the Vulkan loader and MoltenVK, so nothing has to be installed:
       libvulkan.1.dylib            next to libVulkanEx.dylib, which finds it through its @loader_path rpath
       vulkan/icd.d/libMoltenVK.dylib and MoltenVK_icd.json   the Vulkan driver; BundledVulkan points the loader at it
+    On Intel (osx-x64) the other native libraries BRUTAL's packages lack come from ThirdParty/IntelMac (Tools/IntelNatives).
     They come from ThirdParty/Vulkan/osx-arm64 or osx-x64 in this repo (by the platform being built), so a build never
     depends on what is installed on the machine. Set EmpireVulkanLoader / EmpireMoltenVK (properties or environment
     variables) to use other copies.
@@ -76,6 +77,26 @@
     <Warning Text="The Vulkan loader or MoltenVK was not found at $(EmpireVulkanLoader) and $(EmpireMoltenVK), so they are not bundled and must be installed to run. Restore ThirdParty/Vulkan from the repo, or set EmpireVulkanLoader and EmpireMoltenVK to other copies." />
   </Target>
 
+  <!--
+    Intel Macs: BRUTAL's packages have no osx-x64 native libraries, so the ones in ThirdParty/IntelMac (GLFW, Dear ImGui,
+    libVulkanEx, shaderc; see Tools/IntelNatives) go next to the program, beside the bundled Vulkan loader.
+  -->
+  <ItemGroup Condition="'$(EmpireBundleVulkan)' == 'true' And '$(_EmpireVulkanArch)' == 'osx-x64'">
+    <_EmpireIntelNative Include="$(MSBuildThisFileDirectory)ThirdParty/IntelMac/*.dylib" />
+  </ItemGroup>
+
+  <Target Name="EmpireIntelNativesBuild" AfterTargets="Build"
+          Condition="'$(EmpireBundleVulkan)' == 'true' And '$(_EmpireVulkanArch)' == 'osx-x64' And '@(_EmpireIntelNative)' != ''">
+    <Copy SourceFiles="@(_EmpireIntelNative)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="EmpireIntelNativesPublish" AfterTargets="Publish"
+          Condition="'$(EmpireBundleVulkan)' == 'true' And '$(_EmpireVulkanArch)' == 'osx-x64' And '@(_EmpireIntelNative)' != ''">
+    <Copy SourceFiles="@(_EmpireIntelNative)" DestinationFolder="$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(PublishDir)'))" SkipUnchangedFiles="true" />
+  </Target>
+
+  <!-- (These come before the Vulkan targets below: on Intel the loader goes beside libVulkanEx, one of the copied files.) -->
+
   <Target Name="EmpireBundleVulkanBuild" AfterTargets="Build"
           Condition="'$(_EmpireCanBundleVulkan)' == 'true'">
     <ItemGroup>
@@ -100,4 +121,5 @@
     <Copy SourceFiles="$(EmpireMoltenVK)" DestinationFolder="$(_EmpireVulkanPublishDir)vulkan/icd.d" SkipUnchangedFiles="true" />
     <WriteLinesToFile File="$(_EmpireVulkanPublishDir)vulkan/icd.d/MoltenVK_icd.json" Lines="$(_EmpireMoltenVKIcd)" Overwrite="true" WriteOnlyWhenDifferent="true" />
   </Target>
+
 </Project>

@@ -1,4 +1,4 @@
-Vulkan for Intel Macs (x86_64), ready to bundle (BRUTAL has no Intel Mac natives yet, so nothing runs there at the moment) with the editor and with games built from it, so nothing has to be installed.
+Vulkan for Intel Macs (x86_64), bundled together with the libraries in ../IntelMac (see Tools/IntelNatives) with the editor and with games built from it, so nothing has to be installed.
 
   libvulkan.1.dylib    Khronos Vulkan Loader 1.4.363.0   (Apache 2.0)   https://github.com/KhronosGroup/Vulkan-Loader
   libMoltenVK.dylib    MoltenVK (as in LunarG Vulkan SDK 1.4.363.0)   (Apache 2.0)   https://github.com/KhronosGroup/MoltenVK

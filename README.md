@@ -6,7 +6,7 @@ Empire Engine is a 3D game engine written in C# on .NET 10. It draws with Vulkan
 scripts in C# or snap them together from blocks, press Play to try the game, and build it into a program you can hand to
 other people.
 
-> **Status: early (0.1.8).** It works and is used to make small games, but expect rough edges and changes between versions.
+> **Status: early (0.1.9).** It works and is used to make small games, but expect rough edges and changes between versions.
 
 ## What's in it
 
@@ -31,7 +31,7 @@ formats and the engine's architecture.
 ## Getting started
 
 You need the [.NET 10 SDK](https://dotnet.microsoft.com/download) and a graphics card with Vulkan support. On Apple Silicon Macs
-nothing else is needed (Vulkan is bundled). Intel Macs can't run the editor yet: BRUTAL, the framework underneath, ships its native libraries for Apple Silicon only. On Windows and Linux an up-to-date graphics driver provides it.
+nothing else is needed (Vulkan is bundled). Intel Macs have an experimental build (it runs the editor on an Intel MacBook Air): BRUTAL, the framework underneath, ships its native libraries for Apple Silicon only, so Empire carries its own Intel ones (`Tools/IntelNatives`), and it has only been tried under Rosetta, not on a real Intel Mac. On Windows and Linux an up-to-date graphics driver provides it.
 
 ```sh
 git clone https://github.com/ardenarrison/EmpireEngine.git

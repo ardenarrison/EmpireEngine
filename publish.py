@@ -168,12 +168,14 @@ def package(rid, out_root, version, make_zip):
     if missing:
         sys.exit("The package is incomplete, these are missing:\n  " + "\n  ".join(str(path) for path in missing))
 
-    if rid == "osx-x64" and not (editor_dir / "libVulkanEx.dylib").exists():
-        # BRUTAL's NuGet packages hold macOS native libraries (libVulkanEx, libglfw, libimgui, libstb...) for Apple Silicon
-        # only. Without them the editor and games stop at start on an Intel Mac, whatever Vulkan is installed.
-        problems.append("The Intel Mac build cannot run: BRUTAL's packages have no osx-x64 native libraries (libVulkanEx, "
-                        "libglfw, libimgui, libstb, libKtx, libshaderc, libgli, libglad, libvma), so the editor aborts "
-                        "when it starts. Don't publish osx-x64 until BRUTAL ships them.")
+    if rid == "osx-x64":
+        # BRUTAL's NuGet packages have no Intel Mac native libraries; the ones in ThirdParty/IntelMac (Tools/IntelNatives)
+        # stand in. Without them the editor and games abort at start.
+        if not (editor_dir / "libVulkanEx.dylib").exists() or not (editor_dir / "libimgui.dylib").exists():
+            problems.append("The Intel Mac build is missing its native libraries (ThirdParty/IntelMac: libglfw, libimgui, "
+                            "libVulkanEx, libshaderc_shared.1), so the editor would abort when it starts.")
+        problems.append("Intel Mac builds are experimental: they have only been tried under Rosetta on an Apple Silicon Mac and "
+                        "on one real Intel Mac (a MacBook Air, editor only). Say so in the release notes.")
     if rid in ("osx-arm64", "osx-x64"):
         # Mac builds carry their own Vulkan loader and MoltenVK (from ThirdParty/Vulkan). Without them the editor
         # and games only run on Macs that have Vulkan installed.

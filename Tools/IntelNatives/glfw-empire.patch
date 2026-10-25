@@ -1,0 +1,152 @@
+diff --git a/include/GLFW/glfw3.h b/include/GLFW/glfw3.h
+index de2798f..d57c01a 100644
+--- a/include/GLFW/glfw3.h
++++ b/include/GLFW/glfw3.h
+@@ -5442,6 +5442,18 @@ GLFWAPI GLFWcursorenterfun glfwSetCursorEnterCallback(GLFWwindow* window, GLFWcu
+  */
+ GLFWAPI GLFWscrollfun glfwSetScrollCallback(GLFWwindow* window, GLFWscrollfun callback);
+ 
++/* Empire Engine additions, matching the callbacks of BRUTAL's patched GLFW. */
++typedef void (* GLFWscrolldetailfun)(GLFWwindow* window, double xoffset, double yoffset, int flags);
++typedef void (* GLFWtrackpadzoomfun)(GLFWwindow* window, double scale);
++typedef void (* GLFWtrackpadrotatefun)(GLFWwindow* window, double angle);
++#define GLFW_SCROLL_PRECISE  1
++#define GLFW_SCROLL_BEGIN    2
++#define GLFW_SCROLL_END      4
++#define GLFW_SCROLL_MOMENTUM 8
++GLFWAPI GLFWscrolldetailfun glfwSetScrollDetailCallback(GLFWwindow* window, GLFWscrolldetailfun callback);
++GLFWAPI GLFWtrackpadzoomfun glfwSetTrackpadZoomCallback(GLFWwindow* window, GLFWtrackpadzoomfun callback);
++GLFWAPI GLFWtrackpadrotatefun glfwSetTrackpadRotateCallback(GLFWwindow* window, GLFWtrackpadrotatefun callback);
++
+ /*! @brief Sets the path drop callback.
+  *
+  *  This function sets the path drop callback of the specified window, which is
+diff --git a/src/cocoa_window.m b/src/cocoa_window.m
+index 8a09026..e110aa2 100644
+--- a/src/cocoa_window.m
++++ b/src/cocoa_window.m
+@@ -638,10 +638,34 @@ - (void)scrollWheel:(NSEvent *)event
+         deltaY *= 0.1;
+     }
+ 
++    int flags = 0;
++    if ([event hasPreciseScrollingDeltas])
++        flags |= GLFW_SCROLL_PRECISE;
++    if ([event phase] & NSEventPhaseBegan)
++        flags |= GLFW_SCROLL_BEGIN;
++    if ([event phase] & (NSEventPhaseEnded | NSEventPhaseCancelled))
++        flags |= GLFW_SCROLL_END;
++    if ([event momentumPhase] != NSEventPhaseNone)
++        flags |= GLFW_SCROLL_MOMENTUM;
++    if ([event momentumPhase] & (NSEventPhaseEnded | NSEventPhaseCancelled))
++        flags |= GLFW_SCROLL_END;
++    _glfwInputScrollDetail(window, deltaX, deltaY, flags);
++
+     if (fabs(deltaX) > 0.0 || fabs(deltaY) > 0.0)
+         _glfwInputScroll(window, deltaX, deltaY);
+ }
+ 
++- (void)magnifyWithEvent:(NSEvent *)event
++{
++    _glfwInputTrackpadZoom(window, 1.0 + [event magnification]);
++}
++
++- (void)rotateWithEvent:(NSEvent *)event
++{
++    // NSEvent's rotation is in degrees, positive counter-clockwise
++    _glfwInputTrackpadRotate(window, [event rotation]);
++}
++
+ - (NSDragOperation)draggingEntered:(id <NSDraggingInfo>)sender
+ {
+     // HACK: We don't know what to say here because we don't know what the
+diff --git a/src/input.c b/src/input.c
+index f0b29c3..7b31ab8 100644
+--- a/src/input.c
++++ b/src/input.c
+@@ -340,6 +340,27 @@ void _glfwInputScroll(_GLFWwindow* window, double xoffset, double yoffset)
+         window->callbacks.scroll((GLFWwindow*) window, xoffset, yoffset);
+ }
+ 
++void _glfwInputScrollDetail(_GLFWwindow* window, double xoffset, double yoffset, int flags)
++{
++    assert(window != NULL);
++    if (window->callbacks.scrollDetail)
++        window->callbacks.scrollDetail((GLFWwindow*) window, xoffset, yoffset, flags);
++}
++
++void _glfwInputTrackpadZoom(_GLFWwindow* window, double scale)
++{
++    assert(window != NULL);
++    if (window->callbacks.trackpadZoom)
++        window->callbacks.trackpadZoom((GLFWwindow*) window, scale);
++}
++
++void _glfwInputTrackpadRotate(_GLFWwindow* window, double angle)
++{
++    assert(window != NULL);
++    if (window->callbacks.trackpadRotate)
++        window->callbacks.trackpadRotate((GLFWwindow*) window, angle);
++}
++
+ // Notifies shared code of a mouse button click event
+ //
+ void _glfwInputMouseClick(_GLFWwindow* window, int button, int action, int mods)
+@@ -1030,6 +1051,33 @@ GLFWAPI GLFWscrollfun glfwSetScrollCallback(GLFWwindow* handle,
+     return cbfun;
+ }
+ 
++GLFWAPI GLFWscrolldetailfun glfwSetScrollDetailCallback(GLFWwindow* handle, GLFWscrolldetailfun cbfun)
++{
++    _GLFW_REQUIRE_INIT_OR_RETURN(NULL);
++    _GLFWwindow* window = (_GLFWwindow*) handle;
++    assert(window != NULL);
++    _GLFW_SWAP(GLFWscrolldetailfun, window->callbacks.scrollDetail, cbfun);
++    return cbfun;
++}
++
++GLFWAPI GLFWtrackpadzoomfun glfwSetTrackpadZoomCallback(GLFWwindow* handle, GLFWtrackpadzoomfun cbfun)
++{
++    _GLFW_REQUIRE_INIT_OR_RETURN(NULL);
++    _GLFWwindow* window = (_GLFWwindow*) handle;
++    assert(window != NULL);
++    _GLFW_SWAP(GLFWtrackpadzoomfun, window->callbacks.trackpadZoom, cbfun);
++    return cbfun;
++}
++
++GLFWAPI GLFWtrackpadrotatefun glfwSetTrackpadRotateCallback(GLFWwindow* handle, GLFWtrackpadrotatefun cbfun)
++{
++    _GLFW_REQUIRE_INIT_OR_RETURN(NULL);
++    _GLFWwindow* window = (_GLFWwindow*) handle;
++    assert(window != NULL);
++    _GLFW_SWAP(GLFWtrackpadrotatefun, window->callbacks.trackpadRotate, cbfun);
++    return cbfun;
++}
++
+ GLFWAPI GLFWdropfun glfwSetDropCallback(GLFWwindow* handle, GLFWdropfun cbfun)
+ {
+     _GLFW_REQUIRE_INIT_OR_RETURN(NULL);
+diff --git a/src/internal.h b/src/internal.h
+index e89c294..1abe8e5 100644
+--- a/src/internal.h
++++ b/src/internal.h
+@@ -578,6 +578,9 @@ struct _GLFWwindow
+         GLFWcursorposfun          cursorPos;
+         GLFWcursorenterfun        cursorEnter;
+         GLFWscrollfun             scroll;
++        GLFWscrolldetailfun       scrollDetail;
++        GLFWtrackpadzoomfun       trackpadZoom;
++        GLFWtrackpadrotatefun     trackpadRotate;
+         GLFWkeyfun                key;
+         GLFWcharfun               character;
+         GLFWcharmodsfun           charmods;
+@@ -936,6 +939,9 @@ void _glfwInputKey(_GLFWwindow* window,
+ void _glfwInputChar(_GLFWwindow* window,
+                     uint32_t codepoint, int mods, GLFWbool plain);
+ void _glfwInputScroll(_GLFWwindow* window, double xoffset, double yoffset);
++void _glfwInputScrollDetail(_GLFWwindow* window, double xoffset, double yoffset, int flags);
++void _glfwInputTrackpadZoom(_GLFWwindow* window, double scale);
++void _glfwInputTrackpadRotate(_GLFWwindow* window, double angle);
+ void _glfwInputMouseClick(_GLFWwindow* window, int button, int action, int mods);
+ void _glfwInputCursorPos(_GLFWwindow* window, double xpos, double ypos);
+ void _glfwInputCursorEnter(_GLFWwindow* window, GLFWbool entered);
