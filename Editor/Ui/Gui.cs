@@ -131,6 +131,9 @@ public sealed class Gui
     public Box LastItem { get; private set; }
     public bool LastItemHovered { get; private set; }
 
+    // True on the frame the last item was double-clicked with the left mouse button.
+    public bool LastItemDoubleClicked => LastItemHovered && _doubleClicked;
+
     // True when the mouse is over a window, or a widget is being dragged: the 3D view should leave the mouse alone.
     public bool WantsMouse => _hovered is not null || _active is not null;
     public bool IsTyping => _focus is not null || ExternalTyping;

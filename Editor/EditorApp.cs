@@ -566,6 +566,8 @@ public sealed class EditorApp
             if (clicked)
                 ClickHierarchyRow(obj, shift: g.Shift, toggle: IsSaveShortcutHeld(window));
             TrackHierarchyRow(obj, editing);
+            if (editing && g.LastItemDoubleClicked)
+                FocusCameraOn(obj);
         }
 
         FinishHierarchyDrag(editing);
@@ -3533,6 +3535,39 @@ public sealed class EditorApp
             .Select(c => c.Model)
             .Where(m => !string.IsNullOrEmpty(m))
             .Distinct(StringComparer.OrdinalIgnoreCase);
+
+    // Double-clicking an object in the Hierarchy: the scene camera moves to it, keeps looking the way it was, and backs off
+    // far enough to see the whole object (its model's bounds, or a unit size when it has no model). Zooming is measured
+    // from the object afterwards.
+    private void FocusCameraOn(SceneObject obj)
+    {
+        var world = obj.WorldMatrix;
+        var center = world.Translation;
+        float radius = 0.5f;
+        if (obj.Components.OfType<MeshRenderer>().FirstOrDefault() is { Model.Length: > 0 } mr)
+        {
+            try
+            {
+                var model = _assets.GetModel(mr.Model);
+                if (model.BoundsMax.X >= model.BoundsMin.X)
+                {
+                    center = Vector3.Transform((model.BoundsMin + model.BoundsMax) / 2f, world);
+                    float scale = MathF.Max(new Vector3(world.M11, world.M12, world.M13).Length(),
+                                  MathF.Max(new Vector3(world.M21, world.M22, world.M23).Length(),
+                                            new Vector3(world.M31, world.M32, world.M33).Length()));
+                    radius = MathF.Max(0.05f, (model.BoundsMax - model.BoundsMin).Length() / 2f * scale);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Could not read {mr.Model} to frame the object: {ex.Message}");
+            }
+        }
+
+        float distance = MathF.Max(radius * 2.5f, _camera.Near * 4f);
+        _camera.Position = center - _camera.Forward * distance;
+        _camera.Focus = center;
+    }
 
     private void FitCamera()
     {

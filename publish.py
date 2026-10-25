@@ -168,14 +168,17 @@ def package(rid, out_root, version, make_zip):
     if missing:
         sys.exit("The package is incomplete, these are missing:\n  " + "\n  ".join(str(path) for path in missing))
 
-    if rid == "osx-x64":
-        problems.append("Intel Mac builds bundle no Vulkan (the repo only has the Apple Silicon copies), so people need the "
-                        "Vulkan SDK or Homebrew's vulkan-loader and molten-vk installed. Say so in the release notes.")
-    if rid == "osx-arm64":
-        # Apple Silicon builds carry their own Vulkan loader and MoltenVK (from ThirdParty/Vulkan). Without them the editor
+    if rid == "osx-x64" and not (editor_dir / "libVulkanEx.dylib").exists():
+        # BRUTAL's NuGet packages hold macOS native libraries (libVulkanEx, libglfw, libimgui, libstb...) for Apple Silicon
+        # only. Without them the editor and games stop at start on an Intel Mac, whatever Vulkan is installed.
+        problems.append("The Intel Mac build cannot run: BRUTAL's packages have no osx-x64 native libraries (libVulkanEx, "
+                        "libglfw, libimgui, libstb, libKtx, libshaderc, libgli, libglad, libvma), so the editor aborts "
+                        "when it starts. Don't publish osx-x64 until BRUTAL ships them.")
+    if rid in ("osx-arm64", "osx-x64"):
+        # Mac builds carry their own Vulkan loader and MoltenVK (from ThirdParty/Vulkan). Without them the editor
         # and games only run on Macs that have Vulkan installed.
         vulkan_problems = []
-        for folder in (editor_dir, editor_dir / "Player"):
+        for folder in (editor_dir, editor_dir / "Player") if (editor_dir / "libVulkanEx.dylib").exists() else ():
             if not (folder / "libvulkan.1.dylib").exists() or not any((folder / "vulkan" / name / "MoltenVK_icd.json").exists() for name in ("icd.d", "icd")):
                 vulkan_problems.append(f"{folder.relative_to(editor_root)} has no bundled Vulkan (libvulkan.1.dylib, vulkan/icd.d or vulkan/icd).")
         if vulkan_problems:

@@ -31,7 +31,7 @@ formats and the engine's architecture.
 ## Getting started
 
 You need the [.NET 10 SDK](https://dotnet.microsoft.com/download) and a graphics card with Vulkan support. On Apple Silicon Macs
-nothing else is needed (Vulkan is bundled; Intel Macs need the Vulkan SDK or Homebrew's `vulkan-loader` and `molten-vk`); on Windows and Linux an up-to-date graphics driver provides it.
+nothing else is needed (Vulkan is bundled). Intel Macs can't run the editor yet: BRUTAL, the framework underneath, ships its native libraries for Apple Silicon only. On Windows and Linux an up-to-date graphics driver provides it.
 
 ```sh
 git clone https://github.com/ardenarrison/EmpireEngine.git
