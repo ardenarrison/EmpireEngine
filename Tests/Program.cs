@@ -2582,6 +2582,137 @@ if (!OperatingSystem.IsWindows())
     Directory.Delete(sdir, true);
 }
 
+// The collision blocks of visual code: a script built from blocks, turned into C#, compiled and run against real physics.
+{
+    var graph = new VisualCode.Model.VcGraph { Name = "Touch" };
+    foreach (var v in new[] { "entered", "touching", "ended" })
+        graph.Variables.Add(new VisualCode.Model.VcVariable { Name = v, Type = "number", Default = "0" });
+    int nodeCounter = 0;
+    void Watch(string reporter, string variable)
+    {
+        string hat = "h" + nodeCounter, cond = "c" + nodeCounter, branch = "i" + nodeCounter, change = "s" + nodeCounter++;
+        graph.Nodes.Add(new() { Id = hat, Type = "when_every_frame", Next = branch });
+        graph.Nodes.Add(new() { Id = branch, Type = "if", Body = change, Inputs = { ["condition"] = new() { Node = cond } } });
+        graph.Nodes.Add(new() { Id = cond, Type = reporter, Inputs = { ["object"] = new() { Literal = "Ground" } } });
+        graph.Nodes.Add(new() { Id = change, Type = "change_var", Inputs = { ["var"] = new() { Literal = variable }, ["value"] = new() { Literal = "1" } } });
+    }
+    Watch("collision_enter", "entered");
+    Watch("collision_now", "touching");
+    Watch("collision_end", "ended");
+
+    var transpiled = new VisualCode.Transpiler.VcTranspiler().Transpile(graph, "Touch");
+    Check(!transpiled.HasErrors && transpiled.Code.Contains("CollisionEnter(\"Ground\")") && transpiled.Code.Contains("Colliding(\"Ground\")") &&
+          transpiled.Code.Contains("CollisionExit(\"Ground\")"), "the collision blocks turn into the Behaviour's collision checks");
+
+    string touchDir = Path.Combine(Path.GetTempPath(), "empire-vc-touch-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(touchDir);
+    File.WriteAllText(Path.Combine(touchDir, "Touch.cs"), transpiled.Code);
+    string touchDll = Path.Combine(touchDir, "touch.dll");
+    Check(Engine.Scripting.Build.ScriptBuilder.Compile(touchDir, touchDll,
+              Engine.Scripting.Build.ScriptBuilder.DefaultReferences(typeof(Behaviour).Assembly.Location), out string touchErrors),
+          "a script using the collision blocks compiles" + (touchErrors.Length > 0 ? ": " + touchErrors : ""));
+    var touchAssembly = Assembly.LoadFrom(touchDll);
+
+    var touchScene = PhysicsScene();
+    var ball = Dynamic(touchScene, new(0, 1.2f, 0), new SphereCollider());
+    ball.Components.Add(new ScriptComponent { ScriptName = "Touch" });
+    ScriptRuntime.Load(touchScene, new[] { touchAssembly });
+    var touch = ball.Components.OfType<ScriptComponent>().Single().Instance!;
+    int Count(string name) => (int)(float)touch.GetType().GetField("_v_" + name, BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(touch)!;
+
+    void Frames(int n)
+    {
+        for (int i = 0; i < n; i++)
+        {
+            touchScene.Physics.Step(touchScene, 1f / 60f);
+            SceneUpdate.Update(touchScene, 1f / 60f);
+        }
+    }
+    Frames(2);
+    Check(Count("entered") == 0 && Count("touching") == 0, "before the ball lands, no collision block is true");
+    Frames(60);
+    Check(Count("entered") == 1, "collision enter is true for one frame when the ball lands (" + Count("entered") + ")");
+    Check(Count("touching") > 10 && Count("ended") == 0, "collision now stays true while it rests on the ground (" + Count("touching") + ")");
+    int whileResting = Count("touching");
+
+    ball.Position = new Vector3(0, 30f, 0);
+    ball.Components.OfType<Rigidbody>().Single().Velocity = Vector3.Zero;
+    Frames(3);
+    Check(Count("ended") == 1, "collision end is true for one frame when it leaves (" + Count("ended") + ")");
+    int afterLeaving = Count("touching");
+    Frames(10);
+    Check(Count("touching") == afterLeaving && afterLeaving <= whileResting + 3 && Count("entered") == 1 && Count("ended") == 1,
+          "nothing counts once it is away");
+    Directory.Delete(touchDir, true);
+}
+
+// Functions in visual code: a "define function" stack that "call function" runs, waits and all.
+{
+    VisualCode.Model.VcNode Node(string id, string type, string? next = null, string? body = null, params (string Name, string Literal)[] inputs)
+    {
+        var node = new VisualCode.Model.VcNode { Id = id, Type = type, Next = next, Body = body };
+        foreach (var (name, literal) in inputs) node.Inputs[name] = new() { Literal = literal };
+        return node;
+    }
+
+    var graph = new VisualCode.Model.VcGraph { Name = "Funcs" };
+    graph.Variables.Add(new VisualCode.Model.VcVariable { Name = "total", Type = "number", Default = "0" });
+    graph.Nodes.Add(Node("start", "when_start", next: "call1"));
+    graph.Nodes.Add(Node("call1", "call_function", next: "call2", inputs: ("name", "add five")));
+    graph.Nodes.Add(Node("call2", "call_function", next: "after", inputs: ("name", "add five")));
+    graph.Nodes.Add(Node("after", "change_var", inputs: new[] { ("var", "total"), ("value", "100") }));
+    graph.Nodes.Add(Node("def", "define_function", next: "plus", inputs: ("name", "add five")));
+    graph.Nodes.Add(Node("plus", "change_var", next: "pause", inputs: new[] { ("var", "total"), ("value", "5") }));
+    graph.Nodes.Add(Node("pause", "wait_frame"));
+
+    var result = new VisualCode.Transpiler.VcTranspiler().Transpile(graph, "Funcs");
+    Check(!result.HasErrors && result.Code.Contains("Fn_add_five()") && !result.Code.Contains("Script1"),
+          "a function becomes a method, and defining it does not start a script of its own");
+
+    string funcDir = Path.Combine(Path.GetTempPath(), "empire-vc-funcs-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(funcDir);
+    File.WriteAllText(Path.Combine(funcDir, "Funcs.cs"), result.Code);
+    string funcDll = Path.Combine(funcDir, "funcs.dll");
+    Check(Engine.Scripting.Build.ScriptBuilder.Compile(funcDir, funcDll,
+              Engine.Scripting.Build.ScriptBuilder.DefaultReferences(typeof(Behaviour).Assembly.Location), out string funcErrors),
+          "a script that defines and calls a function compiles" + (funcErrors.Length > 0 ? ": " + funcErrors : ""));
+    var funcScene = new Scene();
+    var runner = new SceneObject { Name = "Runner" };
+    runner.Components.Add(new ScriptComponent { ScriptName = "Funcs" });
+    funcScene.Add(runner);
+    ScriptRuntime.Load(funcScene, new[] { Assembly.LoadFrom(funcDll) });
+    var funcInstance = runner.Components.OfType<ScriptComponent>().Single().Instance!;
+    float Total() => (float)funcInstance.GetType().GetField("_v_total", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(funcInstance)!;
+    SceneUpdate.Update(funcScene, 1f / 60f);
+    Check(Total() == 5f, "a call runs the function until it waits, and the script waits with it (" + Total() + ")");
+    SceneUpdate.Update(funcScene, 1f / 60f);
+    Check(Total() == 10f, "after the wait the function finishes and the next call starts (" + Total() + ")");
+    SceneUpdate.Update(funcScene, 1f / 60f);
+    Check(Total() == 110f, "then the blocks after the calls run (" + Total() + ")");
+    Directory.Delete(funcDir, true);
+
+    // Mistakes are reported, not compiled
+    var missing = new VisualCode.Model.VcGraph();
+    missing.Nodes.Add(Node("a", "when_start", next: "b"));
+    missing.Nodes.Add(Node("b", "call_function", inputs: ("name", "nowhere")));
+    Check(new VisualCode.Transpiler.VcTranspiler().Transpile(missing, "X").Diagnostics.Any(d => d.Message.Contains("no function named 'nowhere'")),
+          "calling a function that was never defined is an error");
+
+    var twice = new VisualCode.Model.VcGraph();
+    twice.Nodes.Add(Node("a", "define_function", inputs: ("name", "same")));
+    twice.Nodes.Add(Node("b", "define_function", inputs: ("name", "same")));
+    Check(new VisualCode.Transpiler.VcTranspiler().Transpile(twice, "X").Diagnostics.Any(d => d.Message.Contains("two functions named 'same'")),
+          "two functions with one name are an error");
+
+    var loop = new VisualCode.Model.VcGraph();
+    loop.Nodes.Add(Node("a", "define_function", next: "ac", inputs: ("name", "ping")));
+    loop.Nodes.Add(Node("ac", "call_function", inputs: ("name", "pong")));
+    loop.Nodes.Add(Node("b", "define_function", next: "bc", inputs: ("name", "pong")));
+    loop.Nodes.Add(Node("bc", "call_function", inputs: ("name", "ping")));
+    Check(new VisualCode.Transpiler.VcTranspiler().Transpile(loop, "X").Diagnostics.Count(d => d.Message.Contains("calls itself")) == 2,
+          "functions that call each other round and round are an error");
+}
+
 Console.WriteLine(failures == 0 ? "\nAll checks passed." : $"\n{failures} check(s) failed.");
 return failures == 0 ? 0 : 1;
 

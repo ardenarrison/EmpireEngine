@@ -37,6 +37,14 @@ public sealed class EditorCamera
         Yaw = MathF.Atan2(dir.X, -dir.Z);
     }
 
+    // A pinch on a trackpad: amount is the fraction the fingers moved together (positive) or apart (negative) since last time.
+    public void Pinch(float amount)
+    {
+        if (amount == 0f) return;
+        float distance = MathF.Max(0.5f, Vector3.Distance(Position, Focus));
+        Position += Forward * (distance * Math.Clamp(amount, -0.9f, 0.9f));
+    }
+
     // uiWantsMouse is true when the cursor is over an editor panel, so the UI keeps the mouse (and its scrolling).
     // scroll is this frame's vertical scroll amount: about 1 per wheel notch, in small fractions on a trackpad.
     public void Update(GlfwWindow window, float dt, bool uiWantsMouse, float scroll = 0f)

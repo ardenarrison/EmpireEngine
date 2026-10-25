@@ -128,6 +128,7 @@ public static class ScriptRuntime
                 continue;
             try
             {
+                script.RecordCollision(other, enter);
                 if (enter) script.OnCollisionEnter(other);
                 else script.OnCollisionExit(other);
             }

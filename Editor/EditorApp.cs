@@ -39,6 +39,10 @@ public sealed class EditorApp
     private readonly TransformGizmo _gizmo = new();
     private readonly SelectionOutline _outline = new();
     private bool _prevLeftInScene;      // whether the left mouse button was down last frame, to see a new click in the scene
+    private float2? _sceneClickStart;   // where a left press in the scene view began, until it is let go
+    private float2 _sceneClickLast;
+    private bool _sceneLooking;         // the press turned into a drag: the camera looks around instead of selecting
+    private float _pinch;               // trackpad pinch since the camera last used it, as a fraction to zoom by
     private readonly ScriptFieldCache _scriptFields;
     private readonly UndoHistory _history = new();
     private readonly VisualScriptView _vc;
@@ -137,7 +141,10 @@ public sealed class EditorApp
         SaveGame.Directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "EmpireEditor", Path.GetFileName(Path.GetFullPath(contentRoot).TrimEnd('\\', '/')), "Saves");
         _assetPanel = new AssetPanel(contentRoot);
-        _vc = new VisualScriptView(Path.Combine(contentRoot, "Scripts"));
+        _vc = new VisualScriptView(Path.Combine(contentRoot, "Scripts"))
+        {
+            ObjectNames = () => _scene.InHierarchyOrder.Select(o => o.Name).Distinct().ToList(),
+        };
         _code = new CodeEditorView(Path.Combine(contentRoot, "Scripts"));
         _scriptFields = new ScriptFieldCache(contentRoot);
         _terminal = new Editor.Terminal.TerminalWindow(contentRoot);
@@ -172,6 +179,10 @@ public sealed class EditorApp
                 Size = new int2(1280, 720),
             });
             AppIcon.Apply(window);
+            window.OnTrackpadZoom += (_, scale) =>
+            {
+                if (_mode == EditorMode.Edit) _pinch += (float)(scale - 1.0);
+            };
             try
             {
                 RenderLoop(window);
@@ -341,14 +352,21 @@ public sealed class EditorApp
                 : 0f;
 
             if (_mode == EditorMode.Edit && _vcMode)
+            {
                 _vc.Update(window, uiWantsMouse);
+                if (!uiWantsMouse) _vc.Pinch(_pinch);   // pinching zooms the visual script's workspace
+                _pinch = 0f;
+            }
             else if (_mode == EditorMode.Edit && _codeMode)
             {
                 if (!_gui.IsTyping) _code.Update(window, uiWantsMouse, now);
+                _pinch = 0f;
             }
             else if (_mode == EditorMode.Edit)
             {
                 _camera.Update(window, dt, uiWantsMouse, ImGui.GetIO().MouseWheel);
+                if (!uiWantsMouse) _camera.Pinch(_pinch);
+                _pinch = 0f;
                 Particles.Update(_scene, dt);   // live preview while editing
                 Animators.UpdatePreview(_scene, dt);
             }
@@ -423,11 +441,9 @@ public sealed class EditorApp
                                 UpdateTerrainSculpt(window, uiCanvas, viewProj, SceneArea(ctx), uiWantsMouse, dt);
             if (_mode == EditorMode.Edit && !FullView && !_uiMode && !sculptingNow)
                 _gizmo.Update(window, uiCanvas, _selected, SelectedExtras(), viewProj, eye, SceneArea(ctx), uiWantsMouse);
-            bool leftDown = window.GetMouseButton(GlfwMouseButton.Left) == GlfwButtonAction.Press;
-            if (leftDown && !_prevLeftInScene && _mode == EditorMode.Edit && !FullView && !_uiMode && !sculptingNow &&
-                !_gizmo.IsDragging && !uiWantsMouse && !_gui.AnyActive && _hierDragId is null)
-                SelectInScene(window, viewProj, eye, SceneArea(ctx));
-            _prevLeftInScene = leftDown;
+            UpdateSceneClick(window, viewProj, eye, SceneArea(ctx), uiWantsMouse,
+                canStart: _mode == EditorMode.Edit && !FullView && !_uiMode && !sculptingNow && !_gizmo.IsDragging &&
+                          !_gui.AnyActive && _hierDragId is null);
             uiCanvas.Layer = Canvas2D.PanelLayer;
 
             // An edit becomes an undo step once it has settled: no button held, no field or drag in progress.
@@ -3575,6 +3591,53 @@ public sealed class EditorApp
         float distance = MathF.Max(radius * 2.5f, _camera.Near * 4f);
         _camera.Position = center - _camera.Forward * distance;
         _camera.Focus = center;
+    }
+
+    // The left mouse button in the scene view: a click selects the object under the mouse, and holding it down and moving
+    // the mouse (past a few pixels) turns the camera to look around, the way a right-drag does. The camera moves only on
+    // the drag, so a click never turns it.
+    private void UpdateSceneClick(GlfwWindow window, Matrix4x4 viewProj, Vector3 eye, float4 area, bool uiWantsMouse, bool canStart)
+    {
+        bool left = window.GetMouseButton(GlfwMouseButton.Left) == GlfwButtonAction.Press;
+        bool pressed = left && !_prevLeftInScene;
+        bool released = !left && _prevLeftInScene;
+        _prevLeftInScene = left;
+
+        var cursor = window.CursorPos;
+        var mouse = new float2((float)cursor.X, (float)cursor.Y);
+        bool inside = mouse.X >= area.X && mouse.Y >= area.Y && mouse.X <= area.X + area.Z && mouse.Y <= area.Y + area.W;
+
+        if (pressed)
+        {
+            _sceneClickStart = canStart && !uiWantsMouse && inside ? mouse : null;
+            _sceneLooking = false;
+            _sceneClickLast = mouse;
+        }
+
+        if (left && _sceneClickStart is { } start)
+        {
+            if (_gizmo.IsDragging || _gui.AnyActive || _mode != EditorMode.Edit)
+                _sceneClickStart = null;
+            else
+            {
+                if (!_sceneLooking && MathF.Abs(mouse.X - start.X) + MathF.Abs(mouse.Y - start.Y) > 5f)
+                    _sceneLooking = true;
+                if (_sceneLooking)
+                {
+                    _camera.Yaw += (mouse.X - _sceneClickLast.X) * 0.003f;
+                    _camera.Pitch = Math.Clamp(_camera.Pitch - (mouse.Y - _sceneClickLast.Y) * 0.003f, -1.5f, 1.5f);
+                }
+                _sceneClickLast = mouse;
+            }
+        }
+
+        if (released)
+        {
+            if (_sceneClickStart is not null && !_sceneLooking && inside && !uiWantsMouse)
+                SelectInScene(window, viewProj, eye, area);
+            _sceneClickStart = null;
+            _sceneLooking = false;
+        }
     }
 
     // A left click in the scene view selects the object under the mouse, as a click on its row in the Hierarchy would

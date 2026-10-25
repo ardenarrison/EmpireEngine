@@ -29,6 +29,8 @@ internal static class StandardBlocks
     private static InputSpec Key(string name = "key") => new(name, InputKind.Key, "W", KeyNames);
     private static InputSpec Button(string name = "button") => new(name, InputKind.Choice, "Left", ButtonNames);
     private static InputSpec Axis(string name = "axis") => new(name, InputKind.Choice, "X", AxisNames);
+    private static InputSpec SceneObject(string name = "object") => new(name, InputKind.Object, "");
+    private static InputSpec FunctionName(string name = "name") => new(name, InputKind.Function, "");
     private static InputSpec Var(string name = "var") => new(name, InputKind.Variable, "");
 
     private static BlockSpec Hat(string type, string label, Func<VcNode, Emit, List<string>, List<string>> wrap, params InputSpec[] inputs) => new()
@@ -91,6 +93,34 @@ internal static class StandardBlocks
         Hat("when_mouse_pressed", "when {button} mouse pressed",
             (n, e, body) => Code.Loop(Code.Block($"if (Input.GetMouseButtonDown({e.Value(n, "button")}))", body)),
             Button()),
+
+        // ---------- Functions ----------
+        new BlockSpec
+        {
+            Type = "define_function", Category = "Functions", Label = "define function {name}", Shape = BlockShape.Hat,
+            Inputs = new[] { new InputSpec("name", InputKind.Text, "my function") }, Definition = true,
+            Wrap = (n, e, body) => body.Append("yield break;").ToList(),
+        },
+
+        Statement("call_function", "Functions", "call function {name}", BlockShape.Stack,
+            (n, e) =>
+            {
+                string name = Raw(n, "name", "");
+                if (name.Length == 0)
+                {
+                    e.Error(n, "Choose a function for 'call function'.");
+                    return new List<string>();
+                }
+                if (!e.HasFunction(name))
+                {
+                    e.Error(n, $"There is no function named '{name}'. Add a 'define function' block with that name.");
+                    return new List<string>();
+                }
+                // The function may wait, so its steps are passed on to whoever called it.
+                var step = e.Unique("step");
+                return One($"foreach (var {step} in {Emit.FunctionMethod(name)}()) yield return {step};");
+            },
+            FunctionName()),
 
         // ---------- Motion (3D) ----------
         Statement("move_forward", "Motion", "move {distance} units forward", BlockShape.Stack,
@@ -174,6 +204,15 @@ internal static class StandardBlocks
         Reporter("distance_to", "Sensing", "distance to x: {x} y: {y} z: {z}", "number",
             (n, e) => $"Vector3.Distance(Position, {Vec3(n, e)})",
             Num("x"), Num("y"), Num("z")),
+
+        Reporter("collision_enter", "Sensing", "collision enter with {object}", "bool",
+            (n, e) => $"CollisionEnter({e.Value(n, "object")})", SceneObject()),
+
+        Reporter("collision_end", "Sensing", "collision end with {object}", "bool",
+            (n, e) => $"CollisionExit({e.Value(n, "object")})", SceneObject()),
+
+        Reporter("collision_now", "Sensing", "collision now with {object}", "bool",
+            (n, e) => $"Colliding({e.Value(n, "object")})", SceneObject()),
 
         Reporter("timer", "Sensing", "timer", "number", (n, e) => "Timer"),
         Reporter("delta_time", "Sensing", "delta time", "number", (n, e) => "Time.deltaTime"),

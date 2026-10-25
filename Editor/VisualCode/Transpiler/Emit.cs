@@ -22,6 +22,14 @@ public sealed class Emit
 
     public string Unique(string prefix) => prefix + (++_counter);
 
+    // The functions the script defines (their names as typed), filled in by the transpiler before any code is generated.
+    public HashSet<string> Functions { get; } = new();
+
+    public bool HasFunction(string name) => Functions.Contains(name);
+
+    // The C# method a function becomes. Names are made of letters, digits and underscores; anything else becomes one.
+    public static string FunctionMethod(string name) => "Fn_" + Regex.Replace(name.Trim(), "[^A-Za-z0-9_]", "_");
+
     public void Warn(VcNode? node, string message) =>
         _diagnostics.Add(new Diagnostic(DiagnosticSeverity.Warning, node?.Id, message));
 
