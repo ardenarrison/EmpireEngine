@@ -20,18 +20,18 @@ public static class ReleaseInstaller
     private const long MaxDownloadBytes = 2L * 1024 * 1024 * 1024;      // 2 GB: far bigger than any Empire release
     private const long MaxUnpackedBytes = 6L * 1024 * 1024 * 1024;      // a zip that unpacks to more than this is refused
 
-    // Where the hub's installs live: <hub>/Empire.
-    public static string DefaultRoot => Path.Combine(AppContext.BaseDirectory, "Empire");
+    // Where the hub's installs live: <hub>/Empire, or in the user's app-data folder when the Hub is a macOS app (see HubPaths).
+    public static string DefaultRoot => HubPaths.InstallsRoot;
 
     // The versions already in an installs folder, by folder name.
     public static HashSet<string> InstalledVersions(string root) =>
         Directory.Exists(root)
-            ? Directory.GetDirectories(root).Where(d => File.Exists(Path.Combine(d, "empire.dll")))
+            ? Directory.GetDirectories(root).Where(d => EditorLayout.EntryFolder(d) is not null)
                 .Select(d => Path.GetFileName(d)).ToHashSet(StringComparer.OrdinalIgnoreCase)
             : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
     public static async Task<string> InstallAsync(HttpClient http, EmpireRelease release, string root,
-        IProgress<InstallProgress>? progress, CancellationToken ct)
+        IProgress<InstallProgress>? progress, CancellationToken ct, bool resign = true)
     {
         if (release.Asset is not { } asset)
             throw new InstallException($"Empire {release.Version} has no download for this computer ({ReleaseCatalog.CurrentPlatform}).");
@@ -63,6 +63,11 @@ public static class ReleaseInstaller
             string final = Path.Combine(root, folder);
             if (Directory.Exists(final))
                 throw new InstallException($"Empire {folder} is already installed.");
+
+            // A Mac editor is an app. Unpacking doesn't restore the signature that came with it (it is kept in file attributes), so the
+            // app is signed again here; if that can't be done the editor still runs, so it isn't treated as a failure.
+            if (resign && EditorLayout.EntryFolder(staging) is { } entry && EditorLayout.AppOf(entry) is { } app)
+                HubUpdater.Resign(app);
 
             File.WriteAllText(Path.Combine(staging, MarkerFile), JsonSerializer.Serialize(new InstallMarker
             {
@@ -144,8 +149,8 @@ public static class ReleaseInstaller
     {
         using var zip = ZipFile.OpenRead(zipPath);
 
-        // Which versions the zip holds: every Empire/<name>/empire.dll.
-        var editors = zip.Entries.Select(e => Regex.Match(Normalize(e.FullName), @"^Empire/([^/]+)/empire\.dll$"))
+        // Which versions the zip holds: every Empire/<name>/empire.dll, or on a Mac Empire/<name>/<Something>.app/Contents/MacOS/empire.dll.
+        var editors = zip.Entries.Select(e => Regex.Match(Normalize(e.FullName), @"^Empire/([^/]+)/(?:[^/]+\.app/Contents/MacOS/)?empire\.dll$"))
             .Where(m => m.Success).Select(m => m.Groups[1].Value).Distinct().ToList();
         if (editors.Count == 0)
             throw new InstallException("This download doesn't contain an Empire editor (no Empire/<version>/empire.dll in it).");
@@ -155,14 +160,14 @@ public static class ReleaseInstaller
 
         ExtractEntries(zip, $"Empire/{folder}/", stagingFolder, skip: null, ct);
 
-        if (!File.Exists(Path.Combine(stagingFolder, "empire.dll")))
-            throw new InstallException("The editor in this download is incomplete (empire.dll is missing).");
+        string entryFolder = EditorLayout.EntryFolder(stagingFolder)
+            ?? throw new InstallException("The editor in this download is incomplete (empire.dll is missing).");
 
         // The editor starts through its own launcher; make sure it can run even if the zip didn't keep the permission.
         if (!OperatingSystem.IsWindows())
             foreach (var launcher in new[] { "empire", Path.Combine("Player", "Player") })
             {
-                string path = Path.Combine(stagingFolder, launcher);
+                string path = Path.Combine(entryFolder, launcher);
                 if (File.Exists(path))
                     File.SetUnixFileMode(path, File.GetUnixFileMode(path) | UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute);
             }
@@ -231,7 +236,7 @@ public static class ReleaseInstaller
         var comparison = OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
         if (!string.Equals(Path.GetDirectoryName(target), rootFull, comparison) || string.Equals(target, rootFull, comparison))
             throw new InstallException("That editor isn't in the Hub's installs folder, so the Hub won't delete it.");
-        if (!File.Exists(Path.Combine(target, "empire.dll")))
+        if (EditorLayout.EntryFolder(target) is null)
             throw new InstallException("That folder doesn't hold an Empire editor, so the Hub won't delete it.");
 
         try

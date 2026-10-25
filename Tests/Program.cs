@@ -1,5 +1,6 @@
 using Editor.Assistant;
 using Editor;
+using Editor.Ui;
 using Editor.Terminal;
 using System.IO.Compression;
 using System.Net;
@@ -1909,6 +1910,158 @@ Directory.CreateDirectory(Path.Combine(projectDir, "Scenes"));
           !HubUpdater.CanReplace(installedHub, Path.Combine(buildHub, HubUpdater.ExecutableName), out _),
           "a Hub replaces itself only when it is the installed program in its own folder, not a build or dotnet");
 
+    // --- the Hub as a macOS app (Empire Engine Hub.app) ---
+    const string AppName = "Empire Engine Hub.app";
+    Check(HubPaths.IsInAppBundle("/Applications/Empire Engine Hub.app/Contents/MacOS") && HubPaths.IsInAppBundle("/Applications/Empire Engine Hub.app/Contents/MacOS/") &&
+          HubPaths.IsInAppBundle("C:\\Apps\\Hub.app\\Contents\\MacOS\\") && HubPaths.IsInAppBundle("/x/hub.APP/contents/macos") &&
+          !HubPaths.IsInAppBundle("/Applications/Hub/Contents/MacOS") && !HubPaths.IsInAppBundle("/x/.app/Contents/MacOS") && !HubPaths.IsInAppBundle("/x/Foo.app/Contents/Resources") &&
+          !HubPaths.IsInAppBundle("/x/Hub.app") && !HubPaths.IsInAppBundle("/srv/me-hub"),
+          "a Hub folder is recognised as the inside of an app only when it is <Name>.app/Contents/MacOS");
+    Check(HubPaths.BundlePath("/Applications/Empire Engine Hub.app/Contents/MacOS/") == "/Applications/Empire Engine Hub.app" && HubPaths.BundlePath("/srv/me-hub") is null,
+          "the app's own folder is found from the Hub's folder inside it");
+    Check(HubPaths.InstallsRootFor("/Applications/Empire Engine Hub.app/Contents/MacOS", "/data/Library/Application Support") == Path.Combine("/data/Library/Application Support", "EmpireHub", "Empire") &&
+          HubPaths.InstallsRootFor("/opt/hub", "/data/AppData") == Path.Combine("/opt/hub", "Empire"),
+          "an app keeps its installed editors in the user's app-data folder, not inside itself; a plain Hub keeps them beside its files");
+    Check(HubUpdater.ExecutableIn("/x/" + AppName) == Path.Combine("/x", AppName, "Contents", "MacOS", "EmpireHub") && HubUpdater.ExecutableIn("/opt/hub") == Path.Combine("/opt/hub", HubUpdater.ExecutableName) &&
+          HubUpdater.IsBundleRoot("/x/" + AppName) && HubUpdater.IsBundleRoot("/x/" + AppName + "/") && !HubUpdater.IsBundleRoot("/opt/hub"),
+          "the Hub's program is found inside an app (Contents/MacOS) or at the top of a plain folder");
+
+    (string, byte[], int)[] AppFiles(string app, params (string, byte[], int)[] more) => new (string, byte[], int)[]
+    {
+        ($"{app}/Contents/MacOS/EmpireHub", Bytes("host"), Exec), ($"{app}/Contents/MacOS/EmpireHub.dll", Bytes("dll"), Plain), ($"{app}/Contents/MacOS/libSkia.dylib", Bytes("native"), Plain),
+        ($"{app}/Contents/MacOS/Licenses/NOTICE.txt", Bytes("notice"), Plain), ($"{app}/Contents/Info.plist", Bytes("plist"), Plain), ($"{app}/Contents/Resources/EmpireEngineIcon.icns", Bytes("icns"), Plain),
+        ($"{app}/Contents/_CodeSignature/CodeResources", Bytes("seal"), Plain),
+    }.Concat(more).ToArray();
+    // a zip made by macOS's ditto also holds __MACOSX entries (the app's signature as file attributes), which must be ignored
+    byte[] appZip = MakeZip(AppFiles(AppName, ("__MACOSX/" + AppName + "/Contents/MacOS/._EmpireHub", Bytes("junk"), Plain), ("__MACOSX/._" + AppName, Bytes("junk"), Plain)));
+    string appStage = Path.Combine(dir, "appstage-" + Guid.NewGuid().ToString("N"));
+    string appZipPath = Path.Combine(dir, "app-" + Guid.NewGuid().ToString("N") + ".zip"); File.WriteAllBytes(appZipPath, appZip);
+    string appRoot = HubUpdater.Unpack(appZipPath, appStage);
+    Check(appRoot == Path.Combine(appStage, AppName) && File.ReadAllText(Path.Combine(appRoot, "Contents", "Info.plist")) == "plist" && File.Exists(Path.Combine(appRoot, "Contents", "Resources", "EmpireEngineIcon.icns")) &&
+          File.ReadAllText(Path.Combine(appRoot, "Contents", "MacOS", "Licenses", "NOTICE.txt")) == "notice" && !Directory.Exists(Path.Combine(appStage, "__MACOSX")),
+          "a Hub update that is a macOS app is unpacked as the app, without the extra __MACOSX entries");
+    if (!OperatingSystem.IsWindows())
+        Check((File.GetUnixFileMode(HubUpdater.ExecutableIn(appRoot)) & UnixFileMode.UserExecute) != 0, "the app's program can be run");
+
+    string UnpackError(byte[] zipBytes) { string zp = Path.Combine(dir, "bad-" + Guid.NewGuid().ToString("N") + ".zip"); File.WriteAllBytes(zp, zipBytes); try { HubUpdater.Unpack(zp, Path.Combine(dir, "badstage-" + Guid.NewGuid().ToString("N"))); return ""; } catch (InstallException ex) { return ex.Message; } }
+    Check(UnpackError(MakeZip(AppFiles(AppName).Where(f => !f.Item1.EndsWith("EmpireHub.dll")).ToArray())).Contains("doesn't contain the Hub") &&
+          UnpackError(MakeZip(AppFiles(AppName, ($"{AppName}/Contents/MacOS/../../../evil.txt", Bytes("pwned"), Plain)))).Contains("unsafe path") &&
+          UnpackError(MakeZip(AppFiles("Bad<>Name.app"))).Contains("usable name") &&
+          UnpackError(MakeZip(AppFiles(AppName, ($"{AppName}/Contents/MacOS/link", Bytes("/etc/passwd"), 0xA1FF)))).Contains("symbolic link"),
+          "a Hub app with its program missing, an unsafe path, a strange name or a symbolic link is refused");
+    Check(Directory.GetFiles(dir, "evil.txt", SearchOption.AllDirectories).Length == 0 && !File.Exists(Path.Combine(dir, "..", "evil.txt")), "a refused app writes nothing outside its folder");
+
+    string appTemp = TempRoot();
+    using (var http = Serving(appZip, out _))
+    {
+        string stagedApp = await HubUpdater.DownloadAsync(http, Update(appZip, Sha(appZip)), null, CancellationToken.None, appTemp);
+        Check(HubUpdater.IsBundleRoot(stagedApp) && File.Exists(HubUpdater.ExecutableIn(stagedApp)), "downloading a Hub update that is an app gives the app, checked against its checksum like any other");
+    }
+
+    // putting a new app over the installed one: the result is exactly the new app
+    string newApp = Path.Combine(dir, "newapp-" + Guid.NewGuid().ToString("N"), AppName), oldApp = Path.Combine(dir, "oldapp-" + Guid.NewGuid().ToString("N"), AppName);
+    foreach (var (appFolder, files) in new[] { (newApp, AppFiles("x").Select(f => (f.Item1[2..], f.Item2, f.Item3)).ToArray()) })
+        foreach (var (name, data, _) in files) { string target = Path.Combine(appFolder, name); Directory.CreateDirectory(Path.GetDirectoryName(target)!); File.WriteAllBytes(target, data); }
+    File.WriteAllText(Path.Combine(newApp, "Contents", "MacOS", "brand-new.txt"), "new");
+    if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(Path.Combine(newApp, "Contents", "MacOS", "EmpireHub"), (UnixFileMode)0x1ED);   // rwxr-xr-x, as the zip would hold it
+    foreach (var (name, text) in new[] { ("Contents/MacOS/EmpireHub", "old host"), ("Contents/MacOS/EmpireHub.dll", "old dll"), ("Contents/MacOS/only-in-old.dll", "gone"), ("Contents/MacOS/OldDir/inner.txt", "gone"), ("Contents/Resources/old.icns", "gone") })
+    {
+        string target = Path.Combine(oldApp, name); Directory.CreateDirectory(Path.GetDirectoryName(target)!); File.WriteAllText(target, text);
+    }
+    Check(HubUpdater.ApplyFiles(newApp, oldApp, resign: false) is null &&
+          File.ReadAllText(Path.Combine(oldApp, "Contents", "MacOS", "EmpireHub.dll")) == "dll" && File.ReadAllText(Path.Combine(oldApp, "Contents", "MacOS", "brand-new.txt")) == "new" &&
+          File.ReadAllText(Path.Combine(oldApp, "Contents", "Info.plist")) == "plist" && File.Exists(Path.Combine(oldApp, "Contents", "_CodeSignature", "CodeResources")),
+          "applying a Hub app over the installed one brings in the new files");
+    Check(!File.Exists(Path.Combine(oldApp, "Contents", "MacOS", "only-in-old.dll")) && !Directory.Exists(Path.Combine(oldApp, "Contents", "MacOS", "OldDir")) && !File.Exists(Path.Combine(oldApp, "Contents", "Resources", "old.icns")),
+          "and removes what the new app doesn't have, so the result is exactly the new app");
+    List<string> sameFiles(string folder) => Directory.GetFiles(folder, "*", SearchOption.AllDirectories).Select(f => Path.GetRelativePath(folder, f)).Order().ToList();
+    Check(sameFiles(newApp).SequenceEqual(sameFiles(oldApp)) && !Directory.GetFiles(oldApp, "*.new-*", SearchOption.AllDirectories).Any(), "the two apps hold the same files, and no temporary files are left");
+    if (!OperatingSystem.IsWindows())
+        Check((File.GetUnixFileMode(Path.Combine(oldApp, "Contents", "MacOS", "EmpireHub")) & UnixFileMode.UserExecute) != 0, "the app's program keeps its executable permission after the swap");
+
+    string notAnApp = Path.Combine(dir, "plain-" + Guid.NewGuid().ToString("N"), "NotHub.app"); Directory.CreateDirectory(notAnApp); File.WriteAllText(Path.Combine(notAnApp, "precious.txt"), "keep me");
+    string flatSource = Path.Combine(dir, "flatsrc-" + Guid.NewGuid().ToString("N")), flatTarget = Path.Combine(dir, "flattgt-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(flatSource); Directory.CreateDirectory(flatTarget); File.WriteAllText(Path.Combine(flatSource, HubUpdater.ExecutableName), "new"); File.WriteAllText(Path.Combine(flatTarget, "keep.txt"), "kept");
+    Check(HubUpdater.ApplyFiles(newApp, notAnApp, resign: false) is { } notHubMessage && notHubMessage.Contains("isn't a Hub app") && File.ReadAllText(Path.Combine(notAnApp, "precious.txt")) == "keep me",
+          "a folder that is not a Hub app is never rewritten, even if it is named like one");
+    Check(HubUpdater.ApplyFiles(newApp, flatTarget, resign: false)?.Contains("packaged differently") == true && HubUpdater.ApplyFiles(flatSource, oldApp, resign: false)?.Contains("packaged differently") == true &&
+          File.ReadAllText(Path.Combine(flatTarget, "keep.txt")) == "kept" && sameFiles(newApp).SequenceEqual(sameFiles(oldApp)),
+          "an app update can't be put over a plain Hub, or the other way round: it says so and changes nothing");
+    Check(HubUpdater.ApplyFiles(flatSource, flatTarget, resign: false) is null && File.ReadAllText(Path.Combine(flatTarget, HubUpdater.ExecutableName)) == "new" && File.ReadAllText(Path.Combine(flatTarget, "keep.txt")) == "kept",
+          "a plain Hub is updated as before, keeping files only the old one had");
+
+    // an app can only update itself where it can write inside itself (not when macOS opened it read-only from the Downloads folder)
+    string fakeApp = Path.Combine(dir, "fakeapp-" + Guid.NewGuid().ToString("N"), AppName), fakeMacOS = Path.Combine(fakeApp, "Contents", "MacOS");
+    Directory.CreateDirectory(fakeMacOS);
+    Check(HubUpdater.CanReplace(fakeMacOS, Path.Combine(fakeMacOS, HubUpdater.ExecutableName), out _), "an app in a place it can write can update itself");
+    if (!OperatingSystem.IsWindows())
+    {
+        File.SetUnixFileMode(fakeMacOS, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+        bool canWrite = HubUpdater.CanReplace(fakeMacOS, Path.Combine(fakeMacOS, HubUpdater.ExecutableName), out string readOnlyReason);
+        File.SetUnixFileMode(fakeMacOS, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        Check(!canWrite && readOnlyReason.Contains("Applications"), "an app that can't write inside itself says to move it to Applications, instead of failing");
+    }
+
+    // --- the editor as a macOS app (Empire Engine Editor.app inside the version folder) ---
+    const string EditorApp = "Empire Engine Editor.app";
+    (string, byte[], int)[] EditorAppFiles(string version, params (string, byte[], int)[] more) => new (string, byte[], int)[]
+    {
+        ($"Empire/{version}/{EditorApp}/Contents/MacOS/empire", Bytes("#!/bin/sh\necho started \"$@\" > \"$PWD/launched.txt\"\n"), Exec),
+        ($"Empire/{version}/{EditorApp}/Contents/MacOS/empire.dll", Bytes("dll"), Plain), ($"Empire/{version}/{EditorApp}/Contents/MacOS/Player/Player", Bytes("player"), Plain),
+        ($"Empire/{version}/{EditorApp}/Contents/MacOS/Licenses/ThirdParty/x.txt", Bytes("notice"), Plain), ($"Empire/{version}/{EditorApp}/Contents/Info.plist", Bytes("plist"), Plain),
+        ($"Empire/{version}/{EditorApp}/Contents/Resources/EmpireEngineIcon.icns", Bytes("icns"), Plain), ($"Empire/{version}/{EditorApp}/Contents/_CodeSignature/CodeResources", Bytes("seal"), Plain),
+    }.Concat(more).ToArray();
+    byte[] editorAppZip = MakeZip(EditorAppFiles("0.2.5", ("__MACOSX/Empire/0.2.5/" + EditorApp + "/Contents/MacOS/._empire.dll", Bytes("junk"), Plain), ("Empire/0.0.1/empire.dll", Bytes("older plain editor"), Plain)));
+
+    string editorStage = Path.Combine(dir, "editorstage-" + Guid.NewGuid().ToString("N")), editorZipPath = Path.Combine(dir, "editorapp-" + Guid.NewGuid().ToString("N") + ".zip");
+    File.WriteAllBytes(editorZipPath, editorAppZip);
+    string unpackedVersion = ReleaseInstaller.Unpack(editorZipPath, "0.2.5", editorStage);
+    string? stagedEntry = EditorLayout.EntryFolder(editorStage);
+    Check(unpackedVersion == "0.2.5" && stagedEntry == Path.Combine(editorStage, EditorApp, "Contents", "MacOS") && EditorLayout.AppOf(stagedEntry!) == Path.Combine(editorStage, EditorApp) &&
+          File.ReadAllText(Path.Combine(stagedEntry!, "Licenses", "ThirdParty", "x.txt")) == "notice" && File.Exists(Path.Combine(editorStage, EditorApp, "Contents", "Resources", "EmpireEngineIcon.icns")) &&
+          !Directory.Exists(Path.Combine(editorStage, "__MACOSX")) && !File.Exists(Path.Combine(editorStage, "empire.dll")),
+          "an editor that is a Mac app is unpacked as the app inside its version folder, found by its inside, without the __MACOSX entries or other versions");
+    if (!OperatingSystem.IsWindows())
+        Check((File.GetUnixFileMode(Path.Combine(stagedEntry!, "empire")) & UnixFileMode.UserExecute) != 0 && (File.GetUnixFileMode(Path.Combine(stagedEntry!, "Player", "Player")) & UnixFileMode.UserExecute) != 0,
+              "the app's editor and player programs can be run");
+
+    string editorAppRoot = NewRoot();
+    using (var http = Serving(editorAppZip, out _))
+    {
+        string installedApp = await ReleaseInstaller.InstallAsync(http, Release("0.2.5", editorAppZip, Sha(editorAppZip)), editorAppRoot, null, CancellationToken.None, resign: false);
+        Check(installedApp == Path.Combine(editorAppRoot, "0.2.5") && ReleaseInstaller.InstalledVersions(editorAppRoot).SetEquals(["0.2.5"]) && File.Exists(Path.Combine(installedApp, ReleaseInstaller.MarkerFile)) && Leftovers(editorAppRoot).Length == 0,
+              "installing an editor that is a Mac app puts the app in <installs>/<version>/ and it counts as installed");
+        var asInstall = EditorInstall.FromFolder(installedApp, bundled: true);
+        Check(asInstall is { Downloaded: true, Bundled: true } && asInstall.Folder == Path.GetFullPath(installedApp) && asInstall.EntryFolder == Path.GetFullPath(Path.Combine(installedApp, EditorApp, "Contents", "MacOS")) && asInstall.Version == "0.2.5",
+              "the Hub's list shows the editor app, with the version folder as its folder and the app's inside as where its files are");
+        Check(EditorInstall.FromFolder(Path.Combine(installedApp, EditorApp), bundled: false)?.EntryFolder == asInstall!.EntryFolder, "pointing the Hub at the .app itself (Locate) also finds the editor");
+        Check(EditorInstall.FromFolder(editorAppRoot, bundled: false) is null, "a folder that only holds installs, not an editor, isn't one");
+        if (!OperatingSystem.IsWindows())
+        {
+            string project = Path.Combine(dir, "launch-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(project);
+            using var launched = asInstall.Launch(Path.Combine(project, "Scenes", "Main.empirescene"), project);
+            launched.WaitForExit(5000);
+            Check(File.Exists(Path.Combine(project, "launched.txt")) && File.ReadAllText(Path.Combine(project, "launched.txt")).Contains("Main.empirescene") && File.ReadAllText(Path.Combine(project, "launched.txt")).Contains(project),
+                  "the Hub starts the editor from inside its app, in the project's folder, given the scene and the project");
+        }
+        ReleaseInstaller.Uninstall(editorAppRoot, installedApp);
+        Check(!Directory.Exists(installedApp) && Directory.Exists(editorAppRoot), "uninstalling an editor app deletes its version folder");
+    }
+    var plainAndApp = NewRoot();
+    foreach (var (name, entryFile) in new[] { ("0.3.0", "empire.dll"), ("0.3.1", $"{EditorApp}/Contents/MacOS/empire.dll"), ("0.3.2", "nothing.txt") })
+    {
+        string file = Path.Combine(plainAndApp, name, entryFile); Directory.CreateDirectory(Path.GetDirectoryName(file)!); File.WriteAllText(file, "x");
+    }
+    Check(ReleaseInstaller.InstalledVersions(plainAndApp).SetEquals(["0.3.0", "0.3.1"]), "a plain editor folder and an editor app both count as installed, and a folder with neither doesn't");
+    string emptyVersionFolder = Path.Combine(plainAndApp, "0.3.2");
+    Check(InstallError(() => { ReleaseInstaller.Uninstall(plainAndApp, emptyVersionFolder); return Task.CompletedTask; }).Length > 0 && Directory.Exists(emptyVersionFolder), "uninstall still refuses a folder that holds no editor");
+    byte[] brokenEditorApp = MakeZip(EditorAppFiles("0.4.0").Where(f => !f.Item1.EndsWith("empire.dll")).Append(($"Empire/0.4.0/{EditorApp}/Contents/MacOS/other.dll", Bytes("x"), Plain)).ToArray());
+    string brokenZip = Path.Combine(dir, "brokenapp-" + Guid.NewGuid().ToString("N") + ".zip"); File.WriteAllBytes(brokenZip, brokenEditorApp);
+    Check(InstallError(() => { ReleaseInstaller.Unpack(brokenZip, "0.4.0", Path.Combine(dir, "brokenstage")); return Task.CompletedTask; }).Contains("doesn't contain an Empire editor"), "an editor app without its empire.dll is refused");
+    byte[] slipEditorApp = MakeZip(EditorAppFiles("0.4.1", ($"Empire/0.4.1/{EditorApp}/Contents/MacOS/../../../../evil.txt", Bytes("pwned"), Plain)));
+    string slipZip = Path.Combine(dir, "slipapp-" + Guid.NewGuid().ToString("N") + ".zip"); File.WriteAllBytes(slipZip, slipEditorApp);
+    Check(InstallError(() => { ReleaseInstaller.Unpack(slipZip, "0.4.1", Path.Combine(dir, "slipstage")); return Task.CompletedTask; }).Contains("unsafe path"), "an editor app with an unsafe path is refused");
+
     // Asking GitHub for an update end to end (a fake GitHub).
     using (var http = new HttpClient(new FakeGitHub(r => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(hubJson), RequestMessage = r })))
         Check((await HubUpdater.CheckAsync(http, CancellationToken.None, "0.1.0", "win-x64"))?.Version == "0.2.0" && await HubUpdater.CheckAsync(http, CancellationToken.None, "0.2.0", "win-x64") is null,
@@ -2347,6 +2500,35 @@ if (!OperatingSystem.IsWindows())
     bool refused = false;
     try { new ProjectSettings().Save(Path.Combine(psDir, "no-such-folder")); } catch (IOException) { refused = true; } catch (UnauthorizedAccessException) { refused = true; }
     Check(refused, "saving to a folder that doesn't exist is reported, not silently ignored");
+}
+
+// ---- The editor's light or dark look: --lightmode, --darkmode, or the system's ---------------------------------------------------
+{
+    var none = ThemeChoice.FromArguments(["scene.empirescene", "proj"], out var plain);
+    Check(none == ThemeChoice.Request.System && plain.SequenceEqual(["scene.empirescene", "proj"]), "without a theme flag the editor asks the system, and its arguments are untouched");
+    Check(ThemeChoice.FromArguments(["--lightmode", "scene.empirescene", "proj"], out var a1) == ThemeChoice.Request.Light && a1.SequenceEqual(["scene.empirescene", "proj"]) &&
+          ThemeChoice.FromArguments(["scene.empirescene", "proj", "--darkmode"], out var a2) == ThemeChoice.Request.Dark && a2.SequenceEqual(["scene.empirescene", "proj"]) &&
+          ThemeChoice.FromArguments(["scene.empirescene", "--LightMode", "proj"], out var a3) == ThemeChoice.Request.Light && a3.SequenceEqual(["scene.empirescene", "proj"]),
+          "--lightmode and --darkmode work anywhere in the arguments, in any letter case, and are taken out so the scene and project are found as before");
+    Check(ThemeChoice.FromArguments(["--lightmode", "x", "--darkmode"], out _) == ThemeChoice.Request.Dark && ThemeChoice.FromArguments(["--darkmode", "--lightmode"], out _) == ThemeChoice.Request.Light &&
+          ThemeChoice.FromArguments(["--light-mode", "--dark"], out var a4) == ThemeChoice.Request.System && a4.Length == 2,
+          "when both flags are given the last one wins, and look-alikes are not flags");
+    int asked = 0;
+    bool? Pretend(bool? answer) { asked++; return answer; }
+    Check(ThemeChoice.IsLight(ThemeChoice.Request.Light, () => Pretend(false)) && !ThemeChoice.IsLight(ThemeChoice.Request.Dark, () => Pretend(true)) && asked == 0,
+          "a flag is obeyed without asking the system");
+    Check(ThemeChoice.IsLight(ThemeChoice.Request.System, () => Pretend(true)) && !ThemeChoice.IsLight(ThemeChoice.Request.System, () => Pretend(false)) &&
+          !ThemeChoice.IsLight(ThemeChoice.Request.System, () => Pretend(null)) && asked == 3,
+          "without a flag the system's setting is used, and dark if it can't be found out");
+    Check(ThemeChoice.FromColorScheme("'prefer-dark'\n") == false && ThemeChoice.FromColorScheme("'prefer-light'") == true && ThemeChoice.FromColorScheme("'default'") == true &&
+          ThemeChoice.FromColorScheme("") is null && ThemeChoice.FromColorScheme("error: no such schema") is null && ThemeChoice.FromColorScheme(null) is null,
+          "GNOME's color-scheme setting is read: prefer-dark is dark, prefer-light and default are light, anything else is unknown");
+    Check(ThemeChoice.FromGtkTheme("Adwaita:dark") == false && ThemeChoice.FromGtkTheme("Breeze-Dark") == false && ThemeChoice.FromGtkTheme("Adwaita") is null && ThemeChoice.FromGtkTheme(null) is null,
+          "a GTK_THEME that names a dark theme means dark; otherwise it says nothing");
+    bool? real = ThemeChoice.SystemIsLight();   // whatever this computer says: it just must not crash or hang
+    Check(real is null or true or false, "asking the real system works");
+    Check(Editor.Terminal.TerminalGlyphs.Palette(3) == 0xE5E510 && Editor.Terminal.TerminalGlyphs.Palette(3, light: true) == 0x949800 && Editor.Terminal.TerminalGlyphs.Palette(200) == Editor.Terminal.TerminalGlyphs.Palette(200, light: true),
+          "the terminal's basic colors have a set that can be read on white, and the 256-color cube is the same in both");
 }
 
 Console.WriteLine(failures == 0 ? "\nAll checks passed." : $"\n{failures} check(s) failed.");

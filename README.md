@@ -6,7 +6,7 @@ Empire Engine is a 3D game engine written in C# on .NET 10. It draws with Vulkan
 scripts in C# or snap them together from blocks, press Play to try the game, and build it into a program you can hand to
 other people.
 
-> **Status: early (0.1.5).** It works and is used to make small games, but expect rough edges and changes between versions.
+> **Status: early (0.1.6).** It works and is used to make small games, but expect rough edges and changes between versions.
 
 ## What's in it
 
@@ -43,7 +43,7 @@ dotnet run --project Tests                                                # the 
 ```
 
 In the Hub, **New project** makes a starter project: a scene with a sun, sky, camera and a flat terrain. To package Empire Engine itself
-for release, run `python3 publish.py` (see the script's header). The Hub package doesn't include an editor: a released Hub downloads
+for release, run `python3 publish.py` (see the script's header). On a Mac the Hub is packaged as `Empire Engine Hub.app` and the editor as `Empire Engine Editor.app`. The Hub package doesn't include an editor: a released Hub downloads
 one from the GitHub releases (Installs > Install version...).
 
 Empire Engine is developed mainly on macOS and works on Windows. Linux builds are supported by `publish.py` but have had the

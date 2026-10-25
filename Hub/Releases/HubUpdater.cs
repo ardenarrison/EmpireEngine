@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO.Compression;
 using System.Reflection;
 using System.Security.Cryptography;
+using System.Text.RegularExpressions;
 
 namespace EmpireHub;
 
@@ -27,9 +28,22 @@ public static class HubUpdater
         typeof(HubUpdater).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0] ?? "0.0.0";
 
     // Where the Hub keeps its settings (the same folder as HubSettings.Folder, which isn't part of the update code).
-    private static string SettingsFolder => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "EmpireHub");
+    private static string SettingsFolder =>
+        Environment.GetEnvironmentVariable("EMPIRE_HUB_SETTINGS") is { Length: > 0 } custom
+            ? custom
+            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "EmpireHub");
 
     public static string ExecutableName => OperatingSystem.IsWindows() ? "EmpireHub.exe" : "EmpireHub";
+
+    // What an update replaces: for a plain folder the folder itself, for the macOS app the Empire Engine Hub.app folder.
+    public static string CurrentRoot => HubPaths.BundlePath(AppContext.BaseDirectory) ?? AppContext.BaseDirectory.TrimEnd('/', '\\');
+
+    // Whether a root is an app bundle (its name ends in .app) rather than a plain folder.
+    public static bool IsBundleRoot(string root) => root.TrimEnd('/', '\\').EndsWith(".app", StringComparison.OrdinalIgnoreCase);
+
+    // The Hub's program inside a root: at the top of a plain folder, in Contents/MacOS in an app bundle.
+    public static string ExecutableIn(string root) =>
+        IsBundleRoot(root) ? Path.Combine(root, "Contents", "MacOS", "EmpireHub") : Path.Combine(root, ExecutableName);
 
     // The newest final release that has a Hub download for this computer and is newer than the running version.
     public static HubUpdate? FindUpdate(IEnumerable<EmpireRelease> releases, string currentVersion)
@@ -58,6 +72,7 @@ public static class HubUpdater
             reason = "This copy of the Hub is running from a build, not from an installed Hub, so it can't replace itself.";
             return false;
         }
+        bool inApp = HubPaths.IsInAppBundle(hubFolder);
         try
         {
             string probe = Path.Combine(hubFolder, $".write-test-{Guid.NewGuid():N}");
@@ -66,7 +81,9 @@ public static class HubUpdater
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            reason = $"The Hub can't write to its own folder ({hubFolder}), so it can't update itself there. Download the new version instead.";
+            reason = inApp
+                ? "The Hub can't change itself where it is. If you opened it straight from the Downloads folder, drag it into Applications, open it from there, and try again. Or download the new version instead."
+                : $"The Hub can't write to its own folder ({hubFolder}), so it can't update itself there. Download the new version instead.";
             return false;
         }
         reason = "";
@@ -100,11 +117,11 @@ public static class HubUpdater
 
             progress?.Report(new InstallProgress("Unpacking", -1));
             string hub = Path.Combine(work, "hub");
-            await Task.Run(() => Unpack(zip, hub, ct), ct);
+            string root = await Task.Run(() => Unpack(zip, hub, ct), ct);
             File.Delete(zip);
             done = true;
             progress?.Report(new InstallProgress("Done", 1));
-            return hub;
+            return root;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or HttpRequestException)
         {
@@ -116,26 +133,43 @@ public static class HubUpdater
         }
     }
 
-    // Unpacks the Hub's zip. It holds the Hub's files at the top level; anything under Empire/ is left out, so an update can
-    // never put files into (or over) the installed editors.
-    public static void Unpack(string zipPath, string folder, CancellationToken ct = default)
+    // Unpacks the Hub's zip into `folder` and returns the new Hub's root. A Windows or Linux zip holds the Hub's files at the top level
+    // (anything under Empire/ is left out, so an update can never put files into the installed editors); the macOS zip holds one
+    // Empire Engine Hub.app, whose root is that folder.
+    public static string Unpack(string zipPath, string folder, CancellationToken ct = default)
     {
         using var zip = ZipFile.OpenRead(zipPath);
-        ReleaseInstaller.ExtractEntries(zip, "", folder, name => name.StartsWith("Empire/", StringComparison.Ordinal), ct);
+        string? app = zip.Entries.Select(e => Regex.Match(e.FullName.Replace('\\', '/'), @"^([^/]+\.app)/Contents/MacOS/EmpireHub$"))
+            .FirstOrDefault(m => m.Success)?.Groups[1].Value;
 
-        string exe = Path.Combine(folder, ExecutableName);
-        if (!File.Exists(exe) || !File.Exists(Path.Combine(folder, "EmpireHub.dll")))
+        string root = folder;
+        if (app is not null)
+        {
+            if (!Regex.IsMatch(app, @"^[0-9A-Za-z][0-9A-Za-z ._\-]*\.app$") || app.Contains(".."))
+                throw new InstallException($"The app in this download ('{app}') doesn't have a usable name.");
+            root = Path.Combine(folder, app);
+            ReleaseInstaller.ExtractEntries(zip, app + "/", root, skip: null, ct);
+        }
+        else
+        {
+            ReleaseInstaller.ExtractEntries(zip, "", folder, name => name.StartsWith("Empire/", StringComparison.Ordinal), ct);
+        }
+
+        string exe = ExecutableIn(root);
+        if (!File.Exists(exe) || !File.Exists(Path.Combine(Path.GetDirectoryName(exe)!, "EmpireHub.dll")))
             throw new InstallException("This download doesn't contain the Hub (no EmpireHub program in it).");
         if (!OperatingSystem.IsWindows())
             File.SetUnixFileMode(exe, File.GetUnixFileMode(exe) | UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute);
+        return root;
     }
 
     // Starts the new Hub in update mode. The caller then closes this Hub, which is what the new one is waiting for.
-    public static void LaunchApply(string newHubFolder, string hubFolder)
+    // newRoot is what DownloadAsync returned and currentRoot is what is being replaced (CurrentRoot).
+    public static void LaunchApply(string newRoot, string currentRoot)
     {
-        var info = new ProcessStartInfo(Path.Combine(newHubFolder, ExecutableName)) { UseShellExecute = false, WorkingDirectory = newHubFolder };
+        var info = new ProcessStartInfo(ExecutableIn(newRoot)) { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(ExecutableIn(newRoot)) };
         info.ArgumentList.Add(ApplyArgument);
-        info.ArgumentList.Add(hubFolder);
+        info.ArgumentList.Add(currentRoot);
         info.ArgumentList.Add(Environment.ProcessId.ToString());
         Process.Start(info);
     }
@@ -154,7 +188,9 @@ public static class HubUpdater
                 try { Process.GetProcessById(pid).WaitForExit(60_000); }
                 catch (ArgumentException) { /* it has already closed */ }
             }
-            CopyOver(AppContext.BaseDirectory, hubFolder);
+            string source = HubPaths.BundlePath(AppContext.BaseDirectory) ?? AppContext.BaseDirectory;
+            string? problem = ApplyFiles(source, hubFolder);
+            if (problem is not null) throw new InvalidOperationException(problem);
             if (File.Exists(errorFile)) File.Delete(errorFile);
         }
         catch (Exception ex)
@@ -167,16 +203,70 @@ public static class HubUpdater
             catch (Exception) { /* nowhere to write it */ }
         }
 
-        string hub = Path.Combine(hubFolder, ExecutableName);
+        string hub = ExecutableIn(hubFolder);
         if (File.Exists(hub))
-            Process.Start(new ProcessStartInfo(hub) { UseShellExecute = false, WorkingDirectory = hubFolder });
+        {
+            // An app is opened the way macOS opens apps; a plain folder's program is started directly.
+            if (IsBundleRoot(hubFolder) && File.Exists("/usr/bin/open"))
+                Process.Start(new ProcessStartInfo("/usr/bin/open") { ArgumentList = { hubFolder }, UseShellExecute = false });
+            else
+                Process.Start(new ProcessStartInfo(hub) { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(hub) });
+        }
         return 0;
+    }
+
+    // Puts the new Hub (sourceRoot) over the installed one (targetRoot). Both have to be the same kind: two plain folders (the new files
+    // go over the old; files only the old one has are kept) or two app bundles (the whole app is made exactly like the new one, so its
+    // seal stays valid). Returns null when done, or a plain explanation of why it wasn't.
+    public static string? ApplyFiles(string sourceRoot, string targetRoot, bool resign = true)
+    {
+        bool sourceApp = IsBundleRoot(sourceRoot), targetApp = IsBundleRoot(targetRoot);
+        if (sourceApp != targetApp)
+            return "The new Hub is packaged differently from this one (an app instead of a folder, or the other way round), so it can't be put in place here. Download the new version instead.";
+        if (sourceApp)
+        {
+            // Only ever rewrite something that already is a Hub app, since extra files in it are removed.
+            if (!File.Exists(ExecutableIn(targetRoot)))
+                return $"{targetRoot} isn't a Hub app, so it was left alone.";
+            CopyOver(sourceRoot, targetRoot, removeExtra: true);
+            return resign ? Resign(targetRoot) : null;
+        }
+        CopyOver(sourceRoot, targetRoot);
+        return null;
+    }
+
+    // Signs the app again, ad hoc, once its files are in place. The signature that came with the download is kept in file attributes
+    // that the unpacking here doesn't restore, and the app is only accepted by macOS as one sealed thing if it is signed. (codesign comes
+    // with macOS.) Returns null, or a plain explanation when it couldn't be done.
+    public static string? Resign(string appRoot)
+    {
+        if (!OperatingSystem.IsMacOS() || !File.Exists("/usr/bin/codesign")) return null;
+        try
+        {
+            using var codesign = Process.Start(new ProcessStartInfo("/usr/bin/codesign")
+            {
+                ArgumentList = { "--force", "--deep", "--sign", "-", "--timestamp=none", appRoot },
+                UseShellExecute = false, RedirectStandardError = true, RedirectStandardOutput = true, CreateNoWindow = true,
+            })!;
+            var error = codesign.StandardError.ReadToEndAsync();
+            if (!codesign.WaitForExit(120_000))
+            {
+                try { codesign.Kill(); } catch (InvalidOperationException) { }
+                return "The updated Hub was put in place, but signing it again took too long.";
+            }
+            return codesign.ExitCode == 0 ? null : $"The updated Hub was put in place, but signing it again failed: {error.Result.Trim()}";
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or IOException)
+        {
+            return $"The updated Hub was put in place, but signing it again failed: {ex.Message}";
+        }
     }
 
     // Copies the new Hub's files over the Hub's folder. The Empire folder (the installed editors) is left alone, and files
     // that only exist in the old Hub are kept. Each file is written next to its target and then moved over it, so a file
     // is never half written, and a replaced program is a new file (macOS kills a signed program whose file is changed in place).
-    public static void CopyOver(string from, string to)
+    // With removeExtra, anything in the target that the new Hub doesn't have is removed too, so the result is exactly the new Hub.
+    public static void CopyOver(string from, string to, bool removeExtra = false)
     {
         Directory.CreateDirectory(to);
         foreach (var file in Directory.GetFiles(from))
@@ -189,7 +279,20 @@ public static class HubUpdater
         {
             string name = Path.GetFileName(dir);
             if (name.Equals("Empire", StringComparison.OrdinalIgnoreCase) || name.StartsWith('.')) continue;
-            CopyOver(dir, Path.Combine(to, name));
+            CopyOver(dir, Path.Combine(to, name), removeExtra);
+        }
+
+        if (!removeExtra) return;
+        foreach (var file in Directory.GetFiles(to))
+        {
+            string name = Path.GetFileName(file);
+            if (!name.StartsWith('.') && !File.Exists(Path.Combine(from, name))) Retry(() => File.Delete(file));
+        }
+        foreach (var dir in Directory.GetDirectories(to))
+        {
+            string name = Path.GetFileName(dir);
+            if (!name.Equals("Empire", StringComparison.OrdinalIgnoreCase) && !name.StartsWith('.') && !Directory.Exists(Path.Combine(from, name)))
+                Retry(() => Directory.Delete(dir, recursive: true));
         }
     }
 

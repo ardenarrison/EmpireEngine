@@ -15,6 +15,7 @@ public partial class MainWindow : Window
     private List<ProjectItem> _projects = new();
     private readonly List<(Process Process, string Folder)> _running = new();   // editors this Hub started that are still open
     private HubUpdate? _pendingUpdate;
+    private bool _built;     // false while the window is being put together, when the theme list changes without the user choosing
 
     public MainWindow()
     {
@@ -24,8 +25,11 @@ public partial class MainWindow : Window
         HubVersionText.Text = "Empire Engine Hub " + version;
         AboutVersionText.Text = $"Empire Engine Hub {version}, made with the Empire Engine";
         AutoCheckBox.IsChecked = _settings.CheckForUpdates;
+        HubTheme.Apply(_settings.Theme);
+        ThemeBox.SelectedIndex = Math.Max(0, Array.IndexOf(HubTheme.Choices, _settings.Theme?.ToLowerInvariant() ?? HubTheme.Dark));
         RefreshInstalls();
         RefreshProjects();
+        _built = true;
         Opened += (_, _) =>
         {
             SetDockIcon();
@@ -196,7 +200,7 @@ public partial class MainWindow : Window
 
         try
         {
-            var process = install.Launch(scene, folder);
+            var process = install.Launch(scene, folder, HubTheme.EditorFlag(_settings.Theme));
             process.EnableRaisingEvents = true;
             lock (_running) _running.Add((process, install.Folder));
             process.Exited += (_, _) =>
@@ -330,14 +334,14 @@ public partial class MainWindow : Window
     {
         var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
         {
-            Title = "Choose an Empire Engine editor folder (containing empire.dll)",
+            Title = "Choose an Empire Engine editor folder (containing empire.dll, or an Empire Engine Editor app)",
             AllowMultiple = false,
         });
         if (folders.Count == 0 || folders[0].TryGetLocalPath() is not { } path) return;
 
         if (EditorInstall.FromFolder(path, bundled: false) is not { } install)
         {
-            Status($"No empire.dll in {path}. Pick the editor's build folder, such as Editor/bin/Debug/net10.0.");
+            Status($"No editor in {path}. Pick the editor's build folder, such as Editor/bin/Debug/net10.0, or a folder holding an Empire Engine Editor app.");
             return;
         }
         if (_installs.Any(i => HubSettings.SamePath(i.Folder, install.Folder)))
@@ -410,6 +414,16 @@ public partial class MainWindow : Window
     private async void OnUpdateBannerClick(object? sender, RoutedEventArgs e) => await new UpdateWindow(_pendingUpdate).ShowDialog(this);
 
     private async void OnCheckForUpdates(object? sender, RoutedEventArgs e) => await new UpdateWindow(null).ShowDialog(this);
+
+    private void OnThemeChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (!_built || ThemeBox.SelectedIndex < 0) return;
+        string choice = HubTheme.Choices[ThemeBox.SelectedIndex];
+        if (choice == (_settings.Theme?.ToLowerInvariant() ?? HubTheme.Dark)) return;
+        _settings.Theme = choice;
+        _settings.Save();
+        HubTheme.Apply(choice);
+    }
 
     private void OnAutoCheckChanged(object? sender, RoutedEventArgs e)
     {

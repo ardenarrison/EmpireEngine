@@ -1,3 +1,4 @@
+using Editor.Ui;
 using System.Text.RegularExpressions;
 using Brutal.GlfwApi;
 using Brutal.Numerics;
@@ -40,16 +41,16 @@ public sealed class VisualScriptView
     };
 
     private static readonly float4 Ink = new(0.08f, 0.08f, 0.10f, 1f);
-    private static readonly float4 Dim = new(0.55f, 0.57f, 0.62f, 1f);
-    private static readonly float4 White = new(1f, 1f, 1f, 1f);
-    private static readonly float4 BackgroundColor = new(0.10f, 0.11f, 0.14f, 1f);
-    private static readonly float4 HeaderColor = new(0.16f, 0.17f, 0.21f, 1f);
-    private static readonly float4 PanelColor = new(0.14f, 0.15f, 0.19f, 1f);
-    private static readonly float4 ButtonColor = new(0.24f, 0.26f, 0.33f, 1f);
-    private static readonly float4 ButtonHoverColor = new(0.32f, 0.35f, 0.44f, 1f);
+    private static float4 Dim => Theme.Light ? new(0.38f, 0.40f, 0.45f, 1f) : new(0.55f, 0.57f, 0.62f, 1f);
+    private static float4 White => Theme.Light ? new(0.10f, 0.10f, 0.12f, 1f) : new(1f, 1f, 1f, 1f);
+    private static float4 BackgroundColor => Theme.Light ? new(0.96f, 0.96f, 0.98f, 1f) : new(0.10f, 0.11f, 0.14f, 1f);
+    private static float4 HeaderColor => Theme.Light ? new(0.89f, 0.90f, 0.94f, 1f) : new(0.16f, 0.17f, 0.21f, 1f);
+    private static float4 PanelColor => Theme.Light ? new(0.93f, 0.94f, 0.96f, 1f) : new(0.14f, 0.15f, 0.19f, 1f);
+    private static float4 ButtonColor => Theme.Light ? new(0.85f, 0.87f, 0.91f, 1f) : new(0.24f, 0.26f, 0.33f, 1f);
+    private static float4 ButtonHoverColor => Theme.Light ? new(0.78f, 0.81f, 0.88f, 1f) : new(0.32f, 0.35f, 0.44f, 1f);
     private static readonly float4 FieldColor = new(0.95f, 0.95f, 0.97f, 1f);
     private static readonly float4 FieldFocusColor = new(1f, 1f, 1f, 1f);
-    private static readonly float4 MouthColor = new(0.20f, 0.22f, 0.27f, 1f);
+    private static float4 MouthColor => Theme.Light ? new(0.86f, 0.88f, 0.93f, 1f) : new(0.20f, 0.22f, 0.27f, 1f);
     private static readonly float4 Gray = new(0.5f, 0.5f, 0.5f, 1f);
 
     private sealed record Slot(Box Box, string NodeId, string Input, InputKind Kind);

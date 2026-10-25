@@ -10,10 +10,14 @@ public sealed class HubSettings
     public List<ProjectEntry> Projects { get; set; } = new();
     public List<string> LocatedInstalls { get; set; } = new();
     public string? LastLocation { get; set; }
+    public string Theme { get; set; } = "dark";   // "system", "light" or "dark" (see HubTheme)
     public bool CheckForUpdates { get; set; } = true;   // look for a newer Hub on GitHub when the Hub starts
 
+    // EMPIRE_HUB_SETTINGS names another folder for these files (for trying the Hub out without touching your own settings).
     public static string Folder { get; } =
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "EmpireHub");
+        Environment.GetEnvironmentVariable("EMPIRE_HUB_SETTINGS") is { Length: > 0 } custom
+            ? custom
+            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "EmpireHub");
 
     private static string FilePath => Path.Combine(Folder, "settings.json");
 

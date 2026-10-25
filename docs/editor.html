@@ -148,6 +148,11 @@
 <h2>Live reloading</h2>
 <p>Once a second the editor reloads models whose files changed on disk, so a re-export from Blender shows up right away. Scripts edited elsewhere are picked up the same way.</p>
 
+<h2 id="appearance">Light and dark</h2>
+<p>The editor has a light look and a dark one. Start it with <code>--lightmode</code> or <code>--darkmode</code> to choose; with neither, it uses your computer's setting (and is dark if the setting can't be read). The flag can go anywhere among the arguments:</p>
+<pre data-label="Terminal"><code class="language-sh">empire --lightmode "My Game/Scenes/Main.empirescene" "My Game"</code></pre>
+<p>The Hub does this for you: it opens editors with the look you chose under <em>About &gt; Appearance</em> (nothing is passed when that is <em>Match the system</em>, so the editor follows the system too). The look is chosen when the editor starts. It covers the panels, the code view, the visual script view, the terminal and the asset tiles; the 3D scene itself, and the logo screen every program opens with, are not themed.</p>
+
 <h2 id="project-settings">Project settings</h2>
 <p><strong>File &gt; Project Settings…</strong> opens the settings that belong to this project. They are saved in <code>project-settings.json</code> in the project folder, so they travel with the project and with version control.</p>
 <div class="table-wrap"><table>

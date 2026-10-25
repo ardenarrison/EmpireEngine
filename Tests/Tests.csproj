@@ -16,6 +16,8 @@
     <Compile Include="../Editor/Terminal/TerminalEmulator.cs;../Editor/Terminal/PtySession.cs" Link="EditorTerminal/%(Filename)%(Extension)" />
     <!-- and the editor's per-project settings -->
     <Compile Include="../Editor/ProjectSettings.cs" Link="EditorProject/%(Filename)%(Extension)" />
+    <!-- and how the editor picks its light or dark look -->
+    <Compile Include="../Editor/Ui/ThemeChoice.cs;../Editor/Terminal/TerminalGlyphs.cs" Link="EditorUi/%(Filename)%(Extension)" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../Engine.Core/Engine.Core.csproj" />

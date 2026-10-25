@@ -327,10 +327,12 @@ public static class ProjectBuilder
 
         string driverTarget = Path.Combine(toFolder, "vulkan", "icd.d");
         string bundledDrivers = Path.Combine(editorDir, "vulkan");
-        if (Directory.Exists(Path.Combine(bundledDrivers, "icd.d")))
+        // The driver's folder is icd.d, or icd in the Mac editor app (a folder named *.d inside an app can't be code signed). A game
+        // keeps whichever name it was given; the game finds either.
+        if (HasDriver(bundledDrivers))
         {
             CopyDirectory(bundledDrivers, Path.Combine(toFolder, "vulkan"));
-            copied.Add("vulkan/icd.d (MoltenVK)");
+            copied.Add("vulkan (MoltenVK)");
         }
         else if (new[] { "/opt/homebrew/lib/libMoltenVK.dylib", "/usr/local/lib/libMoltenVK.dylib" }.FirstOrDefault(File.Exists) is { } molten)
         {
@@ -343,7 +345,7 @@ public static class ProjectBuilder
         }
 
         bool haveLoader = File.Exists(loaderTarget);
-        bool haveDriver = File.Exists(Path.Combine(driverTarget, "MoltenVK_icd.json"));
+        bool haveDriver = HasDriver(Path.Combine(toFolder, "vulkan"));
         if (haveLoader && haveDriver) return (copied, null);
 
         string missing = !haveLoader && !haveDriver ? "the Vulkan loader and MoltenVK" : !haveLoader ? "the Vulkan loader" : "MoltenVK";
@@ -351,6 +353,10 @@ public static class ProjectBuilder
                         "Build the editor with the Vulkan loader and MoltenVK available (Homebrew: vulkan-loader and molten-vk, " +
                         "or the Vulkan SDK) so it can bundle them.");
     }
+
+    // Whether a vulkan folder holds MoltenVK's driver manifest, in icd.d or icd.
+    private static bool HasDriver(string vulkanFolder) =>
+        new[] { "icd.d", "icd" }.Any(folder => File.Exists(Path.Combine(vulkanFolder, folder, "MoltenVK_icd.json")));
 
     private static bool IsNativeLibrary(string file)
     {

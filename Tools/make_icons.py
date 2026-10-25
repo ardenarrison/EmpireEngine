@@ -7,12 +7,16 @@ Writes, next to EmpireEngineIcon.png:
     EmpireEngineIcon.ico       Windows: the .exe icons, and the hub's window icons. Transparent, 16 to 256 pixels.
     Engine.Brutal/Ui/Logos/EmpireEngineCrown.png
                          The crown trimmed to its outline, 512 pixels wide, for the splash screen every game opens with.
+    EmpireEngineIcon.icns      macOS: the icon of the Hub's app bundle (Empire Engine Hub.app). The same tile as the Dock icon below,
+                         at every size macOS asks for (16 to 1024 pixels, as PNG).
     EmpireEngineIcon-mac.png   macOS Dock: the crown on a white rounded square laid out on Apple's icon grid (an 824 pixel
                          tile with a 100 pixel margin on a 1024 canvas, and a soft shadow under it), so it looks like
                          the other apps in the Dock.
 Needs Pillow (pip install Pillow).
 """
+import io
 import math
+import struct
 from pathlib import Path
 
 from PIL import Image, ImageChops, ImageDraw, ImageFilter
@@ -65,15 +69,32 @@ def mac_icon(art):
     return icon
 
 
+# The picture kinds an .icns file can hold as PNG: the four-letter type and the size in pixels (the 2x ones are for Retina screens).
+ICNS_TYPES = [("icp4", 16), ("icp5", 32), ("icp6", 64), ("ic07", 128), ("ic08", 256), ("ic09", 512), ("ic10", 1024),
+              ("ic11", 32), ("ic12", 64), ("ic13", 256), ("ic14", 512)]
+
+
+def write_icns(path, icon):
+    """An Apple icon file: 'icns', its length, then each picture as a type, its length and PNG data (all numbers big-endian)."""
+    entries = b""
+    for kind, size in ICNS_TYPES:
+        png = io.BytesIO()
+        icon.resize((size, size), Image.LANCZOS).save(png, format="PNG", optimize=True)
+        entries += kind.encode("ascii") + struct.pack(">I", len(png.getvalue()) + 8) + png.getvalue()
+    path.write_bytes(b"icns" + struct.pack(">I", len(entries) + 8) + entries)
+
+
 def main():
     art = Image.open(SOURCE).convert("RGBA")
     sizes = [(s, s) for s in (16, 20, 24, 32, 40, 48, 64, 128, 256)]
     art.save(ROOT / "EmpireEngineIcon.ico", format="ICO", sizes=sizes)
-    mac_icon(art).save(ROOT / "EmpireEngineIcon-mac.png", optimize=True)
+    mac = mac_icon(art)
+    mac.save(ROOT / "EmpireEngineIcon-mac.png", optimize=True)
+    write_icns(ROOT / "EmpireEngineIcon.icns", mac)
     crown = art.crop(art.getchannel("A").getbbox())
     crown.resize((512, round(crown.height * 512 / crown.width)), Image.LANCZOS).save(
         ROOT / "Engine.Brutal" / "Ui" / "Logos" / "EmpireEngineCrown.png", optimize=True)
-    print("Wrote EmpireEngineIcon.ico, EmpireEngineIcon-mac.png and Engine.Brutal/Ui/Logos/EmpireEngineCrown.png")
+    print("Wrote EmpireEngineIcon.ico, EmpireEngineIcon.icns, EmpireEngineIcon-mac.png and Engine.Brutal/Ui/Logos/EmpireEngineCrown.png")
 
 
 if __name__ == "__main__":

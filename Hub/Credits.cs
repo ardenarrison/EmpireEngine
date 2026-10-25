@@ -41,7 +41,7 @@ public sealed class CreditItem
 
         if (installs.FirstOrDefault(i => i.Bundled) is { } bundled)
         {
-            string thirdParty = Path.Combine(bundled.Folder, "Licenses", "ThirdParty");
+            string thirdParty = Path.Combine(bundled.EntryFolder, "Licenses", "ThirdParty");
             if (Directory.Exists(thirdParty))
                 foreach (var file in Directory.GetFiles(thirdParty, "*.txt").OrderBy(f => f, StringComparer.OrdinalIgnoreCase))
                 {

@@ -128,6 +128,12 @@ public sealed class TerminalWindow(string workingDirectory)
         g.ExternalTyping = IsFocused;
     }
 
+    // The terminal's own colors, which follow the editor's theme: a dark screen on dark, a white one on light.
+    private static int DefaultBackground => Theme.PickRgb(0x1E1E1E, 0xFFFFFF);
+    private static int DefaultForeground => Theme.PickRgb(0xCCCCCC, 0x333333);
+    private static int CursorColor => Theme.PickRgb(0xCCCCCC, 0x333333);
+    private static int Notice => Theme.PickRgb(0xCCA700, 0x9A6700);
+
     private float CharW(Gui g) => Math.Max(1f, g.C.MeasureText("M"));
     private float LineH(Gui g) => g.C.FontSize + 4f;
 
@@ -156,7 +162,7 @@ public sealed class TerminalWindow(string workingDirectory)
             _sentCols = _cols; _sentRows = _rows; _lastSent = _now;
         }
 
-        c.Rect(area.X, area.Y, area.W, area.H, Color(0x1E1E1E));
+        c.Rect(area.X, area.Y, area.W, area.H, Color(DefaultBackground));
         float cw = CharW(g), lh = LineH(g);
         float ox = area.X + 6f, oy = area.Y + 4f;
         int rows = Math.Min(_rows, _screen.Rows), cols = Math.Min(_cols, _screen.Cols);
@@ -182,7 +188,7 @@ public sealed class TerminalWindow(string workingDirectory)
                     if (Colors(next).Bg != bg || nextSelected != selected) break;
                     end++;
                 }
-                if (selected) c.Rect(ox + col * cw, y, (end - col) * cw, lh, Color(0x264F78));
+                if (selected) c.Rect(ox + col * cw, y, (end - col) * cw, lh, Color(Theme.PickRgb(0x264F78, 0xADD6FF)));
                 else if (bg != Colors(Cell.Blank()).Bg) c.Rect(ox + col * cw, y, (end - col) * cw, lh, Color(bg));
                 col = end;
             }
@@ -224,22 +230,22 @@ public sealed class TerminalWindow(string workingDirectory)
             {
                 if ((_now % 1.0) < 0.6)
                 {
-                    c.Rect(cx, cy, cw, lh, Color(0xCCCCCC, 0.85f));
+                    c.Rect(cx, cy, cw, lh, Color(CursorColor, 0.85f));
                     var under = _screen.GetCell(_screen.CursorY, _screen.CursorX);
-                    if (under.Ch > ' ') c.Text(TerminalGlyphs.ToAscii(under.Ch).ToString(), cx, cy + 1f, Color(0x1E1E1E));
+                    if (under.Ch > ' ') c.Text(TerminalGlyphs.ToAscii(under.Ch).ToString(), cx, cy + 1f, Color(DefaultBackground));
                 }
             }
             else
             {
-                c.Outline(cx, cy, cw, lh, 1f, Color(0xCCCCCC, 0.7f));
+                c.Outline(cx, cy, cw, lh, 1f, Color(CursorColor, 0.7f));
             }
         }
 
-        if (_scrollBack > 0) c.Text($"scrolled back {_scrollBack} lines - type or scroll down to return", area.X + area.W - 360f, area.Y + 2f, Color(0xCCA700));
+        if (_scrollBack > 0) c.Text($"scrolled back {_scrollBack} lines - type or scroll down to return", area.X + area.W - 360f, area.Y + 2f, Color(Notice));
         if (_session is { HasExited: true })
         {
             string message = $"[The shell exited{(_session.ExitCode is { } code ? $" (code {code})" : "")}. Press Enter to start a new one.]";
-            c.Text(message, ox, oy + (rows - 1) * lh, Color(0xCCA700));
+            c.Text(message, ox, oy + (rows - 1) * lh, Color(Notice));
         }
     }
 
@@ -264,14 +270,14 @@ public sealed class TerminalWindow(string workingDirectory)
     // Foreground and background as 0xRRGGBB, with inverse applied. -1 for the default colors resolves to the terminal's own.
     private static (int Fg, int Bg) Colors(Cell cell)
     {
-        int fg = Resolve(cell.Fg, 0xCCCCCC), bg = Resolve(cell.Bg, 0x1E1E1E);
-        if ((cell.Attr & Cell.Bold) != 0 && cell.Fg is >= 0 and < 8) fg = Resolve(cell.Fg + 8, 0xCCCCCC);
+        int fg = Resolve(cell.Fg, DefaultForeground), bg = Resolve(cell.Bg, DefaultBackground);
+        if ((cell.Attr & Cell.Bold) != 0 && cell.Fg is >= 0 and < 8) fg = Resolve(cell.Fg + 8, DefaultForeground);
         if ((cell.Attr & Cell.Inverse) != 0) (fg, bg) = (bg, fg);
         return (fg, bg);
     }
 
     private static int Resolve(int color, int fallback) =>
-        color == -1 ? fallback : (color & Cell.Rgb) != 0 ? color & 0xFFFFFF : TerminalGlyphs.Palette(color);
+        color == -1 ? fallback : (color & Cell.Rgb) != 0 ? color & 0xFFFFFF : TerminalGlyphs.Palette(color, Theme.Light);
 
     private static float4 Color(int rgb, float alpha = 1f) =>
         new(((rgb >> 16) & 0xFF) / 255f, ((rgb >> 8) & 0xFF) / 255f, (rgb & 0xFF) / 255f, alpha);

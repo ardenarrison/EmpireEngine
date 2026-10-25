@@ -2,6 +2,27 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="EmpireHub.App"
              RequestedThemeVariant="Dark">
+  <Application.Resources>
+    <ResourceDictionary>
+      <!-- The Hub's own colors, in a set for each theme. Everything else comes from the Fluent theme, which has both. -->
+      <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Dark">
+          <SolidColorBrush x:Key="HubPanelBrush">#16181E</SolidColorBrush>
+          <SolidColorBrush x:Key="HubDimTextBrush">#8A8F9C</SolidColorBrush>
+          <SolidColorBrush x:Key="HubErrorBrush">#FF7A6E</SolidColorBrush>
+          <SolidColorBrush x:Key="HubTagBrush">#2C3040</SolidColorBrush>
+          <SolidColorBrush x:Key="HubBannerBrush">#22304A</SolidColorBrush>
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Light">
+          <SolidColorBrush x:Key="HubPanelBrush">#ECEEF3</SolidColorBrush>
+          <SolidColorBrush x:Key="HubDimTextBrush">#5B6170</SolidColorBrush>
+          <SolidColorBrush x:Key="HubErrorBrush">#C0392B</SolidColorBrush>
+          <SolidColorBrush x:Key="HubTagBrush">#DCE1EC</SolidColorBrush>
+          <SolidColorBrush x:Key="HubBannerBrush">#D8E6FF</SolidColorBrush>
+        </ResourceDictionary>
+      </ResourceDictionary.ThemeDictionaries>
+    </ResourceDictionary>
+  </Application.Resources>
   <Application.Styles>
     <FluentTheme />
     <Style Selector="TextBlock.title">
@@ -9,14 +30,14 @@
       <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
     <Style Selector="TextBlock.dim">
-      <Setter Property="Foreground" Value="#8A8F9C" />
+      <Setter Property="Foreground" Value="{DynamicResource HubDimTextBrush}" />
       <Setter Property="FontSize" Value="12" />
     </Style>
     <Style Selector="TextBlock.error">
-      <Setter Property="Foreground" Value="#FF7A6E" />
+      <Setter Property="Foreground" Value="{DynamicResource HubErrorBrush}" />
     </Style>
     <Style Selector="Border.tag">
-      <Setter Property="Background" Value="#2C3040" />
+      <Setter Property="Background" Value="{DynamicResource HubTagBrush}" />
       <Setter Property="CornerRadius" Value="4" />
       <Setter Property="Padding" Value="8,2" />
       <Setter Property="VerticalAlignment" Value="Center" />

@@ -90,7 +90,7 @@ public partial class UpdateWindow : Window
         {
             string folder = await HubUpdater.DownloadAsync(Http, update, progress, cts.Token);
             StatusText.Text = "Restarting...";
-            HubUpdater.LaunchApply(folder, AppContext.BaseDirectory);
+            HubUpdater.LaunchApply(folder, HubUpdater.CurrentRoot);
             (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.Shutdown();
         }
         catch (InstallException ex)

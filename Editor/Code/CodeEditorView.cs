@@ -1,3 +1,4 @@
+using Editor.Ui;
 using System.Text;
 using Brutal.GlfwApi;
 using Brutal.ImGuiApi;
@@ -26,28 +27,28 @@ public sealed class CodeEditorView
     private const double CheckDelay = 0.4;   // seconds after the last edit before the scripts are compiled again
     private const int MaxNameLength = 40;
 
-    private static readonly float4 Background = Hex(0x1E1E1E);
-    private static readonly float4 PanelColor = Hex(0x252526);
-    private static readonly float4 HeaderColor = Hex(0x2D2D30);
-    private static readonly float4 GutterText = Hex(0x858585);
-    private static readonly float4 GutterActive = Hex(0xC6C6C6);
-    private static readonly float4 CurrentLine = Hex(0x2A2D2E);
-    private static readonly float4 SelectionColor = Hex(0x264F78);
-    private static readonly float4 CaretColor = Hex(0xAEAFAD);
-    private static readonly float4 ErrorColor = Hex(0xF14C4C);
-    private static readonly float4 WarningColor = Hex(0xCCA700);
-    private static readonly float4 TextColor = Hex(0xD4D4D4);
-    private static readonly float4 DimColor = Hex(0x8B8B8B);
-    private static readonly float4 ButtonColor = Hex(0x3A3D41);
-    private static readonly float4 ButtonHover = Hex(0x4A4E54);
-    private static readonly float4 FieldColor = Hex(0x3C3C3C);
-    private static readonly float4 RowHover = Hex(0x2A2D2E);
-    private static readonly float4 RowActive = Hex(0x37373D);
-    private static readonly float4 TooltipColor = Hex(0x252526);
-    private static readonly float4 BorderColor = Hex(0x454545);
-    private static readonly float4 BannerColor = Hex(0x3B3222);
+    private static float4 Background => Theme.Pick(0x1E1E1E, 0xFFFFFF);
+    private static float4 PanelColor => Theme.Pick(0x252526, 0xF3F3F3);
+    private static float4 HeaderColor => Theme.Pick(0x2D2D30, 0xE7E7E7);
+    private static float4 GutterText => Theme.Pick(0x858585, 0x6E7681);
+    private static float4 GutterActive => Theme.Pick(0xC6C6C6, 0x333333);
+    private static float4 CurrentLine => Theme.Pick(0x2A2D2E, 0xEEF3FA);
+    private static float4 SelectionColor => Theme.Pick(0x264F78, 0xADD6FF);
+    private static float4 CaretColor => Theme.Pick(0xAEAFAD, 0x000000);
+    private static float4 ErrorColor => Theme.Pick(0xF14C4C, 0xE51400);
+    private static float4 WarningColor => Theme.Pick(0xCCA700, 0xBF8803);
+    private static float4 TextColor => Theme.Pick(0xD4D4D4, 0x000000);
+    private static float4 DimColor => Theme.Pick(0x8B8B8B, 0x6E6E6E);
+    private static float4 ButtonColor => Theme.Pick(0x3A3D41, 0xDDDDDD);
+    private static float4 ButtonHover => Theme.Pick(0x4A4E54, 0xCFCFCF);
+    private static float4 FieldColor => Theme.Pick(0x3C3C3C, 0xFFFFFF);
+    private static float4 RowHover => Theme.Pick(0x2A2D2E, 0xE8E8E8);
+    private static float4 RowActive => Theme.Pick(0x37373D, 0xDCE6F2);
+    private static float4 TooltipColor => Theme.Pick(0x252526, 0xF3F3F3);
+    private static float4 BorderColor => Theme.Pick(0x454545, 0xC8C8C8);
+    private static float4 BannerColor => Theme.Pick(0x3B3222, 0xFFF4CE);
 
-    private static readonly float4[] TokenColors =
+    private static readonly float4[] DarkTokenColors =
     {
         Hex(0xD4D4D4),   // Plain
         Hex(0x569CD6),   // Keyword
@@ -60,6 +61,22 @@ public sealed class CodeEditorView
         Hex(0x6A9955),   // Comment
         Hex(0x9B9B9B),   // Preprocessor
     };
+
+    private static readonly float4[] LightTokenColors =
+    {
+        Hex(0x000000),   // Plain
+        Hex(0x0000FF),   // Keyword
+        Hex(0xAF00DB),   // Control
+        Hex(0x267F99),   // Type
+        Hex(0x795E26),   // Method
+        Hex(0x001080),   // Variable
+        Hex(0xA31515),   // String
+        Hex(0x098658),   // Number
+        Hex(0x008000),   // Comment
+        Hex(0x808080),   // Preprocessor
+    };
+
+    private static float4[] TokenColors => Theme.Light ? LightTokenColors : DarkTokenColors;
 
     // An error or warning from the last check, in one script.
     private sealed record Problem(string Path, int Line, int Col, int EndLine, int EndCol, bool IsError, string Id, string Message);

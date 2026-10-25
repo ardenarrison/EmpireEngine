@@ -18,8 +18,9 @@ public static unsafe class BundledVulkan
         string baseDir = AppContext.BaseDirectory;
 
         // The driver: the loader reads these when the instance is created. A value the user set wins.
-        string icd = Path.Combine(baseDir, "vulkan", "icd.d", "MoltenVK_icd.json");
-        if (File.Exists(icd) && Environment.GetEnvironmentVariable("VK_DRIVER_FILES") is null &&
+        // The folder is icd.d, or icd inside the Mac editor app (a folder named *.d inside an app can't be code signed).
+        string icd = new[] { "icd.d", "icd" }.Select(folder => Path.Combine(baseDir, "vulkan", folder, "MoltenVK_icd.json")).FirstOrDefault(File.Exists) ?? "";
+        if (icd.Length > 0 && Environment.GetEnvironmentVariable("VK_DRIVER_FILES") is null &&
             Environment.GetEnvironmentVariable("VK_ICD_FILENAMES") is null)
         {
             // .NET's Environment.SetEnvironmentVariable doesn't reach native code on Unix, so set it in libc.

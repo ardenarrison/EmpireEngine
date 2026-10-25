@@ -34,7 +34,7 @@
 </div>
 
 <h2>Empire Engine Hub</h2>
-<p>Run the Hub with <code>dotnet run --project Hub</code>, or start <code>EmpireHub</code> from a packaged release. It has three pages, and it can update itself (see <a href="#updating-the-hub">Updating the Hub</a>).</p>
+<p>Run the Hub with <code>dotnet run --project Hub</code>, or start a packaged release: <strong>Empire Engine Hub.app</strong> on a Mac (drag it into Applications, then open it), or <code>EmpireHub</code> in the unzipped folder on Windows and Linux. It has three pages, and it can update itself (see <a href="#updating-the-hub">Updating the Hub</a>).</p>
 
 <h3>Projects</h3>
 <ul>
@@ -46,11 +46,11 @@
 <p>A project name can't start or end with a space or contain <code>/ \ : * ? " &lt; &gt; |</code>, and the folder it makes must be new or empty.</p>
 
 <h3>Installs</h3>
-<p>The editor versions the Hub knows about. <strong>A released Hub comes without an editor</strong>: the first thing to do is press <em>Install version…</em> and install one. Editors live in <code>&lt;hub&gt;/Empire/&lt;version&gt;/</code>. (Building the Hub from source also copies the editor you just built there.) Each row says where it came from: <em>Built with the Hub</em>, <em>Downloaded from GitHub</em>, or <em>Located</em>.</p>
+<p>The editor versions the Hub knows about. <strong>A released Hub comes without an editor</strong>: the first thing to do is press <em>Install version…</em> and install one. Editors live in <code>&lt;hub&gt;/Empire/&lt;version&gt;/</code> next to the Hub's files (on a Mac, where the Hub is an app that must be left as it came, in <code>~/Library/Application Support/EmpireHub/Empire/&lt;version&gt;/</code> instead). (Building the Hub from source also copies the editor you just built there.) Each row says where it came from: <em>Built with the Hub</em>, <em>Downloaded from GitHub</em>, or <em>Located</em>.</p>
 <p><strong>A project opens with the Empire Engine version it was made with. If that version isn't installed, the Hub asks which one to use</strong> (see <a href="#choosing-a-version">Choosing the editor version</a>). A project with no version recorded opens with the newest installed one.</p>
 <ul>
   <li><strong>Install version…</strong> downloads a version from GitHub (see below).</li>
-  <li><strong>Locate…</strong> adds an editor folder from somewhere else, such as a build of your own. The Hub only remembers where it is.</li>
+  <li><strong>Locate…</strong> adds an editor folder from somewhere else, such as a build of your own (the folder holding <code>empire.dll</code>, or on a Mac the folder holding Empire Engine Editor.app, or the app itself). The Hub only remembers where it is.</li>
   <li><strong>Uninstall</strong> (on a version in the Hub's own folder) deletes that version after asking. <strong>Remove</strong> (on one you located) only forgets it and leaves its files alone. Projects are never touched; one made with an uninstalled version opens with the newest installed version until you install it again (the Hub will ask which version to use). An editor that is open can't be uninstalled, so close it first.</li>
 </ul>
 
@@ -67,7 +67,7 @@
 <ol>
   <li>downloads the release's zip for your computer (<code>EmpireEngine-&lt;version&gt;-&lt;platform&gt;.zip</code>), showing progress,</li>
   <li>checks it against the checksum GitHub lists for it,</li>
-  <li>unpacks the editor into <code>&lt;hub&gt;/Empire/&lt;version&gt;/</code>, next to any others:</li>
+  <li>unpacks the editor into <code>&lt;hub&gt;/Empire/&lt;version&gt;/</code> (the Application Support folder on a Mac, see above), next to any others:</li>
 </ol>
 <pre data-label="&lt;hub&gt;/Empire/"><code>0.1.0/    downloaded from the 0.1.0 release
 0.1.1/    downloaded from the 0.1.1 release</code></pre>
@@ -81,7 +81,7 @@
 </ul>
 
 <h3>About</h3>
-<p>The third-party software in the Hub and the editor, with each license. The editor shows the same list under <em>Help &gt; Credits</em>. This page also has the update controls below.</p>
+<p>The third-party software in the Hub and the editor, with each license. The editor shows the same list under <em>Help &gt; Credits</em>. This page also has the update controls below and the <strong>Appearance</strong> choice: <em>Light</em>, <em>Dark</em>, or <em>Match the system</em> (the Hub follows your computer's light or dark setting and changes when it does). The Hub starts out dark; your choice applies at once and is remembered. Editors the Hub opens get the same look (see <a href="editor.html#appearance">Light and dark</a>). The opening screen with the logos stays dark in every theme, since the BRUTAL logo is made for a dark background.</p>
 
 <h3 id="updating-the-hub">Updating the Hub</h3>
 <p>When the Hub starts it asks GitHub once whether a newer Hub has been released. If there is one, a box appears at the bottom of the sidebar: press <strong>Update…</strong>. You can also press <strong>Check for updates…</strong> on the About page at any time, and untick <em>Look for updates when the Hub starts</em> there to stop the automatic check.</p>
@@ -95,6 +95,7 @@
   <li><strong>What is kept:</strong> your projects and settings (they live in the app data folder, not the Hub's folder), and every installed editor in <code>&lt;hub&gt;/Empire/</code>. An update never adds, replaces or removes an editor; use <em>Install version…</em> for that.</li>
   <li><strong>What is checked:</strong> only github.com over https is trusted, and an update with no checksum, a wrong checksum, or an unsafe path in its zip is refused. Nothing changes until the download is complete and checked.</li>
   <li><strong>When it can't update itself:</strong> a Hub run from a source build (<code>dotnet run</code>) or in a folder it can't write to says why, and the button opens the release page so you can download the new version yourself.</li>
+  <li><strong>On a Mac</strong> the whole app is replaced, files only the old app had are removed, and the app is signed again (ad hoc, with the system's <code>codesign</code>) so macOS accepts it as one sealed app. If you opened the app straight from the Downloads folder, macOS runs it read-only and it can't change itself: drag it into Applications, open it from there, and update again. A Hub from before it was an app (a plain folder) can't update into the app, so download <em>Empire Engine Hub.app</em> once.</li>
   <li><strong>If it fails:</strong> the old Hub keeps running, and if the file swap itself fails the Hub starts again and shows what went wrong in the status line.</li>
 </ul>
 
@@ -102,7 +103,7 @@
 <p>The editor opens the project's <code>StartScene</code> from <code>project.empire</code> if it exists, otherwise <code>Scenes/Main.empirescene</code>, otherwise the first scene it finds.</p>
 
 <h2>Where the Hub keeps its settings</h2>
-<p>The project list and any installs you located by hand are saved in <code>settings.json</code> in the per-user app data folder: <code>AppData</code> on Windows, <code>Application Support</code> on macOS, and <code>~/.config</code> on Linux.</p>
+<p>The project list, any installs you located by hand, and your choices (appearance, whether to look for updates) are saved in <code>settings.json</code> in the per-user app data folder: <code>AppData</code> on Windows, <code>Application Support</code> on macOS, and <code>~/.config</code> on Linux.</p>
 
 <p>For the exact contents of <code>project.empire</code> and the other files, see <a href="file-formats.html">File formats</a>.</p>
 

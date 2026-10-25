@@ -36,23 +36,23 @@ public sealed class Gui
     private const float SpacingY = 4f;
     private const float DragThreshold = 3f;
 
-    public static readonly float4 WindowColor = Hex(0x252526);
-    public static readonly float4 TitleColor = Hex(0x2D2D30);
-    public static readonly float4 BorderColor = Hex(0x3F3F46);
-    public static readonly float4 TextColor = Hex(0xDCDCDC);
-    public static readonly float4 DimColor = Hex(0x8B8B8B);
-    public static readonly float4 ButtonColor = Hex(0x3A3D41);
-    public static readonly float4 ButtonHover = Hex(0x4A4E54);
-    public static readonly float4 ButtonDown = Hex(0x55595F);
-    public static readonly float4 AccentColor = Hex(0x0E639C);
-    public static readonly float4 AccentHover = Hex(0x1177BB);
-    public static readonly float4 FieldColor = Hex(0x1E1E1E);
-    public static readonly float4 FieldHover = Hex(0x2A2A2A);
-    public static readonly float4 RowHover = Hex(0x2A2D2E);
-    public static readonly float4 RowSelected = Hex(0x094771);
-    public static readonly float4 HeaderColor = Hex(0x333337);
-    public static readonly float4 PopupColor = Hex(0x2B2B2E);
-    public static readonly float4 ErrorColor = Hex(0xF14C4C);
+    public static float4 WindowColor => Theme.Pick(0x252526, 0xF3F3F3);
+    public static float4 TitleColor => Theme.Pick(0x2D2D30, 0xE7E7E7);
+    public static float4 BorderColor => Theme.Pick(0x3F3F46, 0xC8C8C8);
+    public static float4 TextColor => Theme.Pick(0xDCDCDC, 0x1F1F1F);
+    public static float4 DimColor => Theme.Pick(0x8B8B8B, 0x6E6E6E);
+    public static float4 ButtonColor => Theme.Pick(0x3A3D41, 0xDDDDDD);
+    public static float4 ButtonHover => Theme.Pick(0x4A4E54, 0xCFCFCF);
+    public static float4 ButtonDown => Theme.Pick(0x55595F, 0xBFBFBF);
+    public static float4 AccentColor => Theme.Pick(0x0E639C, 0x1A73C8);
+    public static float4 AccentHover => Theme.Pick(0x1177BB, 0x0B5CAD);
+    public static float4 FieldColor => Theme.Pick(0x1E1E1E, 0xFFFFFF);
+    public static float4 FieldHover => Theme.Pick(0x2A2A2A, 0xF0F0F0);
+    public static float4 RowHover => Theme.Pick(0x2A2D2E, 0xE8E8E8);
+    public static float4 RowSelected => Theme.Pick(0x094771, 0xCCE4F7);
+    public static float4 HeaderColor => Theme.Pick(0x333337, 0xE3E3E3);
+    public static float4 PopupColor => Theme.Pick(0x2B2B2E, 0xF8F8F8);
+    public static float4 ErrorColor => Theme.Pick(0xF14C4C, 0xC42B1C);
 
     private sealed record WindowRec(string Id, Box Rect, int Z, bool Modal);
 
@@ -594,7 +594,7 @@ public sealed class Gui
             : held ? ButtonDown : hover ? ButtonHover : ButtonColor;
         C.Rect(box.X, box.Y, box.W, box.H, color);
         C.Text(Fit(text, box.W - 8f), box.X + Math.Max(4f, (box.W - C.MeasureText(text)) / 2f), TextTop(box.Y, box.H),
-            enabled ? TextColor : DimColor);
+            !enabled ? DimColor : highlighted ? Theme.OnAccent : TextColor);
         return clicked && enabled;
     }
 

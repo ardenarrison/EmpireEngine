@@ -23,8 +23,8 @@ public sealed class AssistantWindow
         typeof(AssistantWindow).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0] ?? "0";
     private static readonly HttpClient Http = AssistantClient.CreateClient(EditorVersion);
 
-    private static readonly float4 UserColor = Gui.Hex(0x9CDCFE);
-    private static readonly float4 AssistantColor = Gui.Hex(0xB5CEA8);
+    private static float4 UserColor => Theme.Pick(0x9CDCFE, 0x0B5CAD);
+    private static float4 AssistantColor => Theme.Pick(0xB5CEA8, 0x2E7D32);
 
     private readonly string _folder;
     private AssistantSettings _settings = new();

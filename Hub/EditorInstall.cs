@@ -6,7 +6,8 @@ namespace EmpireHub;
 public sealed class EditorInstall
 {
     public required string Version { get; init; }
-    public required string Folder { get; init; }
+    public required string Folder { get; init; }              // the install's folder: <version>/ in the Hub's installs, or the one that was located
+    public required string EntryFolder { get; init; }         // where empire.dll and the editor's files are: Folder itself, or inside the app on a Mac
     public required bool Bundled { get; init; }   // in the hub's Empire Engine folder, as opposed to located by the user
     public bool Downloaded { get; init; }         // put there by the hub from a GitHub release rather than shipped with it
 
@@ -18,21 +19,21 @@ public sealed class EditorInstall
 
     public static EditorInstall? FromFolder(string folder, bool bundled)
     {
-        string dll = Path.Combine(folder, EntryDll);
-        if (!File.Exists(dll)) return null;
+        if (EditorLayout.EntryFolder(folder) is not { } entry) return null;
+        string dll = Path.Combine(entry, EntryDll);
 
         // The editor's product version comes from EmpireVersion in Directory.Build.props.
         string? version = FileVersionInfo.GetVersionInfo(dll).ProductVersion?.Split('+')[0];
         if (string.IsNullOrWhiteSpace(version)) version = Path.GetFileName(folder.TrimEnd('/', '\\'));
         bool downloaded = bundled && File.Exists(Path.Combine(folder, ReleaseInstaller.MarkerFile));
-        return new EditorInstall { Version = version, Folder = Path.GetFullPath(folder), Bundled = bundled, Downloaded = downloaded };
+        return new EditorInstall { Version = version, Folder = Path.GetFullPath(folder), EntryFolder = Path.GetFullPath(entry), Bundled = bundled, Downloaded = downloaded };
     }
 
-    // The bundled editors (in <hub>/Empire/<version>/) followed by the ones the user located, newest first.
+    // The editors the hub has (in its installs folder, <hub>/Empire/<version>/ for a plain Hub) followed by the ones the user located, newest first.
     public static List<EditorInstall> Discover(HubSettings settings)
     {
         var list = new List<EditorInstall>();
-        string bundledRoot = Path.Combine(AppContext.BaseDirectory, "Empire");
+        string bundledRoot = HubPaths.InstallsRoot;
         if (Directory.Exists(bundledRoot))
             foreach (var dir in Directory.GetDirectories(bundledRoot))
                 if (FromFolder(dir, bundled: true) is { } install) list.Add(install);
@@ -52,14 +53,17 @@ public sealed class EditorInstall
         System.Version.TryParse(text.Split('-')[0], out var v) ? v : new Version(0, 0);
 
     // Starts the editor on a scene. The project folder is the content root and the working directory.
-    public Process Launch(string scenePath, string projectFolder)
+    // themeFlag is --lightmode or --darkmode to make the editor use that look, or null to let it use the system's. It goes last, so an editor
+    // from before the flag existed (which only reads the first two arguments) is not confused by it.
+    public Process Launch(string scenePath, string projectFolder, string? themeFlag = null)
     {
-        string appHost = Path.Combine(Folder, OperatingSystem.IsWindows() ? "empire.exe" : "empire");
+        string appHost = Path.Combine(EntryFolder, OperatingSystem.IsWindows() ? "empire.exe" : "empire");
         var info = File.Exists(appHost)
             ? new ProcessStartInfo(appHost)
-            : new ProcessStartInfo("dotnet") { ArgumentList = { Path.Combine(Folder, EntryDll) } };
+            : new ProcessStartInfo("dotnet") { ArgumentList = { Path.Combine(EntryFolder, EntryDll) } };
         info.ArgumentList.Add(scenePath);
         info.ArgumentList.Add(projectFolder);
+        if (themeFlag is not null) info.ArgumentList.Add(themeFlag);
         info.WorkingDirectory = projectFolder;
         info.UseShellExecute = false;
 

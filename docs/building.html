@@ -40,7 +40,7 @@ GameData/
 <h3>What you need to build</h3>
 <p>Build Project takes the player from one of two places, and uses the first it finds:</p>
 <ul>
-  <li><strong>A released editor</strong> (installed from the Hub) carries the player already built, in the <code>Player/</code> folder next to <code>empire.dll</code>. Building copies it, names the program after your game, and adds your project's content and compiled scripts. <strong>Nothing needs to be installed</strong>, not even the .NET SDK.</li>
+  <li><strong>A released editor</strong> (installed from the Hub) carries the player already built, in the <code>Player/</code> folder next to <code>empire.dll</code> (on a Mac, inside the editor app). Building copies it, names the program after your game, and adds your project's content and compiled scripts. <strong>Nothing needs to be installed</strong>, not even the .NET SDK.</li>
   <li><strong>An editor run from a checkout of this repository</strong> (with <code>dotnet run --project Editor</code>, or the Hub built from source) has <code>Player/Player.csproj</code> in a folder above it. Building then runs <code>dotnet restore</code> and <code>dotnet publish</code> on it, which needs the <strong>.NET 10 SDK</strong>.</li>
 </ul>
 <p>If neither is found, the build stops with <em>Could not find Player/Player.csproj in a folder above the Editor, or a built Player folder next to it</em>.</p>
@@ -82,11 +82,18 @@ python3 publish.py --rid win-x64 --rid linux-x64 --zip</code></pre>
     <tr><td><code>--zip</code></td><td>Also zip each package: <code>EmpireEngineHub-&lt;version&gt;-&lt;platform&gt;.zip</code> (the Hub) and <code>EmpireEngine-&lt;version&gt;-&lt;platform&gt;.zip</code> (the editor)</td></tr>
   </tbody>
 </table></div>
-<pre data-label="Empire/osx-arm64/ (the Hub package)"><code>EmpireHub                the Hub: run this</code></pre>
-<pre data-label="Empire/osx-arm64-editor/ (the editor package)"><code>Empire/&lt;version&gt;/        what the Hub unpacks into &lt;hub&gt;/Empire/&lt;version&gt;/
-  empire                 the editor
+<pre data-label="Empire/win-x64/ (the Hub package on Windows; Linux has EmpireHub)"><code>EmpireHub.exe            the Hub: run this</code></pre>
+<pre data-label="Empire/osx-arm64/ (the Hub package on a Mac)"><code>Empire Engine Hub.app    the Hub, as a Mac app: drag it into Applications</code></pre>
+<pre data-label="Empire/win-x64-editor/ (the editor package; macOS below)"><code>Empire/&lt;version&gt;/        what the Hub unpacks into &lt;hub&gt;/Empire/&lt;version&gt;/
+  empire                 the editor (empire.exe on Windows)
   Player/                the game player</code></pre>
-<p>To try the Hub with an editor before a release exists, copy the <code>Empire/</code> folder from the editor package next to <code>EmpireHub</code>.</p>
+<pre data-label="Empire/osx-arm64-editor/ (the editor package on a Mac)"><code>Empire/&lt;version&gt;/
+  Empire Engine Editor.app    the editor and the game player, as a Mac app</code></pre>
+<p>To try the Hub with an editor before a release exists, copy the <code>Empire/</code> folder from the editor package next to <code>EmpireHub</code> (on a Mac, into <code>~/Library/Application Support/EmpireHub/</code>, where the app keeps its editors).</p>
+
+<h3>The Mac apps</h3>
+<p>On macOS the Hub is packaged as <strong>Empire Engine Hub.app</strong> and the editor as <strong>Empire Engine Editor.app</strong> (inside the editor package's version folder; the game player is inside it too, so Build Project still finds it). Both are built the same way. The Hub: <code>Contents/MacOS</code> holds the Hub and everything it needs, <code>Contents/Resources</code> the icon (<code>EmpireEngineIcon.icns</code>, made by <code>Tools/make_icons.py</code>), and <code>Contents/Info.plist</code> says what the app is. <code>publish.py</code> builds it and signs it <em>ad hoc</em> (no Apple developer account), then zips it with macOS's own <code>ditto</code>, which keeps the signature (an ordinary zip drops it and macOS would call the app "damaged"). So <strong>make the release zips on a Mac</strong>; <code>publish.py</code> warns if it can't. The app is not notarized, so the first time someone opens it macOS asks them to confirm (right-click the app, choose Open). Because the app is left exactly as shipped, it keeps the editors it installs in <code>~/Library/Application Support/EmpireHub/Empire/</code>. The Hub starts an editor by running the program inside its app, in the project's folder.</p>
+<p>One detail of the editor app: macOS code signing refuses to sign an app that holds a folder named like <code>icd.d</code> (a dot and a short extension), so inside the editor app the Vulkan driver folders (<code>vulkan/icd.d</code>) are named <code>icd</code>. The editor and the games it builds find either name, and a built game keeps the name it was given. An older Hub (0.1.6 or earlier) can't install the Mac editor app: it only knows the plain folder, and says so. Update the Hub first.</p>
 <p>Apple Silicon (<code>osx-arm64</code>) packages carry their own Vulkan loader and MoltenVK from <code>ThirdParty/Vulkan/</code>. If that folder is missing, the script says so; restore it, or set the <code>EmpireVulkanLoader</code> and <code>EmpireMoltenVK</code> environment variables to the paths of <code>libvulkan.1.dylib</code> and <code>libMoltenVK.dylib</code>.</p>
 
 <h2 id="publishing-a-release">Publishing a release</h2>
@@ -105,7 +112,7 @@ python3 publish.py --rid win-x64 --rid linux-x64 --zip</code></pre>
 </ul>
 
 <h2>Versioning</h2>
-<p>The Empire Engine version (currently <strong>0.1.5</strong>) is set once, as <code>EmpireVersion</code> in <code>Directory.Build.props</code>, and shared by the editor, the player and the Hub. Bump it there for a release. New projects record the version they were made with, and the Hub opens each project with that version when it's installed.</p>
+<p>The Empire Engine version (currently <strong>0.1.6</strong>) is set once, as <code>EmpireVersion</code> in <code>Directory.Build.props</code>, and shared by the editor, the player and the Hub. Bump it there for a release. New projects record the version they were made with, and the Hub opens each project with that version when it's installed.</p>
 
 </article>
 </body>

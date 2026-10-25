@@ -96,16 +96,23 @@ public static class TerminalGlyphs
         };
     }
 
-    // The standard 256-color palette as 0xRRGGBB: 16 basic colors, a 6x6x6 cube, then 24 grays.
-    public static int Palette(int index)
+    // The standard 256-color palette as 0xRRGGBB: 16 basic colors, a 6x6x6 cube, then 24 grays. `light` gives the 16 basic colors a
+    // light background needs (the dark set's yellows and whites can't be read on white).
+    public static int Palette(int index, bool light = false)
     {
         if (index < 0) index = 7;
         if (index < 16)
-            return index switch
-            {
-                0 => 0x1E1E1E, 1 => 0xCD3131, 2 => 0x0DBC79, 3 => 0xE5E510, 4 => 0x2472C8, 5 => 0xBC3FBC, 6 => 0x11A8CD, 7 => 0xE5E5E5,
-                8 => 0x666666, 9 => 0xF14C4C, 10 => 0x23D18B, 11 => 0xF5F543, 12 => 0x3B8EEA, 13 => 0xD670D6, 14 => 0x29B8DB, _ => 0xFFFFFF,
-            };
+            return light
+                ? index switch
+                {
+                    0 => 0x000000, 1 => 0xCD3131, 2 => 0x008000, 3 => 0x949800, 4 => 0x0451A5, 5 => 0xBC05BC, 6 => 0x0598BC, 7 => 0x555555,
+                    8 => 0x666666, 9 => 0xCD3131, 10 => 0x14A014, 11 => 0xB5BA00, 12 => 0x0451A5, 13 => 0xBC05BC, 14 => 0x0598BC, _ => 0xA5A5A5,
+                }
+                : index switch
+                {
+                    0 => 0x1E1E1E, 1 => 0xCD3131, 2 => 0x0DBC79, 3 => 0xE5E510, 4 => 0x2472C8, 5 => 0xBC3FBC, 6 => 0x11A8CD, 7 => 0xE5E5E5,
+                    8 => 0x666666, 9 => 0xF14C4C, 10 => 0x23D18B, 11 => 0xF5F543, 12 => 0x3B8EEA, 13 => 0xD670D6, 14 => 0x29B8DB, _ => 0xFFFFFF,
+                };
         if (index < 232)
         {
             int i = index - 16;

@@ -21,14 +21,14 @@ public sealed class AssetPanel
     private const float Spacing = 8f;
     private const float DragThreshold = 6f;
 
-    private static readonly float4 TileColor = Gui.Hex(0x2F3136);
-    private static readonly float4 TileHover = Gui.Hex(0x3C3F45);
-    private static readonly float4 FolderColor = Gui.Hex(0xDCB67A);
-    private static readonly float4 ModelColor = Gui.Hex(0x4EC9B0);
-    private static readonly float4 SoundColor = Gui.Hex(0xC586C0);
-    private static readonly float4 SceneColor = Gui.Hex(0x569CD6);
-    private static readonly float4 AnimationColor = Gui.Hex(0xD7BA7D);
-    private static readonly float4 AnimationTile = Gui.Hex(0x383630);
+    private static float4 TileColor => Theme.Pick(0x2F3136, 0xE6E6E8);
+    private static float4 TileHover => Theme.Pick(0x3C3F45, 0xD8D8DC);
+    private static float4 FolderColor => Theme.Pick(0xDCB67A, 0x9A6B00);
+    private static float4 ModelColor => Theme.Pick(0x4EC9B0, 0x0B8A6F);
+    private static float4 SoundColor => Theme.Pick(0xC586C0, 0x9B3FA0);
+    private static float4 SceneColor => Theme.Pick(0x569CD6, 0x1F66B8);
+    private static float4 AnimationColor => Theme.Pick(0xD7BA7D, 0x8A6D1B);
+    private static float4 AnimationTile => Theme.Pick(0x383630, 0xECE6D6);
 
     private readonly string _root;
     private string _current;
