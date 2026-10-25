@@ -20,6 +20,9 @@ public abstract class Behaviour
 
     public SceneObject Object { get; internal set; } = null!;
 
+    // The object this script is attached to, as in sceneObject.transform.position. The same object as Object.
+    public SceneObject sceneObject => Object;
+
     // Called once, before the first Update.
     public virtual void Start() { }
 

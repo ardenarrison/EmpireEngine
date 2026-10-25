@@ -93,6 +93,13 @@ SceneObject? parent = Object.Parent;</code></pre>
 <pre><code class="language-cs">Vector3 forward = Vector3.Transform(-Vector3.UnitZ, Object.Rotation);
 Vector3 right   = Vector3.Transform(Vector3.UnitX, Object.Rotation);</code></pre>
 
+<h2>Position, rotation and scale</h2>
+<p><code>sceneObject</code> is the object the script is attached to (the same one as <code>Object</code>), and its <code>transform</code> holds where it is:</p>
+<pre><code class="language-cs">sceneObject.transform.position = new Vector3(0, 2, 0);
+sceneObject.transform.rotation = Quaternion.Identity;
+sceneObject.transform.scale   *= 2f;</code></pre>
+<p>These are the object's own values, relative to its parent, and changing them moves the object at once.</p>
+
 <h2>Other components</h2>
 <pre><code class="language-cs">var body = GetComponent&lt;Rigidbody&gt;();   // null when there is none
 if (body != null) body.AddForce(0, 10, 0);
