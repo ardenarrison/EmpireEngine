@@ -27,8 +27,11 @@
       <ListBox x:Name="ReleaseList" Background="Transparent" IsVisible="False">
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="local:ReleaseItem">
-            <Grid ColumnDefinitions="*,Auto,Auto" Margin="4,6" Background="Transparent" ToolTip.Tip="{Binding Notes}">
-              <StackPanel VerticalAlignment="Center" Spacing="2">
+            <Grid ColumnDefinitions="*,Auto,Auto" Margin="4,6" Background="Transparent">
+              <!-- The release notes show only over the name, not over the button: a tip over the button sat under the
+                   pointer and made the row flicker once it appeared. -->
+              <StackPanel VerticalAlignment="Center" Spacing="2" Background="Transparent" ToolTip.Tip="{Binding Notes}"
+                          ToolTip.Placement="Bottom" ToolTip.VerticalOffset="12">
                 <StackPanel Orientation="Horizontal" Spacing="8">
                   <TextBlock Text="{Binding Title}" FontSize="15" FontWeight="SemiBold" />
                   <Border Classes="tag" IsVisible="{Binding IsLatest}"><TextBlock Text="Latest" FontSize="12" /></Border>

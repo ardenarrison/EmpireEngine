@@ -23,7 +23,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 PLACEHOLDER = "[CONTACT EMAIL]"
-MAX_FILE_MB = 8          # the vendored macOS MoltenVK library is the biggest legitimate file, about 5 MB
+MAX_FILE_MB = 12         # the biggest legitimate file is the vendored Intel Mac shaderc library, about 10 MB
 REQUIRED = ["LICENSE", "NOTICE", "README.md", "CONTRIBUTING.md", "CODE_OF_CONDUCT.md", "SECURITY.md", "TRADEMARKS.md",
             "Licenses/BRUTAL-LICENSE.txt", "Licenses/NOTICE.txt", "Licenses/credits.json"]
 

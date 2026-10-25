@@ -92,7 +92,9 @@
   <li>Click a row to select just that object.</li>
   <li><kbd>Shift</kbd>-click selects every row from the last one you clicked.</li>
   <li><kbd>Cmd</kbd>-click (macOS) or <kbd>Ctrl</kbd>-click adds or removes one row.</li>
+  <li>Left-click an object in the 3D view to select it, with <kbd>Cmd</kbd>/<kbd>Ctrl</kbd> to add it to the selection. An object with a model is hit where its model's bounding box is, a terrain where its ground is, and a camera, light or empty object by its marker. Clicking nothing clears the selection. It doesn't act while you drag a handle, sculpt a terrain or work in UI or Play mode.</li>
 </ul>
+<p>Selected objects glow with a gold outline in the 3D view: an object with a model is outlined along its edges (open edges and the ones where its surface turns away from the camera), a terrain by its box, and a camera, light or empty object by a ring. The outline is drawn over the scene, so it stays visible behind other objects.</p>
 <p>The row you clicked last is the <em>primary</em> selection: the Inspector shows it and the handles sit on it. Moving or scaling changes every selected object by the same amount.</p>
 
 <h3>Parenting</h3>
