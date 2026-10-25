@@ -33,6 +33,30 @@ public abstract class Behaviour
     // was saved. Their public fields are restored; use this to rebuild anything else, like a cached reference.
     public virtual void OnGameLoaded() { }
 
+    // Collisions as the visual script blocks read them. RecordCollision is called by the engine; a collision that started or
+    // ended is visible to CollisionEnter / CollisionExit during the script's next Update, and Colliding is true for as long
+    // as the two are touching. Objects are matched by name.
+    private readonly HashSet<SceneObject> _touching = new();
+    private List<SceneObject> _enterPending = new(), _exitPending = new(), _enterNow = new(), _exitNow = new();
+
+    internal void RecordCollision(SceneObject other, bool enter)
+    {
+        if (enter)
+        {
+            _touching.Add(other);
+            _enterPending.Add(other);
+        }
+        else
+        {
+            _touching.Remove(other);
+            _exitPending.Add(other);
+        }
+    }
+
+    protected bool CollisionEnter(string objectName) => _enterNow.Any(o => o.Name == objectName);
+    protected bool CollisionExit(string objectName) => _exitNow.Any(o => o.Name == objectName);
+    protected bool Colliding(string objectName) => _touching.Any(o => o.Name == objectName);
+
     // Called when this object's colliders start touching another object's, and when they stop.
     public virtual void OnCollisionEnter(SceneObject other) { }
     public virtual void OnCollisionExit(SceneObject other) { }
@@ -113,6 +137,12 @@ public abstract class Behaviour
     // Runs every running coroutine. Call once per frame from Update.
     protected void TickRoutines()
     {
+        // What happened since the last tick is what the collision blocks see during this one.
+        (_enterNow, _enterPending) = (_enterPending, _enterNow);
+        (_exitNow, _exitPending) = (_exitPending, _exitNow);
+        _enterPending.Clear();
+        _exitPending.Clear();
+
         float dt = Time.deltaTime;
         _timer += dt;
         for (int i = 0; i < _routines.Count;)

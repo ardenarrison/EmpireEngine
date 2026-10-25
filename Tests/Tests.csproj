@@ -14,6 +14,8 @@
     <Compile Include="../Editor/Assistant/Assistant*.cs" Link="EditorAssistant/%(Filename)%(Extension)" Exclude="../Editor/Assistant/AssistantWindow.cs" />
     <!-- and the editor's built-in terminal: the screen emulator and the shell hosting are plain .NET -->
     <Compile Include="../Editor/Terminal/TerminalEmulator.cs;../Editor/Terminal/PtySession.cs" Link="EditorTerminal/%(Filename)%(Extension)" />
+    <!-- and the visual scripting blocks and the C# they turn into -->
+    <Compile Include="../Editor/VisualCode/Model/*.cs;../Editor/VisualCode/Blocks/*.cs;../Editor/VisualCode/Transpiler/*.cs" Link="EditorVisualCode/%(Filename)%(Extension)" />
     <!-- and the editor's per-project settings -->
     <Compile Include="../Editor/ProjectSettings.cs" Link="EditorProject/%(Filename)%(Extension)" />
     <!-- and how the editor picks its light or dark look -->

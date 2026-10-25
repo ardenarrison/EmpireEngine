@@ -29,12 +29,13 @@ public sealed class VisualScriptView
     private const float DragThreshold = 4f;
     private const int MaxFieldLength = 32;   // the most characters any text field in the view accepts
 
-    private static readonly string[] CategoryOrder = { "Events", "Motion", "Control", "Sensing", "Variables", "Operators" };
+    private static readonly string[] CategoryOrder = { "Events", "Motion", "Control", "Functions", "Sensing", "Variables", "Operators" };
     private static readonly Dictionary<string, float4> Categories = new()
     {
         ["Events"] = new float4(1f, 0.75f, 0f, 1f),
         ["Motion"] = new float4(0.3f, 0.6f, 1f, 1f),
         ["Control"] = new float4(1f, 0.67f, 0.1f, 1f),
+        ["Functions"] = new float4(0.7f, 0.5f, 0.95f, 1f),
         ["Sensing"] = new float4(0.36f, 0.72f, 0.84f, 1f),
         ["Variables"] = new float4(1f, 0.55f, 0.1f, 1f),
         ["Operators"] = new float4(0.35f, 0.75f, 0.35f, 1f),
@@ -53,13 +54,13 @@ public sealed class VisualScriptView
     private static float4 MouthColor => Theme.Light ? new(0.86f, 0.88f, 0.93f, 1f) : new(0.20f, 0.22f, 0.27f, 1f);
     private static readonly float4 Gray = new(0.5f, 0.5f, 0.5f, 1f);
 
-    private sealed record Slot(Box Box, string NodeId, string Input, InputKind Kind);
+    private sealed record Slot(Box Box, string NodeId, string Input, InputKind Kind, bool World = false);   // World: in the zoomed workspace, not on a panel
     private sealed record Hit(Box Box, string NodeId);
     private sealed record Attach(float X, float Y, string NodeId, string Relation);
     private sealed record PaletteHit(Box Box, BlockSpec Spec);
     private sealed record Seg(string? Text, string? Input);
 
-    private enum PendingKind { None, Block, Chip, Palette, Scroll }
+    private enum PendingKind { None, Block, Chip, Palette, Scroll, Pan }
     private enum DragKind { None, Stack, Reporter }
 
     private readonly string _scriptsFolder;
@@ -82,9 +83,53 @@ public sealed class VisualScriptView
     private string _status = "";
     private float _paletteScroll;
     private float _fontTop = 9f;   // half the font's height plus a pixel, so text sits centered in a row
-    private float _viewWidth;
+    private float _viewWidth, _viewHeight;
     private bool _uiWants;
     private bool _keysConsumed;
+
+    // The open list of the scene's objects, for an input that names one (the collision blocks).
+    private sealed record ObjectMenu(string NodeId, string Input, Box Anchor, InputKind Kind);
+    private ObjectMenu? _menu;
+    private float _menuScroll;
+    private float _wheel;
+
+    // The workspace is drawn zoomed and panned: a block at (x, y) appears at (x * _zoom + _pan.X, y * _zoom + _pan.Y). Everything
+    // in the hit lists except the palette, header and inspector is in the block's own coordinates, and the pointer is turned
+    // into them with ToWorld before it is tested.
+    private float _zoom = 1f;
+    private float2 _pan;
+    private float2 _panStart, _panOrigin;
+    private float2 _lastMouse;
+    private const float MinZoom = 0.4f, MaxZoom = 2.5f;
+
+    private float2 ToWorld(float2 p) => new((p.X - _pan.X) / _zoom, (p.Y - _pan.Y) / _zoom);
+
+    private Box ToScreen(Box b) => new(b.X * _zoom + _pan.X, b.Y * _zoom + _pan.Y, b.W * _zoom, b.H * _zoom);
+
+    private bool InWorkspace(float2 p) =>
+        p.X >= PaletteW && p.X < _viewWidth - InspectorW && p.Y >= PanelTop;
+
+    // Zooms by factor around a point on the screen, so what is under it stays put.
+    private void ZoomAt(float2 point, float factor)
+    {
+        float zoom = Math.Clamp(_zoom * factor, MinZoom, MaxZoom);
+        if (MathF.Abs(zoom - _zoom) < 1e-5f) return;
+        var world = ToWorld(point);
+        _zoom = zoom;
+        _pan = new float2(point.X - world.X * zoom, point.Y - world.Y * zoom);
+    }
+
+    // A pinch on the trackpad: amount is the fraction the fingers moved apart (positive) or together (negative).
+    public void Pinch(float amount)
+    {
+        if (amount == 0f || _menu is not null || !InWorkspace(_lastMouse)) return;
+        ZoomAt(_lastMouse, 1f + Math.Clamp(amount, -0.5f, 0.5f));
+    }
+    private const float MenuRowH = 24f;
+    private const int MenuRows = 12;
+
+    // Set by the editor: the names of the objects in the current scene.
+    public Func<IReadOnlyList<string>>? ObjectNames { get; set; }
 
     // Pointer interaction.
     private PendingKind _pending = PendingKind.None;
@@ -121,6 +166,10 @@ public sealed class VisualScriptView
         _input.Update(window);
         _uiWants = uiWantsMouse;
         _keysConsumed = false;
+        _wheel = Brutal.ImGuiApi.ImGui.GetIO().MouseWheel;
+        _lastMouse = _input.Mouse;
+        if (!uiWantsMouse && _wheel != 0f && _menu is null && InWorkspace(_input.Mouse))
+            ZoomAt(_input.Mouse, MathF.Pow(1.1f, Math.Clamp(_wheel, -3f, 3f)));
 
         if (_input.Pressed && !uiWantsMouse) OnPress(_input.Mouse);
         if (_input.Down && _pending != PendingKind.None) OnDrag(_input.Mouse);
@@ -135,6 +184,7 @@ public sealed class VisualScriptView
     public void Build(Canvas2D c, float2 size)
     {
         _viewWidth = size.X;
+        _viewHeight = size.Y;
         _fontTop = c.FontSize / 2f + 1f;
         _slots.Clear();
         _chips.Clear();
@@ -144,11 +194,14 @@ public sealed class VisualScriptView
 
         c.Begin();
         c.Rect(0, 0, size.X, size.Y, BackgroundColor);
+        c.SetTransform(_zoom, _pan.X, _pan.Y);
+        DrawWorkspace(c, size);
+        c.ResetTransform();
         DrawHeader(c, size);
         DrawPalette(c, size);
-        DrawWorkspace(c, size);
         DrawInspector(c, size);
         c.Text(_status, PaletteW + 12f, size.Y - 24f, Dim);
+        DrawObjectMenu(c, size);
     }
 
     private void DrawHeader(Canvas2D c, float2 size)
@@ -226,10 +279,8 @@ public sealed class VisualScriptView
         var refs = _graph.ReferencedIds();
         foreach (var node in _graph.Nodes.Where(n => !refs.Contains(n.Id)).ToList())
         {
-            float x = Math.Max((float)node.X, PaletteW + 12f);
-            float y = Math.Max((float)node.Y, PanelTop + 8f);
-            node.X = x;
-            node.Y = y;
+            float x = (float)node.X;
+            float y = (float)node.Y;
 
             var spec = _registry.Get(node.Type);
             if (spec is null) continue;
@@ -282,7 +333,9 @@ public sealed class VisualScriptView
                 string value = LiteralOf(node, input.Name, input);
                 var box = new Box(ix + 12f, y, fw, 26f);
                 _slots.Add(new Slot(box, node.Id, input.Name, input.Kind));
-                if (TextField(c, FieldKey(node.Id, input.Name), box, ref value))
+                if (IsPicker(input.Kind))
+                    ObjectField(c, node.Id, input.Name, box, value, input.Kind);
+                else if (TextField(c, FieldKey(node.Id, input.Name), box, ref value))
                     node.Inputs[input.Name] = new VcInput { Literal = value };
                 y += 36f;
             }
@@ -378,10 +431,14 @@ public sealed class VisualScriptView
             else
             {
                 string value = LiteralOf(node, seg.Input, inputSpec);
-                float fw = FieldWidth(c, value);
+                var pickKind = inputSpec?.Kind ?? InputKind.Number;
+                bool pickObject = IsPicker(pickKind);
+                float fw = FieldWidth(c, value, pickKind);
                 var box = new Box(cx, y + 4f, fw, h - 8f);
-                _slots.Add(new Slot(box, node.Id, seg.Input, inputSpec?.Kind ?? InputKind.Number));
-                if (TextField(c, FieldKey(node.Id, seg.Input), box, ref value))
+                _slots.Add(new Slot(box, node.Id, seg.Input, inputSpec?.Kind ?? InputKind.Number, World: true));
+                if (pickObject)
+                    ObjectField(c, node.Id, seg.Input, box, value, pickKind);
+                else if (TextField(c, FieldKey(node.Id, seg.Input), box, ref value))
                     node.Inputs[seg.Input] = new VcInput { Literal = value };
                 cx += fw;
             }
@@ -405,12 +462,99 @@ public sealed class VisualScriptView
             if (node.Inputs.TryGetValue(seg.Input, out var v) && v.Node is { } childId && _graph.Find(childId) is { } child)
                 w += RowWidth(c, child) + 8f;
             else
-                w += FieldWidth(c, LiteralOf(node, seg.Input, spec.Inputs.FirstOrDefault(i => i.Name == seg.Input)));
+            {
+                var inputSpec = spec.Inputs.FirstOrDefault(i => i.Name == seg.Input);
+                w += FieldWidth(c, LiteralOf(node, seg.Input, inputSpec), inputSpec?.Kind ?? InputKind.Number);
+            }
         }
         return w;
     }
 
-    private static float FieldWidth(Canvas2D c, string value) => Math.Max(44f, c.MeasureText(value) + 14f);
+    private static float FieldWidth(Canvas2D c, string value, InputKind kind = InputKind.Number) =>
+        IsPicker(kind) ? Math.Max(120f, c.MeasureText(PickerShown(value, kind)) + 34f) : Math.Max(44f, c.MeasureText(value) + 14f);
+
+    // Inputs that open a list to pick from, instead of being typed: an object in the scene, or a function of this script.
+    private static bool IsPicker(InputKind kind) => kind is InputKind.Object or InputKind.Function;
+
+    private static string PickerShown(string value, InputKind kind) =>
+        value.Length == 0 ? (kind == InputKind.Function ? "choose function" : "choose object") : value;
+
+    // A field that shows the chosen object's name and opens a list of the scene's objects when clicked.
+    private void ObjectField(Canvas2D c, string nodeId, string input, Box box, string value, InputKind kind)
+    {
+        bool open = _menu is { } m && m.NodeId == nodeId && m.Input == input;
+        c.Rect(box.X, box.Y, box.W, box.H, open ? FieldFocusColor : FieldColor);
+        c.Text(Fit(c, PickerShown(value, kind), box.W - 26f), box.X + 6f, TopOf(box.Y, box.H), value.Length == 0 ? Gray : Ink);
+        c.Text("v", box.X + box.W - 16f, TopOf(box.Y, box.H), Gray);
+    }
+
+    private IReadOnlyList<string> MenuNames(InputKind kind) => kind == InputKind.Function
+        ? _graph.Nodes.Where(n => _registry.Get(n.Type) is { Definition: true })
+                      .Select(n => n.Inputs.TryGetValue("name", out var v) ? v.Literal?.Trim() ?? "" : "")
+                      .Where(name => name.Length > 0).Distinct().ToList()
+        : ObjectNames?.Invoke() ?? Array.Empty<string>();
+
+    private Box MenuBox(float2 size, int count)
+    {
+        var anchor = _menu!.Anchor;
+        float h = Math.Min(count, MenuRows) * MenuRowH + 4f;
+        float w = Math.Max(anchor.W, 180f);
+        float x = Math.Min(anchor.X, Math.Max(0f, size.X - w - 4f));
+        float y = anchor.Y + anchor.H + 2f;
+        if (y + h > size.Y - 4f) y = Math.Max(PanelTop, anchor.Y - h - 2f);   // above the field when there is no room below
+        return new Box(x, y, w, h);
+    }
+
+    private void DrawObjectMenu(Canvas2D c, float2 size)
+    {
+        if (_menu is null) return;
+        var names = MenuNames(_menu.Kind);
+        if (_graph.Find(_menu.NodeId) is null) { _menu = null; return; }
+
+        var box = MenuBox(size, Math.Max(names.Count, 1));
+        if (box.Contains(_input.Mouse) && _wheel != 0f && names.Count > MenuRows)
+            _menuScroll = Math.Clamp(_menuScroll - _wheel * MenuRowH * 2f, 0f, (names.Count - MenuRows) * MenuRowH);
+
+        c.Rect(box.X - 1f, box.Y - 1f, box.W + 2f, box.H + 2f, Gray);
+        c.Rect(box.X, box.Y, box.W, box.H, HeaderColor);
+        if (names.Count == 0)
+        {
+            c.Text(_menu.Kind == InputKind.Function ? "No functions defined yet" : "No objects in the scene", box.X + 8f, TopOf(box.Y + 2f, MenuRowH), Dim);
+            return;
+        }
+
+        int first = (int)(_menuScroll / MenuRowH);
+        string current = _graph.Find(_menu.NodeId) is { } node ? LiteralOf(node, _menu.Input, null) : "";
+        for (int i = first; i < Math.Min(names.Count, first + MenuRows); i++)
+        {
+            var row = new Box(box.X + 2f, box.Y + 2f + (i - first) * MenuRowH, box.W - 4f, MenuRowH);
+            bool hover = row.Contains(_input.Mouse) && !_uiWants;
+            if (hover || names[i] == current) c.Rect(row.X, row.Y, row.W, row.H, hover ? ButtonHoverColor : ButtonColor);
+            c.Text(Fit(c, names[i], row.W - 12f), row.X + 6f, TopOf(row.Y, row.H), White);
+        }
+        if (names.Count > MenuRows)
+            c.Text($"{first + 1}-{Math.Min(names.Count, first + MenuRows)} of {names.Count}", box.X + 8f, box.Y + box.H + 2f, Dim);
+    }
+
+    // Handles a press while the list is open. Returns true when the press belonged to the list.
+    private bool PressInObjectMenu(float2 p)
+    {
+        if (_menu is not { } menu) return false;
+        var names = MenuNames(menu.Kind);
+        var box = MenuBox(new float2(_viewWidth, _viewHeight), Math.Max(names.Count, 1));
+        if (box.Contains(p))
+        {
+            int index = (int)((p.Y - box.Y - 2f) / MenuRowH) + (int)(_menuScroll / MenuRowH);
+            if (index >= 0 && index < names.Count && p.Y >= box.Y + 2f && _graph.Find(menu.NodeId) is { } node)
+                node.Inputs[menu.Input] = new VcInput { Literal = names[index] };
+            _menu = null;
+            return true;
+        }
+
+        // A press anywhere else closes the list; pressing the field that opened it just closes it.
+        _menu = null;
+        return _slots.Any(s => s.NodeId == menu.NodeId && s.Input == menu.Input && s.Box.Contains(p));
+    }
 
     private static List<Seg> Segments(string label)
     {
@@ -520,26 +664,39 @@ public sealed class VisualScriptView
     {
         _focus = null;
 
-        if (HitAt(_slots, s => s.Box, p) is { } slot)
+        if (PressInObjectMenu(p)) return;
+        bool inWorkspace = InWorkspace(p);
+        var w = ToWorld(p);
+        Slot? slot = null;
+        for (int i = _slots.Count - 1; i >= 0 && slot is null; i--)
+            if (_slots[i].World ? inWorkspace && _slots[i].Box.Contains(w) : _slots[i].Box.Contains(p))
+                slot = _slots[i];
+        if (slot is not null)
         {
-            _focus = FieldKey(slot.NodeId, slot.Input);
+            if (IsPicker(slot.Kind))
+            {
+                _menu = new ObjectMenu(slot.NodeId, slot.Input, slot.World ? ToScreen(slot.Box) : slot.Box, slot.Kind);
+                _menuScroll = 0f;
+            }
+            else
+                _focus = FieldKey(slot.NodeId, slot.Input);
             return;
         }
-        if (HitAt(_chips, h => h.Box, p) is { } chip)
+        if (inWorkspace && HitAt(_chips, h => h.Box, w) is { } chip)
         {
-            StartPending(PendingKind.Chip, chip.NodeId, chip.Box, p);
+            StartPending(PendingKind.Chip, chip.NodeId, chip.Box, p, w);
             return;
         }
-        if (HitAt(_blocks, h => h.Box, p) is { } block)
+        if (inWorkspace && HitAt(_blocks, h => h.Box, w) is { } block)
         {
             _selectedId = block.NodeId;
-            StartPending(PendingKind.Block, block.NodeId, block.Box, p);
+            StartPending(PendingKind.Block, block.NodeId, block.Box, p, w);
             return;
         }
         if (HitAt(_palette, h => h.Box, p) is { } item)
         {
             _pendingSpec = item.Spec;
-            StartPending(PendingKind.Palette, null, item.Box, p);
+            StartPending(PendingKind.Palette, null, item.Box, p, p);
             return;
         }
         if (p.X < PaletteW)
@@ -549,16 +706,23 @@ public sealed class VisualScriptView
             _scrollOrigin = _paletteScroll;
             return;
         }
-        if (p.X < _viewWidth - InspectorW)
+        if (inWorkspace)
+        {
+            // An empty spot: a click clears the selection, and dragging it moves the whole workspace.
             _selectedId = null;
+            _pending = PendingKind.Pan;
+            _panStart = p;
+            _panOrigin = _pan;
+        }
     }
 
-    private void StartPending(PendingKind kind, string? id, Box box, float2 p)
+    // where is the pointer on screen (p) and in the workspace's own coordinates (at); box is in the same space as at
+    private void StartPending(PendingKind kind, string? id, Box box, float2 p, float2 at)
     {
         _pending = kind;
         _pendingId = id;
         _pressPoint = p;
-        _grab = new float2(p.X - box.X, p.Y - box.Y);
+        _grab = new float2(at.X - box.X, at.Y - box.Y);
     }
 
     private void OnDrag(float2 p)
@@ -566,6 +730,12 @@ public sealed class VisualScriptView
         if (_pending == PendingKind.Scroll)
         {
             _paletteScroll = Math.Max(0f, _scrollOrigin - (p.Y - _scrollStart));
+            return;
+        }
+
+        if (_pending == PendingKind.Pan)
+        {
+            _pan = new float2(_panOrigin.X + (p.X - _panStart.X), _panOrigin.Y + (p.Y - _panStart.Y));
             return;
         }
 
@@ -577,8 +747,9 @@ public sealed class VisualScriptView
 
         if (_dragHead is { } head && _graph.Find(head) is { } node)
         {
-            node.X = p.X - _grab.X;
-            node.Y = p.Y - _grab.Y;
+            var at = ToWorld(p);
+            node.X = at.X - _grab.X;
+            node.Y = at.Y - _grab.Y;
         }
     }
 
@@ -602,8 +773,9 @@ public sealed class VisualScriptView
 
             case PendingKind.Palette when _pendingSpec is { } spec:
                 var created = NewNode(spec);
-                created.X = p.X - _grab.X;
-                created.Y = p.Y - _grab.Y;
+                var at = ToWorld(p);
+                created.X = at.X - _grab.X;
+                created.Y = at.Y - _grab.Y;
                 _graph.Nodes.Add(created);
                 _dragSet = new HashSet<string> { created.Id };
                 _dragHead = created.Id;
@@ -631,7 +803,7 @@ public sealed class VisualScriptView
             }
             else if (_drag == DragKind.Reporter)
             {
-                PlugReporter(head, p);
+                PlugReporter(head, ToWorld(p));
                 _selectedId = head;
             }
             else
@@ -659,7 +831,7 @@ public sealed class VisualScriptView
         for (int i = _slots.Count - 1; i >= 0; i--)
         {
             var slot = _slots[i];
-            if (!slot.Box.Contains(p) || _dragSet.Contains(slot.NodeId)) continue;
+            if (!slot.World || !slot.Box.Contains(p) || _dragSet.Contains(slot.NodeId)) continue;
             if (!Accepts(slot.Kind, returns) || _graph.Find(slot.NodeId) is not { } owner) continue;
             owner.Inputs[slot.Input] = new VcInput { Node = headId };
             return;
@@ -711,8 +883,9 @@ public sealed class VisualScriptView
     {
         var node = NewNode(spec);
         int count = _graph.Nodes.Count;
-        node.X = PaletteW + 40 + (count % 6) * 30;
-        node.Y = PanelTop + 30 + (count % 10) * 36;
+        var spot = ToWorld(new float2(PaletteW + 40 + (count % 6) * 30, PanelTop + 30 + (count % 10) * 36));
+        node.X = spot.X;
+        node.Y = spot.Y;
         _graph.Nodes.Add(node);
         _selectedId = node.Id;
     }

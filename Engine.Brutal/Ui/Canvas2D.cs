@@ -242,7 +242,22 @@ public sealed unsafe class Canvas2D : IDisposable
         Array.Clear(_layerCounts);
         _layer = PanelLayer;
         _clip = null;
+        _zoom = 1f;
+        _shiftX = _shiftY = 0f;
     }
+
+    private float _zoom = 1f, _shiftX, _shiftY;
+
+    // Scales and shifts everything drawn from now on: a point drawn at (x, y) lands at (x * zoom + shiftX, y * zoom + shiftY).
+    // Text and lines scale with it. Begin and ResetTransform put it back. Clip boxes are not moved by it.
+    public void SetTransform(float zoom, float shiftX, float shiftY)
+    {
+        _zoom = zoom;
+        _shiftX = shiftX;
+        _shiftY = shiftY;
+    }
+
+    public void ResetTransform() => SetTransform(1f, 0f, 0f);
 
     public float FontSize => _fontSize;
 
@@ -419,8 +434,8 @@ public sealed unsafe class Canvas2D : IDisposable
         var layer = _layers[_layer];
         int i = _layerCounts[_layer]++ * FloatsPerVertex;
         _vertexCount++;
-        layer[i + 0] = x;
-        layer[i + 1] = y;
+        layer[i + 0] = x * _zoom + _shiftX;
+        layer[i + 1] = y * _zoom + _shiftY;
         layer[i + 2] = u;
         layer[i + 3] = v;
         layer[i + 4] = color.X;

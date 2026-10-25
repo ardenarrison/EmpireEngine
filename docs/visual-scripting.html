@@ -17,10 +17,11 @@
 <h2>The VC view</h2>
 <p>Press <strong>VC</strong> in the toolbar. The 3D view is replaced by three areas:</p>
 <ul>
-  <li><strong>The palette</strong> on the left, with the blocks grouped by category: Events, Motion, Control, Sensing, Variables and Operators.</li>
+  <li><strong>The palette</strong> on the left, with the blocks grouped by category: Events, Motion, Control, Functions, Sensing, Variables and Operators.</li>
   <li><strong>The canvas</strong> in the middle, where you build scripts.</li>
   <li><strong>The block inspector</strong> on the right. Click a block to edit its values, see what's plugged into it, or press <em>Duplicate block</em> or <em>Delete block</em>.</li>
 </ul>
+<p><strong>Moving around the canvas:</strong> hold the left mouse button on an empty spot of the canvas and drag to move the whole workspace. Scroll with the mouse wheel or two fingers on a trackpad, or pinch, to zoom in and out around the pointer (from 40% to 250%). Blocks keep their places in the script, so panning and zooming only change what you see; dragging, dropping and picking from a list work at any zoom.</p>
 <p>The header has <strong>New</strong>, <strong>Save</strong> and <strong>Check</strong>, a name box for the script, a button for each visual script in the project to open it, and <strong>3D view</strong> to go back.</p>
 
 <h3>Building a script</h3>
@@ -95,11 +96,25 @@
     <tr><td><em>key [key] held?</em></td><td>True while the key is held</td></tr>
     <tr><td><em>[button] mouse pressed?</em></td><td>True while the mouse button is held</td></tr>
     <tr><td><em>distance to x: () y: () z: ()</em></td><td>How far the object is from a point</td></tr>
+    <tr><td><em>collision enter with [object]</em></td><td>True for one frame when this object's collider starts touching the named object's</td></tr>
+    <tr><td><em>collision now with [object]</em></td><td>True for as long as the two are touching</td></tr>
+    <tr><td><em>collision end with [object]</em></td><td>True for one frame when they stop touching</td></tr>
     <tr><td><em>timer</em>, <em>reset timer</em></td><td>Seconds since the script started or the timer was last reset</td></tr>
     <tr><td><em>delta time</em></td><td>Seconds since the last frame (multiply speeds by it)</td></tr>
     <tr><td><em>fps</em></td><td>Frames per second</td></tr>
   </tbody>
 </table></div>
+
+<p>The three collision blocks go inside an <em>if</em> (or anywhere a true/false value fits). Click the name in one to pick an object from a list of the objects in the scene; objects are matched by name. Both objects need a collider, and at least one a Rigidbody, as for <code>OnCollisionEnter</code> in a script.</p>
+
+<h3>Functions</h3>
+<p>A function is a stack of blocks you name once and run from anywhere in the script.</p>
+<ul>
+  <li><em>define function [name]</em> (under Functions in the palette) is a hat block like <em>every frame</em>, but it doesn't start anything by itself: type a name and build the stack of blocks under it.</li>
+  <li><em>call function [name]</em> runs that stack. Click its name to pick from the functions you have defined. The caller waits for the function to finish, including any <em>wait</em> blocks inside it, before going on to the next block.</li>
+  <li>Functions share the script's variables. They don't take values in or give any back: use variables for that.</li>
+  <li>The <strong>Check</strong> button reports a call to a function that doesn't exist, two functions with one name, and functions that call each other round and round (they would never finish).</li>
+</ul>
 
 <h3>Variables</h3>
 <p>Type a name under Variables in the palette and press <strong>Add</strong>. Then use <em>set [var] to ()</em>, <em>change [var] by ()</em>, and the variable's own reporter block. Variables belong to the script on one object, start at their set value each time play starts, and are not shown in the Inspector.</p>
