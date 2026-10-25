@@ -2526,7 +2526,7 @@ if (!OperatingSystem.IsWindows())
     Check(ThemeChoice.FromGtkTheme("Adwaita:dark") == false && ThemeChoice.FromGtkTheme("Breeze-Dark") == false && ThemeChoice.FromGtkTheme("Adwaita") is null && ThemeChoice.FromGtkTheme(null) is null,
           "a GTK_THEME that names a dark theme means dark; otherwise it says nothing");
     bool? real = ThemeChoice.SystemIsLight();   // whatever this computer says: it just must not crash or hang
-    Check(real is null or true or false, "asking the real system works");
+    Check(real.GetValueOrDefault() || !real.GetValueOrDefault(), "asking the real system works");
     Check(Editor.Terminal.TerminalGlyphs.Palette(3) == 0xE5E510 && Editor.Terminal.TerminalGlyphs.Palette(3, light: true) == 0x949800 && Editor.Terminal.TerminalGlyphs.Palette(200) == Editor.Terminal.TerminalGlyphs.Palette(200, light: true),
           "the terminal's basic colors have a set that can be read on white, and the 256-color cube is the same in both");
 }
