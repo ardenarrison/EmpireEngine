@@ -20,8 +20,15 @@ public abstract class Component
     // The same as Object.
     public SceneObject sceneObject => Object;
 
+    // Destroys an object and everything under it, at the end of this frame or after delay seconds (see Scene.Destroy).
+    public void Destroy(SceneObject? target, float delay = 0f) => Scene.Destroy(target, delay);
+
     // Another component on the same object, e.g. GetComponent<MeshRenderer>(). Null when there is none.
     public T? GetComponent<T>() where T : Component => Object?.Components.OfType<T>().FirstOrDefault();
+
+    // Called once when the object is destroyed with Destroy, just before it leaves the scene, for components written in
+    // scripts that had started.
+    public virtual void OnDestroy() { }
 
     // Called once before the first Update, for components written in scripts.
     public virtual void Start() { }

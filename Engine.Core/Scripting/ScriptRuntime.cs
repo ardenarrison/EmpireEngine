@@ -119,6 +119,26 @@ public static class ScriptRuntime
             }
     }
 
+    // Calls OnDestroy on every started script on obj and on everything under it (a parent before its children), just before
+    // Destroy takes them out of the scene. A script that throws is reported and skipped; the rest still run.
+    internal static void NotifyDestroy(SceneObject obj)
+    {
+        foreach (var o in Engine.Core.Scene.Scene.Subtree(obj).ToList())
+            foreach (var comp in o.Components.OfType<ScriptComponent>().ToList())
+            {
+                if (!comp.Started) continue;
+                try
+                {
+                    if (comp.Instance is { } script) script.OnDestroy();
+                    else if (comp.ComponentInstance is { } component && !comp.ComponentStopped) component.OnDestroy();
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Script error in {comp.ScriptName}.OnDestroy on '{o.Name}': {ex.Message}.");
+                }
+            }
+    }
+
     // Tells every script on obj that it started (enter) or stopped touching other.
     internal static void Collision(SceneObject obj, SceneObject other, bool enter)
     {

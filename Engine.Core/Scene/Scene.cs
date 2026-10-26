@@ -68,6 +68,13 @@ public sealed class Scene
     // find an object once (in Start) and keep it rather than searching every frame.
     public static SceneObject? FindObjectWithName(string name) => Scripting.SceneManager.World?.FindByName(name);
 
+    // For scripts: destroys an object, and everything under it, in the scene that is playing. It goes at the end of the
+    // frame (or after delay seconds), not at once, so the script can carry on using it for the rest of the frame and the
+    // other scripts are not interrupted. Any script can destroy any object it has a reference to:
+    //     Scene.Destroy(enemy);          // or Scene.Destroy(enemy, 2f) for two seconds from now
+    // Destroying an object that is already gone, or null, does nothing.
+    public static void Destroy(SceneObject? obj, float delay = 0f) => Scripting.Destruction.Request(obj, delay);
+
     // For scripts: every object with exactly this name in the scene that is playing.
     public static List<SceneObject> FindObjectsWithName(string name) =>
         Scripting.SceneManager.World?.FindAllByName(name) ?? new List<SceneObject>();

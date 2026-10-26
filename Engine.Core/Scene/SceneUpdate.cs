@@ -23,5 +23,6 @@ public static class SceneUpdate
         Animators.Update(scene, Time.deltaTime);
         Particles.Update(scene, Time.deltaTime);
         Audio.AudioEngine.Update(scene, dt);
+        Destruction.Apply(scene, dt);  // objects scripts asked to destroy go now, so nothing was pulled out from under a loop
     }
 }

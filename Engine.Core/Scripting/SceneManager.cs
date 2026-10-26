@@ -91,6 +91,7 @@ public static class SceneManager
         }
         World = scene;
         ContentRoot = contentRoot;
+        Destruction.Clear();
         foreach (var obj in scene.All)
             if (obj.SceneName.Length == 0)
                 obj.SceneName = ActiveScene;

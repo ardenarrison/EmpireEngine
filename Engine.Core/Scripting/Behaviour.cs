@@ -23,6 +23,10 @@ public abstract class Behaviour
     // The object this script is attached to, as in sceneObject.transform.position. The same object as Object.
     public SceneObject sceneObject => Object;
 
+    // Destroys an object and everything under it, at the end of this frame or after delay seconds. Any script can destroy any
+    // object it has a reference to, including its own: Destroy(other), Destroy(sceneObject), Destroy(enemy, 2f).
+    public void Destroy(SceneObject? target, float delay = 0f) => Scene.Scene.Destroy(target, delay);
+
     // Called once, before the first Update.
     public virtual void Start() { }
 
@@ -55,7 +59,22 @@ public abstract class Behaviour
 
     protected bool CollisionEnter(string objectName) => _enterNow.Any(o => o.Name == objectName);
     protected bool CollisionExit(string objectName) => _exitNow.Any(o => o.Name == objectName);
-    protected bool Colliding(string objectName) => _touching.Any(o => o.Name == objectName);
+    protected bool Colliding(string objectName) => _touching.Any(o => o.Name == objectName && StillInScene(o));
+
+    // An object that was destroyed while touching this one never sends an end of collision, so it is checked for here.
+    private static bool StillInScene(SceneObject obj) => SceneManager.World?.Contains(obj) ?? true;
+
+    // Called once when this object is destroyed with Destroy, just before it leaves the scene (children go with their parent,
+    // and each gets it too). For scripts that had started. Not called when a scene is unloaded or the game stops.
+    public virtual void OnDestroy() { }
+
+    // Destroys every object in the scene with exactly this name, as the visual code block "destroy [object]" does. Does
+    // nothing when there is none.
+    public void DestroyObjectsNamed(string objectName)
+    {
+        foreach (var target in Scene.Scene.FindObjectsWithName(objectName))
+            Destroy(target);
+    }
 
     // Called when this object's colliders start touching another object's, and when they stop.
     public virtual void OnCollisionEnter(SceneObject other) { }
@@ -142,6 +161,7 @@ public abstract class Behaviour
         (_exitNow, _exitPending) = (_exitPending, _exitNow);
         _enterPending.Clear();
         _exitPending.Clear();
+        _touching.RemoveWhere(o => !StillInScene(o));
 
         float dt = Time.deltaTime;
         _timer += dt;

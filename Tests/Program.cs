@@ -2713,6 +2713,163 @@ if (!OperatingSystem.IsWindows())
           "functions that call each other round and round are an error");
 }
 
+// Destroy: any script can destroy any object it has a reference to, at the end of the frame or after a delay.
+{
+    string destroyDir = Path.Combine(Path.GetTempPath(), "empire-destroy-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(destroyDir);
+    File.WriteAllText(Path.Combine(destroyDir, "Reaper.cs"), """
+        public class Reaper : Behaviour
+        {
+            public SceneObject Victim;
+            public float Delay;
+            public bool SelfDestruct;
+            public bool StillThereAfterAsking;
+            public int Frame;
+            public override void Update()
+            {
+                Frame++;
+                if (Frame == 2)
+                {
+                    if (SelfDestruct) Destroy(sceneObject);
+                    else Destroy(Victim, Delay);
+                    StillThereAfterAsking = Scene.FindObjectWithName(Victim?.Name ?? sceneObject.Name) != null;
+                    if (!SelfDestruct) Destroy(Victim, Delay);   // asking twice is fine
+                }
+            }
+        }
+        public class Bystander : Behaviour
+        {
+            public int Updates;
+            public override void Update() { Updates++; }
+        }
+        """);
+    string destroyDll = Path.Combine(destroyDir, "destroy.dll");
+    Check(Engine.Scripting.Build.ScriptBuilder.Compile(destroyDir, destroyDll,
+              Engine.Scripting.Build.ScriptBuilder.DefaultReferences(typeof(Behaviour).Assembly.Location), out string destroyErrors),
+          "a script that calls Destroy on another object compiles" + (destroyErrors.Length > 0 ? ": " + destroyErrors : ""));
+    var destroyAssembly = Assembly.LoadFrom(destroyDll);
+
+    Scene Arena(out SceneObject reaper, out SceneObject victim, out SceneObject child, out SceneObject bystander, bool self = false, float delay = 0f)
+    {
+        var scene = new Scene();
+        victim = new SceneObject { Name = "Victim" };
+        child = new SceneObject { Name = "VictimChild" };
+        reaper = new SceneObject { Name = "Reaper" };
+        bystander = new SceneObject { Name = "Bystander" };
+        scene.Add(victim);
+        scene.Add(child, victim);
+        scene.Add(reaper);
+        scene.Add(bystander);
+        reaper.Components.Add(new ScriptComponent
+        {
+            ScriptName = "Reaper",
+            Fields = { ["Delay"] = delay.ToString(System.Globalization.CultureInfo.InvariantCulture), ["SelfDestruct"] = self ? "true" : "false" },
+        });
+        bystander.Components.Add(new ScriptComponent { ScriptName = "Bystander" });
+        ScriptRuntime.Load(scene, new[] { destroyAssembly });
+        return scene;
+    }
+    object? Field(SceneObject owner, string script, string field)
+    {
+        var instance = owner.Components.OfType<ScriptComponent>().First(c => c.ScriptName == script).Instance!;
+        return instance.GetType().GetField(field)!.GetValue(instance);
+    }
+
+    var arena = Arena(out var reaper, out var victim, out var victimChild, out var bystander);
+    reaper.Components.OfType<ScriptComponent>().First().Instance!.GetType().GetField("Victim")!
+        .SetValue(reaper.Components.OfType<ScriptComponent>().First().Instance, victim);
+    SceneUpdate.Update(arena, 1f / 60f);
+    Check(arena.Contains(victim), "nothing is destroyed before the script asks");
+    SceneUpdate.Update(arena, 1f / 60f);
+    Check((bool)Field(reaper, "Reaper", "StillThereAfterAsking")! && !arena.Contains(victim) && !arena.Contains(victimChild),
+          "Destroy waits for the end of the frame, then the object and its children are gone");
+    Check(arena.Contains(reaper) && arena.Contains(bystander) && (int)Field(bystander, "Bystander", "Updates")! == 2,
+          "the other objects, and the scripts running in the same frame, are not disturbed");
+    SceneUpdate.Update(arena, 1f / 60f);
+    Check((int)Field(bystander, "Bystander", "Updates")! == 3, "and they carry on");
+
+    var delayed = Arena(out var reaper2, out var victim2, out _, out _, delay: 0.5f);
+    reaper2.Components.OfType<ScriptComponent>().First().Instance!.GetType().GetField("Victim")!
+        .SetValue(reaper2.Components.OfType<ScriptComponent>().First().Instance, victim2);
+    for (int i = 0; i < 20; i++) SceneUpdate.Update(delayed, 1f / 60f);
+    Check(delayed.Contains(victim2), "a delayed Destroy leaves the object there until the time is up");
+    for (int i = 0; i < 20; i++) SceneUpdate.Update(delayed, 1f / 60f);
+    Check(!delayed.Contains(victim2), "and takes it out after");
+
+    var suicide = Arena(out var reaper3, out var victim3, out _, out _, self: true);
+    reaper3.Components.OfType<ScriptComponent>().First().Instance!.GetType().GetField("Victim")!
+        .SetValue(reaper3.Components.OfType<ScriptComponent>().First().Instance, victim3);
+    SceneUpdate.Update(suicide, 1f / 60f);
+    SceneUpdate.Update(suicide, 1f / 60f);
+    Check(!suicide.Contains(reaper3) && suicide.Contains(victim3), "a script can destroy its own object");
+    Scene.Destroy(null);
+    Scene.Destroy(reaper3);   // already gone
+    SceneUpdate.Update(suicide, 1f / 60f);
+    Check(suicide.Contains(victim3), "destroying null, or an object that is already gone, does nothing");
+    Directory.Delete(destroyDir, true);
+}
+
+// OnDestroy, and the visual code blocks "destroy [object]" and "destroy this object".
+{
+    string hookDir = Path.Combine(Path.GetTempPath(), "empire-ondestroy-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(hookDir);
+    var graph = new VisualCode.Model.VcGraph { Name = "Cleaner" };
+    graph.Nodes.Add(new() { Id = "start", Type = "when_start", Next = "kill" });
+    graph.Nodes.Add(new() { Id = "kill", Type = "destroy_object", Next = "self", Inputs = { ["object"] = new() { Literal = "Crate" } } });
+    graph.Nodes.Add(new() { Id = "self", Type = "destroy_self" });
+    var transpiled = new VisualCode.Transpiler.VcTranspiler().Transpile(graph, "Cleaner");
+    Check(!transpiled.HasErrors && transpiled.Code.Contains("DestroyObjectsNamed(\"Crate\")") && transpiled.Code.Contains("Destroy(sceneObject)"),
+          "the destroy blocks turn into Destroy calls");
+    var empty = new VisualCode.Model.VcGraph();
+    empty.Nodes.Add(new() { Id = "a", Type = "when_start", Next = "b" });
+    empty.Nodes.Add(new() { Id = "b", Type = "destroy_object" });
+    Check(new VisualCode.Transpiler.VcTranspiler().Transpile(empty, "X").Diagnostics.Any(d => d.Message.Contains("Choose an object")),
+          "a destroy block with no object chosen is reported");
+    File.WriteAllText(Path.Combine(hookDir, "Cleaner.cs"), transpiled.Code);
+    File.WriteAllText(Path.Combine(hookDir, "Mortal.cs"), """
+        using System.Collections.Generic;
+        public class Mortal : Behaviour
+        {
+            public static List<string> Log = new();
+            public override void OnDestroy() { Log.Add(sceneObject.Name); }
+        }
+        public class Grumpy : Behaviour
+        {
+            public override void OnDestroy() { throw new System.Exception("not today"); }
+        }
+        """);
+    string hookDll = Path.Combine(hookDir, "hooks.dll");
+    Check(Engine.Scripting.Build.ScriptBuilder.Compile(hookDir, hookDll,
+              Engine.Scripting.Build.ScriptBuilder.DefaultReferences(typeof(Behaviour).Assembly.Location), out string hookErrors),
+          "scripts with OnDestroy and the visual code destroy blocks compile" + (hookErrors.Length > 0 ? ": " + hookErrors : ""));
+    var hookAssembly = Assembly.LoadFrom(hookDll);
+    var log = (List<string>)hookAssembly.GetType("Mortal")!.GetField("Log")!.GetValue(null)!;
+
+    var hookWorld = new Scene();
+    var elder = new SceneObject { Name = "Parent" };
+    var youngster = new SceneObject { Name = "Kid" };
+    var woodCrate = new SceneObject { Name = "Crate" };
+    var woodCrate2 = new SceneObject { Name = "Crate" };
+    var tidier = new SceneObject { Name = "Cleaner" };
+    hookWorld.Add(elder); hookWorld.Add(youngster, elder); hookWorld.Add(woodCrate); hookWorld.Add(woodCrate2); hookWorld.Add(tidier);
+    foreach (var o in new[] { elder, youngster, woodCrate })
+        o.Components.Add(new ScriptComponent { ScriptName = "Mortal" });
+    elder.Components.Add(new ScriptComponent { ScriptName = "Grumpy" });
+    tidier.Components.Add(new ScriptComponent { ScriptName = "Cleaner" });
+    ScriptRuntime.Load(hookWorld, new[] { hookAssembly });
+    SceneUpdate.Update(hookWorld, 1f / 60f);   // Start runs, the cleaner asks, and at the end of the frame it is done
+    Check(!hookWorld.Contains(woodCrate) && !hookWorld.Contains(woodCrate2) && !hookWorld.Contains(tidier) && hookWorld.Contains(elder),
+          "destroy [object] destroys every object with that name, and destroy this object destroys its own");
+    Check(log.SequenceEqual(new[] { "Crate" }), "OnDestroy ran once, on the crate that had started (" + string.Join(",", log) + ")");
+
+    Scene.Destroy(elder);
+    SceneUpdate.Update(hookWorld, 1f / 60f);
+    Check(!hookWorld.Contains(elder) && !hookWorld.Contains(youngster) && log.SequenceEqual(new[] { "Crate", "Parent", "Kid" }),
+          "a parent's OnDestroy runs before its children's, even though its other script threw (" + string.Join(",", log) + ")");
+
+    Directory.Delete(hookDir, true);
+}
+
 Console.WriteLine(failures == 0 ? "\nAll checks passed." : $"\n{failures} check(s) failed.");
 return failures == 0 ? 0 : 1;
 
