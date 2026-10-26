@@ -434,8 +434,7 @@ public sealed class CodeEditorView
                 if (_doc == doc && !doc.Dirty) _doc = null;
                 continue;
             }
-            if (!doc.Dirty && CodeDocument.Normalize(File.ReadAllText(path)) != doc.Text)
-                doc.Reload();
+            doc.CheckAgainstDisk();   // reloads it, or flags it for the header to ask when it has edits here
         }
     }
 
@@ -541,10 +540,25 @@ public sealed class CodeEditorView
         if (Button(c, "New", new Box(x, by, 52, bh))) CreateScript();
         x += 64f;
 
+        float reserved = 140f;
+        if (_doc is { DiskConflict: true } conflicted)
+        {
+            // Changed on disk while it has edits here: keep one of the two.
+            if (Button(c, "Keep mine", new Box(size.X - 108f - 94f, by, 86, bh)))
+            {
+                conflicted.IgnoredDisk = CodeDocument.Normalize(File.ReadAllText(conflicted.Path));
+                conflicted.DiskConflict = false;
+            }
+            if (Button(c, "Load disk", new Box(size.X - 108f - 94f - 94f, by, 86, bh)))
+                conflicted.Reload();
+            reserved = 108f + 94f + 94f + 8f;
+        }
+
         if (_doc is not null)
         {
-            string title = $"{_doc.Name}.cs" + (_doc.Dirty ? "  (unsaved)" : "") + (_doc.ReadOnly ? "  (read-only)" : "");
-            c.Text(Fit(c, title, size.X - x - 140f), x, Mid(by, bh, c), _doc.Dirty ? WarningColor : TextColor);
+            string title = $"{_doc.Name}.cs" + (_doc.Dirty ? "  (unsaved)" : "") + (_doc.ReadOnly ? "  (read-only)" : "") +
+                           (_doc.DiskConflict ? "  (changed on disk)" : "");
+            c.Text(Fit(c, title, size.X - x - reserved), x, Mid(by, bh, c), _doc.Dirty || _doc.DiskConflict ? WarningColor : TextColor);
         }
 
         if (Button(c, "3D view", new Box(size.X - 108f, by, 98f, bh))) _exitRequested = true;

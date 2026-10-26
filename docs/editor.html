@@ -151,6 +151,13 @@
 
 <h2>Live reloading</h2>
 <p>Once a second the editor reloads models whose files changed on disk, so a re-export from Blender shows up right away. Scripts edited elsewhere are picked up the same way.</p>
+<p>The same goes for the scene and your scripts when another program changes their files (another editor, git, a build step):</p>
+<ul>
+  <li><strong>The scene.</strong> With no unsaved changes in the editor, the scene reloads at once and a note says so. The selection stays on the same object if it still exists, and undo history starts again. With unsaved changes, a window asks whether to <em>Load the file from disk</em> or <em>Keep my version</em>; keeping yours means your next save replaces the file. The check waits while you play and happens when you stop.</li>
+  <li><strong>Scripts in the code view.</strong> A script with no edits of yours reloads. One with edits stays as you left it, and the header shows <em>changed on disk</em> with <em>Load disk</em> and <em>Keep mine</em>. Saving a script keeps your version.</li>
+  <li><strong>Visual scripts.</strong> The open visual script reloads the same way (the canvas keeps its pan and zoom), or the header asks when you have unsaved edits.</li>
+</ul>
+<p>The editor waits for a file to stop changing before it reads it, so a file still being written is not loaded half way, and a file that was only touched, with the same contents, is ignored.</p>
 
 <h2 id="appearance">Light and dark</h2>
 <p>The editor has a light look and a dark one. Start it with <code>--lightmode</code> or <code>--darkmode</code> to choose; with neither, it uses your computer's setting (and is dark if the setting can't be read). The flag can go anywhere among the arguments:</p>

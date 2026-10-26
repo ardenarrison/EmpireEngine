@@ -153,6 +153,11 @@ public sealed class VisualScriptView
 
     private bool _exitRequested;
 
+    // The open script's file, watched for changes made by something else; and whether the copy here has edits of its own.
+    private FileChangeWatcher? _watch;
+    private string _savedGraphJson = "";
+    private bool _changedOnDisk;
+
     // Returns true once after the "3D view" button was pressed.
     public bool TakeExit()
     {
@@ -221,12 +226,30 @@ public sealed class VisualScriptView
         if (Button(c, "3D view", new Box(size.X - 118f, by, 106f, bh)))
             _exitRequested = true;
 
+        float listEnd = size.X - 130f;
+        if (_changedOnDisk)
+        {
+            // Changed on disk while it has edits here: keep one of the two.
+            if (Button(c, "Keep mine", new Box(size.X - 118f - 100f, by, 92f, bh)))
+            {
+                _changedOnDisk = false;
+                _watch?.Accept();
+            }
+            if (Button(c, "Load disk", new Box(size.X - 118f - 200f, by, 92f, bh)))
+            {
+                LoadFromDisk();
+                Status($"Loaded {Path.GetFileName(_path)} from disk.");
+            }
+            c.Text("changed on disk", size.X - 118f - 360f, TopOf(by, bh), Dim);
+            listEnd = size.X - 118f - 380f;
+        }
+
         float fx = 448f;
         foreach (var file in ListScripts())
         {
             string label = Path.GetFileNameWithoutExtension(file);
             float w = Math.Max(90f, c.MeasureText(label) + 18f);
-            if (fx + w > size.X - 130f) break;
+            if (fx + w > listEnd) break;
             if (Button(c, label, new Box(fx, by, w, bh))) Open(file);
             fx += w + 6f;
         }
@@ -1074,10 +1097,46 @@ public sealed class VisualScriptView
 
     private void Status(string text) => _status = text;
 
+    // Called about once a second: notices the open script's file being changed by something else. With no unsaved edits it
+    // is reloaded (the canvas keeps its pan and zoom); with edits, the header asks which to keep. Returns a note to show,
+    // or null.
+    public string? PollDisk()
+    {
+        if (_path is null || _watch is not { } watch || !watch.Poll()) return null;
+        if (_graph.ToJson() != _savedGraphJson)
+        {
+            _changedOnDisk = true;
+            return $"{Path.GetFileName(_path)} was changed on disk and you have unsaved edits in the VC view: choose in its header.";
+        }
+        return LoadFromDisk() ? $"Reloaded {Path.GetFileName(_path)}: it was changed on disk." : null;
+    }
+
+    private bool LoadFromDisk()
+    {
+        _changedOnDisk = false;
+        try
+        {
+            _graph = VcGraph.Load(File.ReadAllText(_path!));
+            _savedGraphJson = _graph.ToJson();
+            _name = _graph.Name;
+            if (_selectedId is not null && _graph.Find(_selectedId) is null) _selectedId = null;
+            _menu = null;
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Status($"Could not reload {Path.GetFileName(_path)}: {ex.Message}");
+            return false;
+        }
+    }
+
     private void NewScript()
     {
         _graph = new VcGraph();
         _path = null;
+        _watch = null;
+        _changedOnDisk = false;
+        _savedGraphJson = _graph.ToJson();
         _selectedId = null;
         _name = "Script";
         Status("New script.");
@@ -1089,6 +1148,10 @@ public sealed class VisualScriptView
         {
             _graph = VcGraph.Load(File.ReadAllText(file));
             _path = file;
+            _watch = new FileChangeWatcher(file);
+            _watch.Accept();
+            _changedOnDisk = false;
+            _savedGraphJson = _graph.ToJson();
             _selectedId = null;
             _name = _graph.Name;
             Status($"Opened {Path.GetFileName(file)}.");
@@ -1109,6 +1172,10 @@ public sealed class VisualScriptView
         Directory.CreateDirectory(_scriptsFolder);
         _path = Path.Combine(_scriptsFolder, className + ".visualcode");
         File.WriteAllText(_path, _graph.ToJson());
+        _watch = new FileChangeWatcher(_path);
+        _watch.Accept();
+        _changedOnDisk = false;
+        _savedGraphJson = _graph.ToJson();
         VisualScriptSync.Sync(_scriptsFolder);
         Status($"Saved {className}.visualcode. {Summary(result)}");
     }

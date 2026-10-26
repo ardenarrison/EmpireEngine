@@ -69,6 +69,25 @@ public sealed class CodeDocument
     {
         File.WriteAllText(Path, string.Join(Newline, Lines));
         _savedText = Text;
+        DiskConflict = false;
+        IgnoredDisk = null;
+    }
+
+    // The file changed on disk, by something else, while this copy has edits of its own: the user chooses which to keep.
+    public bool DiskConflict { get; set; }
+    public string? IgnoredDisk { get; set; }   // a version on disk the user chose not to load, so it isn't asked about again
+    public string SavedText => _savedText;
+
+    // Looks at the file as it is on disk now. A copy with no edits here is reloaded; one with edits is flagged (DiskConflict)
+    // when the file differs from what was last loaded or saved, unless the user already chose to keep their version of it.
+    public void CheckAgainstDisk()
+    {
+        if (!File.Exists(Path)) return;
+        string disk = Normalize(File.ReadAllText(Path));
+        if (!Dirty && disk != Text)
+            Reload();
+        else if (Dirty && disk != SavedText && disk != IgnoredDisk)
+            DiskConflict = true;
     }
 
     // Replaces the text with what is on disk now, for a file changed outside the editor while it had no edits here.
@@ -79,6 +98,8 @@ public sealed class CodeDocument
         _savedText = text;
         _undo.Clear();
         _redo.Clear();
+        DiskConflict = false;
+        IgnoredDisk = null;
         Caret = Clamp(Caret);
         Anchor = null;
         Version++;

@@ -17,7 +17,7 @@
     <!-- and the visual scripting blocks and the C# they turn into -->
     <Compile Include="../Editor/VisualCode/Model/*.cs;../Editor/VisualCode/Blocks/*.cs;../Editor/VisualCode/Transpiler/*.cs" Link="EditorVisualCode/%(Filename)%(Extension)" />
     <!-- and the editor's per-project settings -->
-    <Compile Include="../Editor/ProjectSettings.cs" Link="EditorProject/%(Filename)%(Extension)" />
+    <Compile Include="../Editor/ProjectSettings.cs;../Editor/FileChangeWatcher.cs;../Editor/Code/CodeDocument.cs" Link="EditorProject/%(Filename)%(Extension)" />
     <!-- and how the editor picks its light or dark look -->
     <Compile Include="../Editor/Ui/ThemeChoice.cs;../Editor/Terminal/TerminalGlyphs.cs" Link="EditorUi/%(Filename)%(Extension)" />
   </ItemGroup>

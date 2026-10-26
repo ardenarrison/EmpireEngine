@@ -80,6 +80,11 @@ public sealed class EditorApp
     private bool _unsaved;
     private bool _exitRequested;        // the main loop stops after this frame
     private bool _confirmingExit;       // the unsaved-changes prompt is open
+    private readonly FileChangeWatcher _sceneWatch;   // notices the scene file being changed by something else
+    private bool _sceneChangedOnDisk;   // the scene file changed while the scene here has unsaved edits: asking which to keep
+    private string _notice = "";        // a line shown for a few seconds, such as "Reloaded the scene from disk"
+    private double _noticeUntil;
+    private double _frameNow;
     private readonly FolderBrowser _folderBrowser = new();
     private readonly CreditsWindow _credits = new();
     private readonly Editor.Assistant.AssistantWindow _assistant = new();
@@ -163,6 +168,8 @@ public sealed class EditorApp
         EnsureCamera();
         _savedJson = SceneSerializer.ToJson(_scene);
         _history.Reset(_savedJson);
+        _sceneWatch = new FileChangeWatcher(scenePath);
+        _sceneWatch.Accept();
     }
 
     public void Run()
@@ -265,6 +272,7 @@ public sealed class EditorApp
 
 
             double now = clock.Elapsed.TotalSeconds;
+            _frameNow = now;
             float dt = (float)Math.Min(now - lastTime, 0.1);
             lastTime = now;
 
@@ -280,6 +288,13 @@ public sealed class EditorApp
                         renderer.ReloadModel(path, _assets.GetModel(path));
                     Console.WriteLine($"Reloaded {path}.");
                 }
+
+                // The scene file or a visual script changed by something else (another editor, git): reload it, or ask
+                // when there are unsaved edits here that the reload would throw away.
+                if (_mode == EditorMode.Edit && !_sceneChangedOnDisk && _sceneWatch.Poll())
+                    OnSceneChangedOnDisk();
+                if (_vc.PollDisk() is { } vcMessage)
+                    ShowNotice(vcMessage);
             }
 
             ui.BeginFrame();
@@ -383,6 +398,7 @@ public sealed class EditorApp
                 DrawMenuBar();
                 DrawBuildWindow();
                 DrawExitPrompt();
+                DrawChangedOnDiskPrompt();
             }
 
             // The game's UI: live while playing, and a still preview with outlines in UI mode.
@@ -560,6 +576,7 @@ public sealed class EditorApp
         DrawScriptPicker();
         DrawMenuBar();
         DrawExitPrompt();
+        DrawChangedOnDiskPrompt();
     }
 
     private void DrawHierarchy(GlfwWindow window)
@@ -2913,6 +2930,79 @@ public sealed class EditorApp
 
     // ---- exiting ---------------------------------------------------------------------
 
+    private void ShowNotice(string text)
+    {
+        _notice = text;
+        _noticeUntil = _frameNow + 5.0;
+        Console.WriteLine(text);
+    }
+
+    // The scene file was changed on disk by something else. With no unsaved edits here it is simply reloaded; otherwise the
+    // user chooses (see DrawChangedOnDiskPrompt).
+    private void OnSceneChangedOnDisk()
+    {
+        if (SceneSerializer.ToJson(_scene) == _savedJson)
+            ReloadSceneFromDisk();
+        else
+            _sceneChangedOnDisk = true;
+    }
+
+    // Replaces the scene with the file's version. The selection stays on the same object when it still exists. Undo history
+    // starts again, since the old steps belong to a scene that no longer exists.
+    private void ReloadSceneFromDisk()
+    {
+        _sceneChangedOnDisk = false;
+        Scene loaded;
+        try { loaded = SceneSerializer.Load(_scenePath); }
+        catch (Exception ex)
+        {
+            ShowNotice($"The scene file changed on disk but could not be read: {ex.Message}");
+            return;
+        }
+
+        _scene = loaded;
+        EnsureSun();
+        EnsureCamera();
+        _savedJson = SceneSerializer.ToJson(_scene);
+        _history.Reset(_savedJson);
+        _selected = _selectedId is { } id ? _scene.Find(id) : null;
+        if (_selected is null) _selectedId = null;
+        _extraSelected.Clear();
+        _extraFor = null;
+        _optionText.Clear();
+        _sculpting = false;
+        ShowNotice($"Reloaded {Path.GetFileName(_scenePath)}: it was changed on disk.");
+    }
+
+    // The note shown for a few seconds after a reload, and the question when the scene file changed under unsaved edits.
+    private void DrawChangedOnDiskPrompt()
+    {
+        var g = _gui;
+        if (_notice.Length > 0 && _frameNow < _noticeUntil && !_sceneChangedOnDisk)
+        {
+            var box = new Box(g.Size.X * 0.5f - 260f, Gui.MenuBarHeight + 6f, 520f, 40f);
+            g.BeginWindow("Notice", box, "Notice", WindowFlags.NoTitle | WindowFlags.NoScroll);
+            g.TextWrapped(_notice);
+            g.EndWindow();
+        }
+
+        if (!_sceneChangedOnDisk) return;
+        var rect = new Box(g.Size.X * 0.5f - 230f, g.Size.Y * 0.5f - 80f, 460f, 150f);
+        g.BeginWindow("Scene Changed", rect, "Scene Changed", WindowFlags.Modal | WindowFlags.NoScroll);
+        g.TextWrapped($"{Path.GetFileName(_scenePath)} was changed on disk by something else, and you have unsaved changes " +
+                      "in the editor. Which version do you want?");
+        g.Spacing();
+        if (g.Button("Load the file from disk", highlighted: true))
+            ReloadSceneFromDisk();
+        g.SameLine();
+        if (g.Button("Keep my version"))
+        {
+            _sceneChangedOnDisk = false;
+            ShowNotice("Kept your version. Saving will replace the file on disk.");
+        }
+        g.EndWindow();
+    }
+
     // Exits now if the scene is saved; otherwise opens the unsaved-changes prompt.
     // In play mode the scene is restored first, so the check sees the edits made before pressing Play.
     private void RequestExit()
@@ -2980,6 +3070,7 @@ public sealed class EditorApp
         }
 
         SceneSerializer.Save(_scene, _scenePath);
+        _sceneWatch.Accept();
         _savedJson = SceneSerializer.ToJson(_scene);
         _unsaved = false;
         Console.WriteLine($"Saved {_scenePath}");

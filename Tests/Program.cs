@@ -2713,6 +2713,80 @@ if (!OperatingSystem.IsWindows())
           "functions that call each other round and round are an error");
 }
 
+// Noticing that a file changed under the editor.
+{
+    string watchDir = Path.Combine(Path.GetTempPath(), "empire-watch-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(watchDir);
+    string watched = Path.Combine(watchDir, "scene.empirescene");
+    File.WriteAllText(watched, "one");
+    var watcher = new FileChangeWatcher(watched);
+    watcher.Accept();
+    Check(!watcher.Poll() && !watcher.Poll(), "a file nobody touched is not reported");
+
+    File.WriteAllText(watched, "two, written by someone else");
+    Check(!watcher.Poll(), "a change is not reported on the first poll, in case the file is still being written");
+    Check(watcher.Poll(), "it is reported once the file has settled");
+    Check(!watcher.Poll() && !watcher.Poll(), "and only once");
+
+    File.WriteAllText(watched, "three");
+    watcher.Poll();
+    watcher.Accept();   // the editor saved it itself
+    Check(!watcher.Poll() && !watcher.Poll(), "the editor's own save is not reported");
+
+    File.SetLastWriteTimeUtc(watched, DateTime.UtcNow.AddMinutes(5));
+    watcher.Poll();
+    Check(!watcher.Poll(), "a touch that leaves the contents the same is not reported");
+
+    File.WriteAllText(watched, "four");
+    File.SetLastWriteTimeUtc(watched, DateTime.UtcNow.AddMinutes(10));
+    watcher.Poll();
+    File.WriteAllText(watched, "five, more than four");   // still changing between polls
+    Check(!watcher.Poll(), "a file still changing is waited for");
+    Check(watcher.Poll(), "and reported when it stops");
+
+    File.Delete(watched);
+    Check(!watcher.Poll() && !watcher.Poll(), "a file that disappears is not reported as a change");
+    File.WriteAllText(watched, "six, back again");
+    watcher.Poll();
+    Check(watcher.Poll(), "but it is when it comes back different");
+    Directory.Delete(watchDir, true);
+}
+
+// A script open in the code view that something else changes on disk.
+{
+    string codeDir = Path.Combine(Path.GetTempPath(), "empire-code-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(codeDir);
+    string script = Path.Combine(codeDir, "Mover.cs");
+    File.WriteAllText(script, "public class Mover : Behaviour { }\n");
+    var open = Editor.Code.CodeDocument.Load(script);
+
+    File.WriteAllText(script, "public class Mover : Behaviour { public float speed; }\n");
+    open.CheckAgainstDisk();
+    Check(open.Text.Contains("speed") && !open.Dirty && !open.DiskConflict, "a script with no edits here is reloaded when the file changes");
+
+    open.Insert("// my edit\n");
+    Check(open.Dirty, "typing makes it unsaved");
+    File.WriteAllText(script, "public class Mover : Behaviour { public float speed; public int lives; }\n");
+    open.CheckAgainstDisk();
+    Check(open.DiskConflict && open.Text.Contains("// my edit") && !open.Text.Contains("lives"),
+          "a script with edits here is not touched when the file changes; it is flagged instead");
+
+    open.IgnoredDisk = Editor.Code.CodeDocument.Normalize(File.ReadAllText(script));
+    open.DiskConflict = false;
+    open.CheckAgainstDisk();
+    Check(!open.DiskConflict, "after choosing to keep their version, they are not asked about that file again");
+    File.WriteAllText(script, "public class Mover : Behaviour { public float speed; public int lives; public bool alive; }\n");
+    open.CheckAgainstDisk();
+    Check(open.DiskConflict, "but they are asked again when it changes again");
+
+    open.Reload();
+    Check(open.Text.Contains("alive") && !open.Dirty && !open.DiskConflict, "loading the disk version drops their edits and the flag");
+    open.Insert("// again\n");
+    open.Save();
+    Check(!open.Dirty && !open.DiskConflict && File.ReadAllText(script).Contains("// again"), "saving keeps their version and clears the flag");
+    Directory.Delete(codeDir, true);
+}
+
 Console.WriteLine(failures == 0 ? "\nAll checks passed." : $"\n{failures} check(s) failed.");
 return failures == 0 ? 0 : 1;
 
