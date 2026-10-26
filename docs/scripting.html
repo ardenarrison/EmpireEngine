@@ -54,6 +54,7 @@ public class Bob : Behaviour
     <tr><td><code>Update()</code></td><td>Every frame while the game plays.</td></tr>
     <tr><td><code>OnCollisionEnter(SceneObject other)</code></td><td>When this object's colliders start touching another object's.</td></tr>
     <tr><td><code>OnCollisionExit(SceneObject other)</code></td><td>When they stop touching.</td></tr>
+    <tr><td><code>OnDestroy()</code></td><td>Once, when this object is destroyed with <code>Destroy</code>, just before it leaves the scene. Children destroyed with it get it too, after their parent. Only for scripts that had started. It is <em>not</em> called when a scene is unloaded or the game stops.</td></tr>
     <tr><td><code>OnGameLoaded()</code></td><td>After <code>SaveGame.Load</code> put a saved game back, on scripts that had already started when it was saved. Rebuild cached references here. See <a href="scene-management.html#saving-the-game">Saving the game</a>.</td></tr>
   </tbody>
 </table></div>
@@ -194,20 +195,31 @@ animator.Play("Walk");</code></pre>
         if (other.Name != "Player") return;
         SaveGame.SetInt("coins", SaveGame.GetInt("coins") + 1);
         AudioSource.PlayClipAtPoint("Audio/Coin.wav", Object.Position);
-        SceneManager.World!.Remove(Object);
+        Destroy(sceneObject);
     }
 }</code></pre>
 <p>Collision events need colliders on both objects, and at least one of the two must have a Rigidbody. Use <a href="physics.html#raycasts">raycasts</a> to find things without touching them.</p>
 
 <h2>Making and removing objects</h2>
-<p>Scripts can add objects to the scene that's playing and remove them again:</p>
+<p><strong>Destroy</strong> takes an object, and everything under it, out of the scene. Any script can destroy any object it has a reference to, its own included:</p>
+<pre><code class="language-cs">Destroy(sceneObject);                 // this object
+Destroy(other);                       // an object from OnCollisionEnter(SceneObject other)
+Destroy(enemy, 2f);                   // an object you found or were given, two seconds from now
+Scene.Destroy(enemy);                 // the same, from code that is not in a Behaviour</code></pre>
+<p>To clean up when an object is destroyed, override <code>OnDestroy</code>:</p>
+<pre><code class="language-cs">public override void OnDestroy()
+{
+    AudioSource.PlayClipAtPoint("Audio/Pop.wav", Object.Position);   // the object is still in the scene here
+}</code></pre>
+<p>The object goes at the <em>end of the frame</em> (or when the delay is up), not at once, so the rest of your code can still use it and no other script is interrupted. Its children go with it. Destroying <code>null</code>, or an object that is already gone, does nothing. When the object was touching another object, the other one gets no <code>OnCollisionExit</code>, but the visual script <em>collision now</em> block stops counting it.</p>
+<p>Scripts can add objects to the scene that's playing too:</p>
 <pre><code class="language-cs">var ball = new SceneObject { Name = "Ball", Position = Object.Position + new Vector3(0, 1, 0) };
 ball.Components.Add(new MeshRenderer { Model = "Models/Ball.glb" });
 ball.Components.Add(new SphereCollider());
 ball.Components.Add(new Rigidbody { Mass = 0.5f });
 SceneManager.World!.Add(ball);              // or .Add(ball, parent)
 
-SceneManager.World!.Remove(ball);           // takes it and its children out</code></pre>
+Destroy(ball);                              // takes it and its children out at the end of the frame</code></pre>
 <p>The engine's own components work on objects made this way: the model is loaded the first time it's drawn, and physics picks up the new body on its next step. <strong>Script components are only started on objects that come from a scene</strong>, so to spawn something with behaviour, make it in its own scene and load that scene additively (<code>SceneManager.LoadScene("Enemy", LoadSceneMode.Additive)</code>).</p>
 
 <h2>How scripts are compiled</h2>
@@ -228,7 +240,7 @@ SceneManager.World!.Remove(ball);           // takes it and its children out</co
     <tr><td><code>FixedUpdate</code></td><td>None: add forces in <code>Update</code></td></tr>
     <tr><td><code>StartCoroutine</code></td><td><code>Spawn</code>, plus <code>TickRoutines()</code> in <code>Update</code></td></tr>
     <tr><td><code>GameObject.Find</code></td><td><code>Scene.FindObjectWithName</code></td></tr>
-    <tr><td><code>Instantiate</code> / <code>Destroy</code></td><td><code>SceneManager.World.Add</code> / <code>Remove</code>, or additive scene loading</td></tr>
+    <tr><td><code>Instantiate</code> / <code>Destroy</code></td><td><code>SceneManager.World.Add</code> / <code>Destroy(obj)</code>, or additive scene loading</td></tr>
     <tr><td><code>[SerializeField] private</code></td><td>Not supported: only public fields are shown and saved</td></tr>
     <tr><td><code>PlayerPrefs</code></td><td><code>SaveGame.SetInt</code> and friends, which travel with a save slot</td></tr>
     <tr><td><code>Vector3</code>, <code>Quaternion</code></td><td><code>System.Numerics</code> types (<code>Vector3.UnitZ</code>, <code>Quaternion.CreateFromYawPitchRoll</code>, radians)</td></tr>

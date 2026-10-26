@@ -188,6 +188,21 @@ internal static class StandardBlocks
                 .ToList(),
             Bool("condition")),
 
+        Statement("destroy_object", "Control", "destroy {object}", BlockShape.Stack,
+            (n, e) =>
+            {
+                if (Raw(n, "object", "").Length == 0)
+                {
+                    e.Warn(n, "Choose an object for 'destroy'.");
+                    return new List<string>();
+                }
+                return One($"DestroyObjectsNamed({e.Value(n, "object")});");
+            },
+            SceneObject()),
+
+        Statement("destroy_self", "Control", "destroy this object", BlockShape.Stack,
+            (n, e) => One("Destroy(sceneObject);")),
+
         Statement("stop_script", "Control", "stop this script", BlockShape.Stack,
             (n, e) => One("yield break;")),
 

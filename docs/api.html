@@ -21,10 +21,12 @@
   <tbody>
     <tr><td><code>SceneObject Object</code></td><td>The object this script is on</td></tr>
     <tr><td><code>SceneObject sceneObject</code></td><td>The same object as <code>Object</code>; <code>sceneObject.transform.position</code>, <code>.rotation</code> and <code>.scale</code> read and set where it is</td></tr>
+    <tr><td><code>void Destroy(SceneObject? target, float delay = 0)</code></td><td>Destroys the object and its children at the end of the frame, or after <code>delay</code> seconds. Any script can destroy any object it has a reference to, its own included. Null and already-destroyed objects are ignored</td></tr>
     <tr><td><code>virtual void Start()</code></td><td>Once, before the first <code>Update</code></td></tr>
     <tr><td><code>virtual void Update()</code></td><td>Every frame while playing</td></tr>
     <tr><td><code>virtual void OnCollisionEnter(SceneObject other)</code></td><td>Colliders started touching</td></tr>
     <tr><td><code>virtual void OnCollisionExit(SceneObject other)</code></td><td>Colliders stopped touching</td></tr>
+    <tr><td><code>virtual void OnDestroy()</code></td><td>Once, when the object is destroyed with <code>Destroy</code>, just before it leaves the scene</td></tr>
     <tr><td><code>virtual void OnGameLoaded()</code></td><td>After a save game is loaded, on scripts that had started</td></tr>
     <tr><td><code>T? GetComponent&lt;T&gt;()</code></td><td>First component of type <code>T</code> on this object, or null</td></tr>
     <tr><td><code>rigidbody</code> / <code>Rigidbody</code></td><td>This object's Rigidbody; stops the script with a message if missing</td></tr>
@@ -86,6 +88,7 @@
 <table>
   <thead><tr><th>Member</th><th>Description</th></tr></thead>
   <tbody>
+    <tr><td><code>static void Destroy(SceneObject?, float delay = 0)</code></td><td>The same as <code>Destroy</code> in a script, for code that is not in a Behaviour</td></tr>
     <tr><td><code>static SceneObject? FindObjectWithName(string)</code></td><td>First object with that exact name in the playing scene</td></tr>
     <tr><td><code>static List&lt;SceneObject&gt; FindObjectsWithName(string)</code></td><td>Every such object</td></tr>
     <tr><td><code>IEnumerable&lt;SceneObject&gt; All</code>, <code>Roots</code>, <code>InHierarchyOrder</code></td><td>Every object; top-level ones; parents before children</td></tr>
