@@ -1,10 +1,11 @@
 using Editor.Ui;
+using Engine.Core.Scene;
 
 namespace Editor;
 
 // File > Project Settings: settings that belong to the project and are kept in its project-settings.json.
-// For now that is the editor's near and far clip planes.
-public sealed class ProjectSettingsWindow(ProjectSettings settings, EditorCamera camera, string projectFolder)
+// That is the position type (float or double) and the editor's near and far clip planes.
+public sealed class ProjectSettingsWindow(ProjectSettings settings, EditorCamera camera, string projectFolder, Action<PositionType> positionTypeChanged)
 {
     private bool _open;
     private bool _dirty;          // changed but not saved yet: saved when the mouse is let go (not on every step of a drag) and when the window closes
@@ -32,6 +33,18 @@ public sealed class ProjectSettingsWindow(ProjectSettings settings, EditorCamera
             g.EndWindow();
             return;
         }
+
+        var type = settings.PositionType;
+        if (g.Combo("Position Type", ref type))
+        {
+            settings.PositionType = type;
+            positionTypeChanged(type);
+            _dirty = true;
+        }
+        g.TextWrapped("Float keeps about 7 digits of precision, which is plenty for most games. Double keeps about 16, for very large worlds: far from the " +
+                      "origin an object can still move in tiny steps, and small movements added up over time stay exact. Double positions are edited in the Inspector " +
+                      "and read in scripts as transform.positionD. Physics, rendering and audio still work in floats. Going back to Float rounds every position now in the scene.", Gui.DimColor);
+        g.Spacing();
 
         g.Text("Editor Far Clip Plane");
         float far = settings.EditorFarClipPlane;

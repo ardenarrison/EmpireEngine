@@ -151,9 +151,10 @@ public sealed class EditorApp
         AppDomain.CurrentDomain.ProcessExit += (_, _) => _terminal.Shutdown();   // stops the shell, and anything running in it, with the editor
         _packages = new PackageManagerWindow(contentRoot);
         var projectSettings = ProjectSettings.Load(contentRoot);
+        SceneObject.PositionPrecision = projectSettings.PositionType;   // before any scene loads
         _camera.Far = projectSettings.EditorFarClipPlane;
         _camera.Near = projectSettings.EditorNearClipPlane;
-        _projectSettings = new ProjectSettingsWindow(projectSettings, _camera, contentRoot);
+        _projectSettings = new ProjectSettingsWindow(projectSettings, _camera, contentRoot, SetPositionType);
         _packages.Changed += _scriptFields.Invalidate;
         // The code view checks scripts against the enabled packages too, so using their classes isn't an error.
         Editor.Code.CodeEditorView.ExtraReferences = () => Packages.Enabled(_contentRoot)
@@ -673,9 +674,19 @@ public sealed class EditorApp
 
         if (obj.Parent is not null)
             g.TextWrapped("Position, rotation and scale are relative to the parent.", Gui.DimColor);
-        var pos = new float3(obj.Position.X, obj.Position.Y, obj.Position.Z);
-        if (g.DragFloat3("Position", ref pos) && editing)
-            obj.Position = new Vector3(pos.X, pos.Y, pos.Z);
+        if (SceneObject.PositionPrecision == PositionType.Double)
+        {
+            var posD = obj.PositionD;
+            double x = posD.X, y = posD.Y, z = posD.Z;
+            if (g.DragDouble3("Position", ref x, ref y, ref z) && editing)
+                obj.PositionD = new Vector3D(x, y, z);
+        }
+        else
+        {
+            var pos = new float3(obj.Position.X, obj.Position.Y, obj.Position.Z);
+            if (g.DragFloat3("Position", ref pos) && editing)
+                obj.Position = new Vector3(pos.X, pos.Y, pos.Z);
+        }
 
         var scale = new float3(obj.Scale.X, obj.Scale.Y, obj.Scale.Z);
         if (g.DragFloat3("Scale", ref scale) && editing)
@@ -2892,6 +2903,15 @@ public sealed class EditorApp
             _projectSettings.Draw(g);
         if (_mode == EditorMode.Edit)
             _packages.Draw(g, _scene, _scriptFields.Classes, _scriptFields.Errors, _scriptFields.IsCompiling);
+    }
+
+    // Project Settings changed the position type. Float rounds every position in the scene to a float (double needs no change).
+    private void SetPositionType(PositionType type)
+    {
+        SceneObject.PositionPrecision = type;
+        if (type == PositionType.Float)
+            foreach (var o in _scene.All)
+                o.PositionD = o.PositionD;
     }
 
     // What the AI assistant may attach to a question if the user ticks it: the script open in the code view, and the selected

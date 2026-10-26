@@ -100,6 +100,8 @@ Vector3 right   = Vector3.Transform(Vector3.UnitX, Object.Rotation);</code></pre
 sceneObject.transform.rotation = Quaternion.Identity;
 sceneObject.transform.scale   *= 2f;</code></pre>
 <p>These are the object's own values, relative to its parent, and changing them moves the object at once.</p>
+<p>If the project's <strong>Position Type</strong> is <em>Double</em> (File &gt; Project Settings), <code>transform.positionD</code> holds the same position with double precision, as a <code>Vector3D</code> (<code>X</code>, <code>Y</code>, <code>Z</code> doubles, which add, subtract, scale and convert to and from <code>Vector3</code>). <code>transform.worldPositionD</code> is where the object is in the world. Use these for very large worlds or movements that must add up exactly; <code>transform.position</code> is the same value rounded to a float, and setting it replaces all the digits with that float. <code>Translate</code> also takes doubles. In a Float project <code>positionD</code> simply holds the float value.</p>
+<pre><code class="language-cs">sceneObject.transform.positionD += new Vector3D(0.001, 0, 0);   // exact even at 1,000,000,000 units out</code></pre>
 
 <h2>Other components</h2>
 <pre><code class="language-cs">var body = GetComponent&lt;Rigidbody&gt;();   // null when there is none

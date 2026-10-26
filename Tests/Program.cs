@@ -2870,6 +2870,47 @@ if (!OperatingSystem.IsWindows())
     Directory.Delete(hookDir, true);
 }
 
+// ---- double positions ----
+{
+    var before = SceneObject.PositionPrecision;
+    try
+    {
+        SceneObject.PositionPrecision = PositionType.Float;
+        var fo = new SceneObject { PositionD = new Vector3D(1e9 + 0.123, 0.1, 2) };
+        Check(fo.PositionD == fo.PositionD.ToFloatPrecision() && fo.Position.Y == 0.1f, "float positions round to a float, as before");
+        var fScene = new Engine.Core.Scene.Scene(); fScene.Add(fo);
+        Check(!SceneSerializer.ToJson(fScene).Contains("positionD"), "a float project writes no positionD");
+
+        SceneObject.PositionPrecision = PositionType.Double;
+        var parentObj = new SceneObject { PositionD = new Vector3D(1e12 + 0.5, 0, 0) };
+        var childObj = new SceneObject { PositionD = new Vector3D(0, 0, 0.25) };
+        var dScene = new Engine.Core.Scene.Scene(); dScene.Add(parentObj); dScene.Add(childObj, parentObj);
+        Check(parentObj.PositionD.X == 1e12 + 0.5, "double positions keep digits a float loses");
+        var walker = new SceneObject { PositionD = new Vector3D(1e9, 0, 0) };
+        for (int i = 0; i < 1000; i++) walker.PositionD += new Vector3D(0.001, 0, 0);
+        Check(Math.Abs(walker.PositionD.X - (1e9 + 1.0)) < 1e-3, "small steps far from the origin add up in doubles");
+        parentObj.PositionD += new Vector3D(1, 0, 0);
+        Check(Math.Abs(childObj.WorldPositionD.X - parentObj.PositionD.X) < 1e-9 && Math.Abs(childObj.WorldPositionD.Z - 0.25) < 1e-9, "world position is worked out in doubles through the parent");
+        parentObj.Rotation = Quaternion.CreateFromAxisAngle(Vector3.UnitY, MathF.PI / 2f);
+        Check(Math.Abs(childObj.WorldPositionD.X - (parentObj.PositionD.X + 0.25)) < 1e-4, "a rotated parent turns the child's offset");
+        string json = SceneSerializer.ToJson(dScene);
+        var back = SceneSerializer.FromJson(json).Find(parentObj.Id)!;
+        Check(json.Contains("positionD") && back.PositionD == parentObj.PositionD, "double positions survive saving and loading");
+        Check(Math.Abs(back.Position.X - (float)parentObj.PositionD.X) == 0f, "the float position is still written for older readers");
+        var bodyTf = parentObj.transform; bodyTf.positionD = new Vector3D(3, 4, 5);
+        Check(parentObj.Position == new Vector3(3, 4, 5) && bodyTf.positionD.Y == 4, "transform.positionD reads and writes the object");
+
+        string psTemp = Path.Combine(Path.GetTempPath(), "ps-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(psTemp);
+        new ProjectSettings { PositionType = PositionType.Double }.Save(psTemp);
+        Check(ProjectSettings.Load(psTemp).PositionType == PositionType.Double && ProjectSettings.Load(Path.GetTempPath()).PositionType == PositionType.Float, "the position type is saved in project-settings.json (float by default)");
+        Directory.Delete(psTemp, true);
+        var manifest = System.Text.Json.JsonSerializer.Deserialize<GameManifest>("{\"name\":\"g\",\"startScene\":\"s\",\"positionType\":\"Double\"}", new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        Check(manifest!.PositionType == PositionType.Double && System.Text.Json.JsonSerializer.Deserialize<GameManifest>("{\"name\":\"g\",\"startScene\":\"s\"}")!.PositionType == PositionType.Float, "the game manifest carries the position type");
+    }
+    finally { SceneObject.PositionPrecision = before; }
+}
+
 Console.WriteLine(failures == 0 ? "\nAll checks passed." : $"\n{failures} check(s) failed.");
 return failures == 0 ? 0 : 1;
 

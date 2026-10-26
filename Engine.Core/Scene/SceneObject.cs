@@ -59,6 +59,12 @@ public sealed class Transform
     internal Transform(SceneObject owner) => _owner = owner;
 
     public Vector3 position { get => _owner.Position; set => _owner.Position = value; }
+
+    // The same position at double precision. In a project set to Float positions this is the float value, widened.
+    public Vector3D positionD { get => _owner.PositionD; set => _owner.PositionD = value; }
+
+    // Where the object is in the world, worked out in double precision through its parents (read only).
+    public Vector3D worldPositionD => _owner.WorldPositionD;
     public Quaternion rotation { get => _owner.Rotation; set => _owner.Rotation = value; }
     public Vector3 scale { get => _owner.Scale; set => _owner.Scale = value; }
 }
@@ -71,7 +77,38 @@ public sealed class SceneObject
     public SceneObject? Parent { get; internal set; }
     public List<SceneObject> Children { get; } = new();   // mutated only through Scene
 
-    public Vector3 Position { get; set; } = Vector3.Zero;
+    // Which precision positions keep, for every object (File > Project Settings). The editor and the player set it before a
+    // scene loads. With Float, a position is rounded to a float whenever it is set, so nothing changes from before.
+    public static PositionType PositionPrecision { get; set; } = PositionType.Float;
+
+    // The position (local to the parent), held as doubles. Position is the same value as floats, for the many places that
+    // work in floats; setting Position replaces all the digits with that float, while PositionD keeps them.
+    private Vector3D _position;
+
+    public Vector3D PositionD
+    {
+        get => _position;
+        set => _position = PositionPrecision == PositionType.Double ? value : value.ToFloatPrecision();
+    }
+
+    public Vector3 Position
+    {
+        get => (Vector3)_position;
+        set => _position = value;
+    }
+
+    // The position in the world, worked out in doubles all the way up the parents (rotation and scale included).
+    public Vector3D WorldPositionD
+    {
+        get
+        {
+            var p = _position;
+            for (var a = Parent; a is not null; a = a.Parent)
+                p = Vector3D.Rotate(p * new Vector3D(a.Scale), a.Rotation) + a._position;
+            return p;
+        }
+    }
+
     public Quaternion Rotation { get; set; } = Quaternion.Identity;
     public Vector3 Scale { get; set; } = Vector3.One;
 

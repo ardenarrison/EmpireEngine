@@ -7,7 +7,7 @@ using Engine.Core.Scripting;
 
 namespace Engine.Core.Serialization;
 
-public sealed record GameManifest(string Name, string StartScene);
+public sealed record GameManifest(string Name, string StartScene, PositionType PositionType = PositionType.Float);
 
 public static class SceneSerializer
 {
@@ -48,6 +48,7 @@ public static class SceneSerializer
         public Guid? Parent { get; set; }
         public string Name { get; set; } = "";
         public float[] Position { get; set; } = [0, 0, 0];
+        public double[]? PositionD { get; set; }    // only when the position has digits a float can't hold; Position is then its rounded copy
         public float[] Rotation { get; set; } = [0, 0, 0, 1];
         public float[] Scale { get; set; } = [1, 1, 1];
         public string? SceneName { get; set; }      // which loaded scene the object came from; written only in save games
@@ -285,6 +286,7 @@ public static class SceneSerializer
             Parent = o.Parent?.Id,
             Name = o.Name,
             Position = [o.Position.X, o.Position.Y, o.Position.Z],
+            PositionD = o.PositionD == o.PositionD.ToFloatPrecision() ? null : [o.PositionD.X, o.PositionD.Y, o.PositionD.Z],
             Rotation = [o.Rotation.X, o.Rotation.Y, o.Rotation.Z, o.Rotation.W],
             Scale = [o.Scale.X, o.Scale.Y, o.Scale.Z],
             SceneName = runtime && o.SceneName.Length > 0 ? o.SceneName : null,
@@ -514,7 +516,7 @@ public static class SceneSerializer
         var o = new SceneObject(id)
         {
             Name = rec.Name,
-            Position = new(rec.Position[0], rec.Position[1], rec.Position[2]),
+            PositionD = rec.PositionD is { Length: 3 } d ? new(d[0], d[1], d[2]) : new Vector3D(rec.Position[0], rec.Position[1], rec.Position[2]),
             Rotation = new(rec.Rotation[0], rec.Rotation[1], rec.Rotation[2], rec.Rotation[3]),
             Scale = new(rec.Scale[0], rec.Scale[1], rec.Scale[2]),
             SceneName = rec.SceneName ?? "",

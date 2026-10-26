@@ -172,7 +172,7 @@ public static class ProjectBuilder
         // 5. Record which scene starts the game.
         string startScene = Path.GetRelativePath(content, scene).Replace('\\', '/');
         File.WriteAllText(Path.Combine(gameData, "game.json"),
-            JsonSerializer.Serialize(new GameManifest(name, startScene), Options));
+            JsonSerializer.Serialize(new GameManifest(name, startScene, ProjectSettings.Load(content).PositionType), Options));
 
         File.WriteAllText(LogPath, log);
         string message = $"Built \"{name}\" to:\n{outDir}";

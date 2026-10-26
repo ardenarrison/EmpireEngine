@@ -122,7 +122,10 @@ public abstract class Behaviour
     public Rigidbody Rigidbody => rigidbody;
 
     // Moves the object by x, y, z in world units.
-    public void Translate(float x, float y, float z) => Object.Position += new Vector3(x, y, z);
+    public void Translate(float x, float y, float z) => Object.PositionD += new Vector3D(x, y, z);
+
+    // The same with doubles, for a project that keeps double positions: small steps add up exactly even far from the origin.
+    public void Translate(double x, double y, double z) => Object.PositionD += new Vector3D(x, y, z);
 
     // Turns the object by x, y, z degrees around the X, Y and Z axes.
     public void Rotate(float x, float y, float z)
