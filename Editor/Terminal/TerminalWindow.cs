@@ -21,6 +21,7 @@ public sealed class TerminalWindow(string workingDirectory)
     private string _error = "";
     private int _cols = DefaultCols, _rows = DefaultRows;
     private double _resizeAt;
+    private float _wheelRemainder;                   // part of a line the wheel or trackpad has scrolled but not yet applied
     private int _scrollBack;                          // lines the view is scrolled back from the live screen
     private (int Row, int Col)? _selFrom, _selTo;     // selection, in lines relative to the live screen (negative is scrollback)
     private bool _dragging;
@@ -290,10 +291,16 @@ public sealed class TerminalWindow(string workingDirectory)
         if (g.MousePressed)
             _focused = _windowRect.Contains(g.Mouse);   // a click anywhere in the terminal window (its buttons too) keeps the keyboard; a click elsewhere in the editor takes it away
 
+        // A trackpad sends many tiny steps (a fraction of a line each), so the leftover is kept until it adds up to whole lines.
         if (over && g.Wheel != 0)
         {
-            _scrollBack = Math.Clamp(_scrollBack + (int)MathF.Round(g.Wheel * 3f), 0, _screen.ScrollbackCount);
+            _wheelRemainder += g.Wheel * 3f;
+            int lines = (int)_wheelRemainder;
+            _wheelRemainder -= lines;
+            _scrollBack = Math.Clamp(_scrollBack + lines, 0, _screen.ScrollbackCount);
         }
+        else if (!over)
+            _wheelRemainder = 0f;
 
         float cw = CharW(g), lh = LineH(g);
         (int Row, int Col) CellAt() => (
