@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Engine.Core.Scene;
 
 namespace Editor;
 
@@ -21,6 +22,9 @@ public sealed class ProjectSettings
     public const float DefaultNearClipPlane = 0.1f;
     public const float MinNearClipPlane = 0.01f;
     public const float MaxNearClipPlane = 100f;
+
+    // Whether object positions keep float (32-bit) or double (64-bit) precision. Float is what every project used before.
+    public PositionType PositionType { get; set; } = PositionType.Float;
 
     private float _editorFarClipPlane = DefaultFarClipPlane;
     private float _editorNearClipPlane = DefaultNearClipPlane;
@@ -60,6 +64,9 @@ public sealed class ProjectSettings
             string file = Path.Combine(projectFolder, FileName);
             if (File.Exists(file) && JsonNode.Parse(File.ReadAllText(file)) is JsonObject root)
             {
+                if (root["positionType"] is JsonValue kind && kind.TryGetValue(out string? name) &&
+                    Enum.TryParse(name, ignoreCase: true, out PositionType type))
+                    settings.PositionType = type;
                 if (root["editorFarClipPlane"] is JsonValue far && far.TryGetValue(out double farValue))
                     settings.EditorFarClipPlane = (float)farValue;   // first, because the near plane's limit depends on it
                 if (root["editorNearClipPlane"] is JsonValue near && near.TryGetValue(out double nearValue))
@@ -82,6 +89,7 @@ public sealed class ProjectSettings
         }
         catch (Exception ex) when (ex is IOException or JsonException or InvalidOperationException) { }   // a broken file is replaced
 
+        root["positionType"] = PositionType.ToString().ToLowerInvariant();
         root["editorFarClipPlane"] = EditorFarClipPlane;
         root["editorNearClipPlane"] = EditorNearClipPlane;
         string temp = file + ".tmp-" + Guid.NewGuid().ToString("N");

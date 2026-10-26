@@ -4,6 +4,7 @@ using Engine.Brutal;
 using Engine.Brutal.Audio;
 using Engine.Core.Assets;
 using Engine.Core.Audio;
+using Engine.Core.Scene;
 using Engine.Core.Scripting;
 using Engine.Core.Serialization;
 
@@ -22,6 +23,7 @@ var manifest = JsonSerializer.Deserialize<GameManifest>(
                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
                ?? throw new InvalidDataException("game.json is empty.");
 
+SceneObject.PositionPrecision = manifest.PositionType;   // before the scene loads, so its positions keep the project's precision
 var contentRoot = Path.Combine(gameData, "Core");
 var assets = new AssetCache(contentRoot);
 var scene = SceneSerializer.Load(Path.Combine(contentRoot, manifest.StartScene));

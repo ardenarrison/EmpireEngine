@@ -108,6 +108,7 @@ public sealed class Gui
     private bool _activeSeen;
     private float2 _activeStart;
     private float _dragStartValue;
+    private double _dragStartDouble;
     private bool _dragMoved;
 
     private string? _focus;            // the text or number field being typed in
@@ -684,6 +685,77 @@ public sealed class Gui
         if (!DragFloats(label, v, speed, min, max)) return false;
         value = new float3(v[0], v[1], v[2]);
         return true;
+    }
+
+    // Three number boxes for a double-precision value such as a position: drag, or click to type all the digits.
+    public bool DragDouble3(string label, ref double x, ref double y, ref double z, double speed = 0.05)
+    {
+        var control = Row(label);
+        string id = Id(label);
+        float gap = 3f, w = (control.W - gap * 2) / 3f;
+        bool changed = false;
+        Span<double> v = stackalloc double[] { x, y, z };
+        for (int i = 0; i < 3; i++)
+            changed |= DragDoubleField($"{id}#{i}", new Box(control.X + i * (w + gap), control.Y, w, control.H), ref v[i], speed);
+        (x, y, z) = (v[0], v[1], v[2]);
+        return changed;
+    }
+
+    private bool DragDoubleField(string id, Box box, ref double value, double speed)
+    {
+        if (_focus == id)
+        {
+            _focusSeen = true;
+            foreach (char ch in _typed)
+                if (char.IsDigit(ch) || ch is '-' or '.' or 'e' or 'E' or '+') _editText += ch;
+            HandleEditKeys();
+            bool commit = Pressed(ImGuiKey.Enter) || Pressed(ImGuiKey.KeypadEnter) || Pressed(ImGuiKey.Tab) ||
+                          (MousePressed && !Hovered(box) && !_focusJustSet);
+            bool cancel = Pressed(ImGuiKey.Escape);
+            DrawEditBox(box);
+            if (cancel)
+            {
+                _focus = null;
+                return false;
+            }
+            if (!commit) return false;
+            _focus = null;
+            if (!double.TryParse(_editText, NumberStyles.Float, CultureInfo.InvariantCulture, out double parsed) ||
+                double.IsNaN(parsed) || double.IsInfinity(parsed) || parsed == value) return false;
+            value = parsed;
+            return true;
+        }
+
+        bool clicked = Behavior(id, box, out bool hover, out bool held);
+        bool changed = false;
+        if (_active == id && MousePressed && hover) _dragStartDouble = value;
+        if (held)
+        {
+            float dx = Mouse.X - _activeStart.X;
+            if (MathF.Abs(dx) > DragThreshold) _dragMoved = true;
+            if (_dragMoved)
+            {
+                double next = _dragStartDouble + dx * speed * (Shift ? 10.0 : 1.0);
+                if (next != value)
+                {
+                    value = next;
+                    changed = true;
+                }
+            }
+        }
+        string text = FormatDouble(value);
+        if (clicked && !_dragMoved)
+            Focus(id, text, numeric: true);
+
+        C.Rect(box.X, box.Y, box.W, box.H, held ? ButtonDown : hover ? FieldHover : FieldColor);
+        C.Text(Fit(text, box.W - 6f), box.X + Math.Max(3f, (box.W - C.MeasureText(text)) / 2f), TextTop(box.Y, box.H), TextColor);
+        return changed;
+    }
+
+    private static string FormatDouble(double value)
+    {
+        string text = value.ToString("0.############", CultureInfo.InvariantCulture);
+        return text == "-0" ? "0" : text;
     }
 
     private bool DragFloats(string label, Span<float> values, float speed, float min, float max)
