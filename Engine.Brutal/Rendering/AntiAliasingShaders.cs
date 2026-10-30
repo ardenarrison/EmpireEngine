@@ -8,7 +8,7 @@ namespace Engine.Brutal.Rendering;
 // FXAA is one pass: it finds edges from the brightness around each pixel and blurs along them (the short form of Timothy Lottes'
 // FXAA). SMAA is three: find edges, work out how much of each neighbor to blend in (using the two lookup textures from the SMAA
 // reference), then blend. The SMAA code itself is the reference implementation from github.com/iryoku/smaa (MIT license), kept
-// unchanged in Smaa/SMAA.glsl, and the shaders below only supply what it asks the host program for.
+// as it is in Smaa/SMAA.glsl (only the authors' contact emails are removed from its header), and the shaders below only supply what it asks the host program for.
 internal static class AntiAliasingShaders
 {
     // The size of the target in pixels as (1 / width, 1 / height, width, height), passed to every pass as a push constant.
