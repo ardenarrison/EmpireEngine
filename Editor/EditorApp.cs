@@ -120,7 +120,7 @@ public sealed class EditorApp
     private int _paintLayer;   // the layer the Paint brush paints with
     private readonly Gui _gui = new();   // the editor's panels, menus and gizmos, drawn with Canvas2D
 
-    private static readonly string[] AntiAliasingNames = { "None", "MSAA" };
+    private static readonly string[] AntiAliasingNames = { "None", "MSAA", "FXAA", "SMAA" };   // in the order of AntiAliasingMode
     private static readonly int[] MsaaCounts = { 2, 4, 8 };
     private static readonly string[] MsaaNames = { "2x", "4x", "8x" };
     private int _maxSamples = 1;   // the most MSAA samples this GPU supports, read once the renderer exists
@@ -463,7 +463,7 @@ public sealed class EditorApp
 
             // The main camera's anti-aliasing applies in the editor view and in play mode. Changing it rebuilds the
             // scene's images, so it only does work when the setting actually changes.
-            ctx.SetSampleCount(GameCamera()?.Cam.RequestedSamples ?? 1);
+            ctx.ApplyAntiAliasing(GameCamera()?.Cam);
 
             // The sky, ambient light and every light besides the sun.
             var (environment, extraLights) = SceneLighting.Collect(_scene, eye);
@@ -2155,10 +2155,10 @@ public sealed class EditorApp
         if (g.DragFloat("Far", ref far, 1f, 1f, 10000f) && editing)
             cam.Far = far;
 
-        // Anti-aliasing smooths jagged edges. MSAA draws several samples per pixel and averages them.
-        int mode = cam.AntiAliasing == AntiAliasingMode.Msaa ? 1 : 0;
-        if (g.Combo("Anti-Aliasing", mode, AntiAliasingNames, out int pickedMode) && editing)
-            cam.AntiAliasing = pickedMode == 1 ? AntiAliasingMode.Msaa : AntiAliasingMode.None;
+        // Anti-aliasing smooths jagged edges. MSAA draws several samples per pixel and averages them; FXAA and SMAA smooth the
+        // finished picture instead (SMAA is cleaner, FXAA a little cheaper).
+        if (g.Combo("Anti-Aliasing", (int)cam.AntiAliasing, AntiAliasingNames, out int pickedMode) && editing)
+            cam.AntiAliasing = (AntiAliasingMode)pickedMode;
         if (cam.AntiAliasing == AntiAliasingMode.Msaa)
         {
             int stop = Array.IndexOf(MsaaCounts, CameraComponent.NormalizeMsaaSamples(cam.MsaaSamples));
@@ -2171,6 +2171,11 @@ public sealed class EditorApp
             else if (cam.RequestedSamples > _maxSamples)
                 g.TextWrapped($"This GPU supports up to {_maxSamples}x, so {_maxSamples}x is used.", Gui.DimColor);
         }
+
+        if (cam.AntiAliasing == AntiAliasingMode.Fxaa)
+            g.TextWrapped("FXAA blurs the edges it finds in the finished picture. Cheap, and it also smooths edges inside textures.", Gui.DimColor);
+        else if (cam.AntiAliasing == AntiAliasingMode.Smaa)
+            g.TextWrapped("SMAA finds the edges in the finished picture and blends across them. Cleaner than FXAA, slightly slower.", Gui.DimColor);
 
         bool isMainCamera = GameCamera()?.Obj == obj;
         if (isMainCamera)

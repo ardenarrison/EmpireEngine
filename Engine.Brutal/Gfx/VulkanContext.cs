@@ -8,6 +8,9 @@ using Brutal.VulkanApi.Abstractions;
 
 namespace Engine.Brutal.Gfx;
 
+// Anti-aliasing done after the scene is drawn, on the finished picture (MSAA is separate: it happens while drawing).
+public enum PostAntiAliasing { None, Fxaa, Smaa }
+
 // Owns instance, device, swapchain, depth buffer, a UI render pass, command buffers and per-frame sync.
 public sealed unsafe class VulkanContext : IDisposable
 {
@@ -43,6 +46,13 @@ public sealed unsafe class VulkanContext : IDisposable
     private VkDeviceMemory _msaaMemory;
     private VkImageView _msaaView;
     private int _samples = 1;
+
+    // With FXAA or SMAA the scene is drawn into this image instead of the swapchain's, then the anti-aliasing passes read it and
+    // write the swapchain image. It is the swapchain's format, so everything that draws the scene needs no change.
+    private VkImage _sceneColorImage;
+    private VkDeviceMemory _sceneColorMemory;
+    private VkImageView _sceneColorView;
+    private PostAntiAliasing _post = PostAntiAliasing.None;
 
     private VkRenderPass _uiPass;
     private VkFramebuffer[] _framebuffers = [];
@@ -121,6 +131,47 @@ public sealed unsafe class VulkanContext : IDisposable
         Gpu.Attach(this);
     }
 
+    // The anti-aliasing applied after the scene is drawn.
+    public PostAntiAliasing PostAntiAliasing => _post;
+
+    // The image the scene is drawn into while PostAntiAliasing is on. Only valid then.
+    public VkImage SceneColorImage => _sceneColorImage;
+    public VkImageView SceneColorView => _sceneColorView;
+
+    // Counts how many times the scene image has been made, so what describes it (descriptor sets) knows to follow.
+    public int SceneColorGeneration { get; private set; }
+
+    // The swapchain image of the frame being recorded, which the anti-aliasing passes write the smoothed scene into.
+    public VkImageView CurrentSwapchainView => _views[_imageIndex];
+
+    // Called after the scene pass ends and before the UI, with the scene image ready to be sampled. It must draw the
+    // scene into the swapchain image (CurrentSwapchainView) inside the 16:9 rectangle, since nothing else does.
+    public Action<CommandBuffer>? AfterScenePass { get; set; }
+
+    // The 16:9 rectangle the scene fills, in pixels.
+    public (int X, int Y, int Width, int Height) SceneRectPixels
+    {
+        get
+        {
+            var rect = SceneViewport;
+            return ((int)(rect.X * _extent.Width), (int)(rect.Y * _extent.Height), (int)(rect.Z * _extent.Width), (int)(rect.W * _extent.Height));
+        }
+    }
+
+    // Turns FXAA or SMAA on or off. Waits for the GPU and makes or frees the scene image, so call it between frames, and only
+    // when the value changes. Does nothing if AfterScenePass isn't set (nothing could then put the scene on screen).
+    public void SetPostAntiAliasing(PostAntiAliasing mode)
+    {
+        if (mode == _post || (mode != PostAntiAliasing.None && AfterScenePass is null)) return;
+
+        _device.WaitIdle();
+        if (_post != PostAntiAliasing.None)
+            DestroyPostTarget();
+        _post = mode;
+        if (_post != PostAntiAliasing.None)
+            CreatePostTarget();
+    }
+
     public DeviceEx DeviceEx => _device;
     public Device Device => _device;
     public PhysicalDevice Physical => _physical;
@@ -156,6 +207,19 @@ public sealed unsafe class VulkanContext : IDisposable
         _samples = samples;
         CreateDepthBuffer();
         SampleCountChanged?.Invoke(samples);
+    }
+
+    // Sets MSAA and post-process anti-aliasing from a camera's settings (no camera means none). Call between frames; it does
+    // work only when something changed.
+    public void ApplyAntiAliasing(Engine.Core.Scene.CameraComponent? camera)
+    {
+        SetSampleCount(camera?.RequestedSamples ?? 1);
+        SetPostAntiAliasing(camera?.AntiAliasing switch
+        {
+            Engine.Core.Scene.AntiAliasingMode.Fxaa => PostAntiAliasing.Fxaa,
+            Engine.Core.Scene.AntiAliasingMode.Smaa => PostAntiAliasing.Smaa,
+            _ => PostAntiAliasing.None,
+        });
     }
 
     // Raised after the sample count changes, so things that depend on it (pipelines) can follow.
@@ -336,6 +400,49 @@ public sealed unsafe class VulkanContext : IDisposable
         _msaaView = _device.CreateImageView(in viewInfo, null);
     }
 
+    // The image the scene is drawn into for FXAA and SMAA: a color attachment the passes afterwards sample.
+    private void CreatePostTarget()
+    {
+        var imageInfo = new VkImageCreateInfo
+        {
+            ImageType = (VkImageType)1,
+            Format = _colorFormat,
+            Extent = new VkExtent3D { Width = _extent.Width, Height = _extent.Height, Depth = 1 },
+            MipLevels = 1,
+            ArrayLayers = 1,
+            Samples = (VkSampleCountFlags)1,
+            Tiling = (VkImageTiling)0,
+            Usage = (VkImageUsageFlags)0x14,           // COLOR_ATTACHMENT + SAMPLED
+            SharingMode = (VkSharingMode)0,
+            InitialLayout = (VkImageLayout)0,
+        };
+        _sceneColorImage = _device.CreateImage(in imageInfo, null);
+        _sceneColorMemory = _device.AllocateMemory(_physical, _sceneColorImage, (VkMemoryPropertyFlags)1, null);
+        _device.BindImageMemory(_sceneColorImage, _sceneColorMemory, (ByteSize64)0);
+
+        var viewInfo = new VkImageViewCreateInfo
+        {
+            Image = _sceneColorImage,
+            ViewType = (VkImageViewType)1,
+            Format = _colorFormat,
+            SubresourceRange = new VkImageSubresourceRange
+            {
+                AspectMask = (VkImageAspectFlags)ColorAspect,
+                LevelCount = 1,
+                LayerCount = 1,
+            },
+        };
+        _sceneColorView = _device.CreateImageView(in viewInfo, null);
+        SceneColorGeneration++;
+    }
+
+    private void DestroyPostTarget()
+    {
+        _device.DestroyImageView(_sceneColorView, null);
+        _device.DestroyImage(_sceneColorImage, null);
+        _device.FreeMemory(_sceneColorMemory, null);
+    }
+
     // Frees the depth image and, when MSAA is on, the multisampled color image.
     private void DestroySceneTargets()
     {
@@ -476,12 +583,16 @@ public sealed unsafe class VulkanContext : IDisposable
         foreach (var framebuffer in _framebuffers)
             _device.DestroyFramebuffer(framebuffer, null);
         DestroySceneTargets();
+        if (_post != PostAntiAliasing.None)
+            DestroyPostTarget();
         foreach (var view in _views)
             _device.DestroyImageView(view, null);
         _device.DestroySwapchainKHR(_swapchain, null);
 
         CreateSwapchain(_window.FramebufferSize.X, _window.FramebufferSize.Y);
         CreateDepthBuffer();
+        if (_post != PostAntiAliasing.None)
+            CreatePostTarget();
         CreateFramebuffers();
 
         _renderFinished = new VkSemaphore[_images.Length];
@@ -523,6 +634,9 @@ public sealed unsafe class VulkanContext : IDisposable
         VkUtil.Transition(cmd, _depthImage, DepthAspect, 0, LayoutDepthAttachment, 0x300, 0x100, 0x400, 0x400);
         if (_samples > 1)
             VkUtil.Transition(cmd, _msaaImage, ColorAspect, 0, 2, 0x400, 0x400, 0x180, 0x100);
+        // The scene image was read by the anti-aliasing pass of the frame before (fragment shader, 0x80), so wait for that.
+        if (_post != PostAntiAliasing.None)
+            VkUtil.Transition(cmd, _sceneColorImage, ColorAspect, 0, 2, 0x480, 0x400, 0x120, 0x100);
 
         _scenePassOpen = false;
         if (!deferScenePass)
@@ -533,9 +647,11 @@ public sealed unsafe class VulkanContext : IDisposable
     public void BeginScenePass()
     {
         var cmd = _cmds[_frame];
+        // With FXAA or SMAA the scene goes into its own image; the anti-aliasing passes then write the swapchain image.
+        var target = _post != PostAntiAliasing.None ? _sceneColorView : _views[_imageIndex];
         var color = new VkRenderingAttachmentInfo
         {
-            ImageView = _views[_imageIndex],
+            ImageView = target,
             ImageLayout = (VkImageLayout)2,
             LoadOp = (VkAttachmentLoadOp)1,
             StoreOp = (VkAttachmentStoreOp)0,
@@ -549,7 +665,7 @@ public sealed unsafe class VulkanContext : IDisposable
             // Draw into the multisampled image; the GPU averages its samples into the swapchain image at the end.
             color.ImageView = _msaaView;
             color.ResolveMode = VkResolveModeFlags.AverageBit;
-            color.ResolveImageView = _views[_imageIndex];
+            color.ResolveImageView = target;
             color.ResolveImageLayout = (VkImageLayout)2;
             color.StoreOp = (VkAttachmentStoreOp)1;   // DONT_CARE: only the resolved result is needed
         }
@@ -591,6 +707,13 @@ public sealed unsafe class VulkanContext : IDisposable
             BeginScenePass();
         var cmd = _cmds[_frame];
         cmd.EndRendering();
+
+        if (_post != PostAntiAliasing.None)
+        {
+            // Hand the scene to the fragment shaders of the anti-aliasing passes, which write the swapchain image.
+            VkUtil.Transition(cmd, _sceneColorImage, ColorAspect, 2, 5, 0x400, 0x80, 0x100, 0x20);
+            AfterScenePass?.Invoke(cmd);
+        }
 
         var begin = new VkRenderPassBeginInfo
         {
@@ -685,6 +808,8 @@ public sealed unsafe class VulkanContext : IDisposable
         _device.DestroyRenderPass(_uiPass, null);
 
         DestroySceneTargets();
+        if (_post != PostAntiAliasing.None)
+            DestroyPostTarget();
 
         foreach (var view in _views)
             _device.DestroyImageView(view, null);

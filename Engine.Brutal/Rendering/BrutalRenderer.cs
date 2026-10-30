@@ -420,7 +420,11 @@ public sealed class BrutalRenderer : IRenderer
         CreateDescriptors();
         _particles = new ParticleRenderer(ctx, shaders);
         _ctx.BeforeEndFrame = FlushFrame;
+        _antiAliasing = new AntiAliasingPass(ctx, shaders);
+        _ctx.AfterScenePass = cmd => _antiAliasing.Record(cmd, _ctx.PostAntiAliasing);
     }
+
+    private readonly AntiAliasingPass _antiAliasing;
 
     private VkPipelineLayout CreateLayout()
     {
@@ -1327,6 +1331,8 @@ public sealed class BrutalRenderer : IRenderer
     public void Dispose()
     {
         _ctx.WaitIdle();
+        _ctx.AfterScenePass = null;
+        _antiAliasing.Dispose();
         _particles.Dispose();
         _meshes.Dispose();
         foreach (var list in _dynamicBuffers)

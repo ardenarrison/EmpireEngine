@@ -2911,6 +2911,22 @@ if (!OperatingSystem.IsWindows())
     finally { SceneObject.PositionPrecision = before; }
 }
 
+// ---- anti-aliasing modes ----
+{
+    foreach (var mode in new[] { AntiAliasingMode.None, AntiAliasingMode.Msaa, AntiAliasingMode.Fxaa, AntiAliasingMode.Smaa })
+    {
+        var aaScene = new Engine.Core.Scene.Scene();
+        var camObj = new SceneObject { Name = "Cam" };
+        camObj.Components.Add(new CameraComponent { AntiAliasing = mode, MsaaSamples = 8 });
+        aaScene.Add(camObj);
+        string aaJson = SceneSerializer.ToJson(aaScene);
+        var aaBack = SceneSerializer.FromJson(aaJson).All.Single().Components.OfType<CameraComponent>().Single();
+        Check(aaBack.AntiAliasing == mode, $"the camera's {mode} anti-aliasing survives saving and loading");
+        Check(aaJson.Contains("msaaSamples") == (mode == AntiAliasingMode.Msaa), $"{mode}: the MSAA sample count is saved only for MSAA");
+        Check(new CameraComponent { AntiAliasing = mode, MsaaSamples = 8 }.RequestedSamples == (mode == AntiAliasingMode.Msaa ? 8 : 1), $"{mode}: only MSAA asks for extra samples");
+    }
+}
+
 Console.WriteLine(failures == 0 ? "\nAll checks passed." : $"\n{failures} check(s) failed.");
 return failures == 0 ? 0 : 1;
 
