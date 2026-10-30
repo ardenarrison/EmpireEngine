@@ -106,10 +106,20 @@
   <tbody>
     <tr><td>Focal Length</td><td>35 mm</td><td>Zoom, as on a full-frame camera (36 mm wide sensor). 35 mm gives a horizontal view of about 54°. Lower is wider.</td></tr>
     <tr><td>Near, Far</td><td>0.1, 500</td><td>The closest and farthest distances drawn</td></tr>
-    <tr><td>Anti Aliasing</td><td>None</td><td><em>MSAA</em> smooths jagged edges by drawing several samples per pixel and averaging them</td></tr>
-    <tr><td>MSAA Samples</td><td>4</td><td>2, 4 or 8. A GPU that can't do that many uses its highest.</td></tr>
+    <tr><td>Anti Aliasing</td><td>None</td><td>How jagged edges are smoothed: <em>MSAA</em>, <em>FXAA</em> or <em>SMAA</em> (see below)</td></tr>
+    <tr><td>MSAA Samples</td><td>4</td><td>Shown for MSAA: 2, 4 or 8. A GPU that can't do that many uses its highest.</td></tr>
   </tbody>
 </table></div>
+<div class="table-wrap"><table>
+  <thead><tr><th>Anti Aliasing</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td><strong>None</strong></td><td>No smoothing: the sharpest and fastest, with jagged edges.</td></tr>
+    <tr><td><strong>MSAA</strong></td><td>Draws several samples per pixel and averages them. Smooths the edges of shapes only, and needs the most GPU memory.</td></tr>
+    <tr><td><strong>FXAA</strong></td><td>Works on the finished picture: it finds edges from the brightness around each pixel and blurs along them. Cheap, and it also smooths edges inside textures, but it softens the picture a little.</td></tr>
+    <tr><td><strong>SMAA</strong></td><td>Also works on the finished picture, in three steps: find the edges, work out how to blend across each one, then blend. Cleaner and sharper than FXAA, and a little slower. This is SMAA 1x at the high preset, from the reference implementation by Jimenez et al. (MIT license).</td></tr>
+  </tbody>
+</table></div>
+<p>FXAA and SMAA make the scene draw into a second picture the size of the window first, which is smoothed into the screen; SMAA uses two more for its in-between steps. Nothing is made until a camera asks for one of them. Only the scene is smoothed: the UI is drawn afterwards and stays sharp. A mesh your own Vulkan code draws during the scene is smoothed with the rest.</p>
 <p>The main camera's anti-aliasing also applies to the editor's view. In the editor, cameras are drawn as a small body with lines showing what they see: yellow when selected, green for the camera play mode uses, gray otherwise.</p>
 <p>The game view is 16:9. In a built game, <kbd>F11</kbd> switches between a window and fullscreen.</p>
 

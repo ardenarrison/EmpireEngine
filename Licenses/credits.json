@@ -2,6 +2,7 @@
   "comment": "Third-party software in Empire Engine. 'usedIn' says which programs ship it: hub (Empire Engine Hub), editor, game (games built with Empire Engine). Credits screens read this file; the BRUTAL component notices in ThirdParty/ are copied from the NuGet packages at build time.",
   "brutalNotice": "BRUTAL game development framework is Copyright (c) 2024 Ahwoo Limited. This product is built with BRUTAL, a game development framework by Ahwoo Limited, used under the BRUTAL License v1.0. www.ahwoo.com/brutal",
   "entries": [
+    { "name": "SMAA (Enhanced Subpixel Morphological Antialiasing)", "copyright": "Copyright (C) 2013 Jorge Jimenez, Jose I. Echevarria, Belen Masia, Fernando Navarro, Diego Gutierrez", "license": "MIT", "file": "SMAA-MIT.txt", "url": "https://github.com/iryoku/smaa", "usedIn": ["editor", "game"] },
     { "name": "BRUTAL", "copyright": "Copyright (c) 2024 Ahwoo Limited", "license": "BRUTAL License v1.0", "file": "BRUTAL-LICENSE.txt", "url": "https://www.ahwoo.com/brutal", "usedIn": ["hub", "editor", "game"] },
     { "name": "JetBrains Mono typeface", "copyright": "Copyright 2020 The JetBrains Mono Project Authors", "license": "SIL Open Font License 1.1", "file": "JetBrainsMono-OFL.txt", "url": "https://github.com/JetBrains/JetBrainsMono", "usedIn": ["editor"] },
     { "name": ".NET runtime and Microsoft.Extensions", "copyright": "Copyright (c) .NET Foundation and Contributors", "license": "MIT", "file": "DotNet-MIT.txt", "url": "https://github.com/dotnet/runtime", "usedIn": ["hub", "editor", "game"] },

@@ -223,8 +223,9 @@ public sealed class SceneEnvironment : Component
 
 // Viewpoint for play mode. The camera looks down its local -Z axis, like the Editor's fly camera at yaw 0.
 // FocalLength is in millimeters on a 36 mm wide sensor, so 35 mm gives a horizontal view of about 54 degrees.
-// How a camera smooths jagged edges. More methods can be added here later.
-public enum AntiAliasingMode { None, Msaa }
+// How a camera smooths jagged edges. Msaa works while the scene is drawn (sharpest, costs the most memory); Fxaa and Smaa work
+// on the finished picture, so they also smooth edges inside textures and shaders. Smaa is cleaner than Fxaa and a little slower.
+public enum AntiAliasingMode { None, Msaa, Fxaa, Smaa }
 
 public sealed class CameraComponent : Component
 {
@@ -239,7 +240,7 @@ public sealed class CameraComponent : Component
     // The nearest allowed MSAA sample count (2, 4 or 8) to any number.
     public static int NormalizeMsaaSamples(int samples) => samples <= 2 ? 2 : samples <= 4 ? 4 : 8;
 
-    // Samples per pixel this camera asks for: 1 (off), 2, 4 or 8.
+    // Samples per pixel this camera asks for: 1 (off), 2, 4 or 8. Only MSAA uses samples; FXAA and SMAA draw with one.
     public int RequestedSamples => AntiAliasing == AntiAliasingMode.Msaa ? NormalizeMsaaSamples(MsaaSamples) : 1;
 
     // Vertical field of view in radians for an aspect ratio (width / height).

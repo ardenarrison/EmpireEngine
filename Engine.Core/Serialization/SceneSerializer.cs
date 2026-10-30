@@ -402,7 +402,7 @@ public static class SceneSerializer
                         Far = cam.Far,
                         // Written only when on, so scenes without anti-aliasing stay as they were.
                         AntiAliasing = cam.AntiAliasing == AntiAliasingMode.None ? null : cam.AntiAliasing.ToString(),
-                        MsaaSamples = cam.AntiAliasing == AntiAliasingMode.None ? null : CameraComponent.NormalizeMsaaSamples(cam.MsaaSamples),
+                        MsaaSamples = cam.AntiAliasing == AntiAliasingMode.Msaa ? CameraComponent.NormalizeMsaaSamples(cam.MsaaSamples) : null,
                     });
                     break;
                 case UiElement ui:

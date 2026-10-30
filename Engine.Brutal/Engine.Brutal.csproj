@@ -24,6 +24,10 @@
     <!-- The logos on the splash every game opens with (SplashScreen). See Ui\Logos\README.txt before changing them. -->
     <EmbeddedResource Include="Ui\Logos\BrutalLogo.png" LogicalName="Engine.Brutal.Ui.Logos.BrutalLogo.png" />
     <EmbeddedResource Include="Ui\Logos\EmpireEngineCrown.png" LogicalName="Engine.Brutal.Ui.Logos.EmpireEngineCrown.png" />
+    <!-- SMAA anti-aliasing: the reference shader and its two lookup textures (MIT license, see Licenses/SMAA-MIT.txt). -->
+    <EmbeddedResource Include="Rendering\Smaa\SMAA.glsl" LogicalName="Engine.Brutal.Rendering.Smaa.SMAA.glsl" />
+    <EmbeddedResource Include="Rendering\Smaa\AreaTex.bin" LogicalName="Engine.Brutal.Rendering.Smaa.AreaTex.bin" />
+    <EmbeddedResource Include="Rendering\Smaa\SearchTex.bin" LogicalName="Engine.Brutal.Rendering.Smaa.SearchTex.bin" />
   </ItemGroup>
 
   <PropertyGroup>
