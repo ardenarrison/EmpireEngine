@@ -114,7 +114,7 @@ function buildTopbar() {
   const brand = el("a", { class: "brand", href: "index.html" }, [
     el("span", { class: "brand-mark", text: "E" }),
     el("span", { text: "EMPIRE" }),
-    el("small", { text: "Engine docs · v0.2.5" }),
+    el("small", { text: "Engine docs · v0.2.6" }),
   ]);
 
   return el("header", { class: "topbar" }, [menu, brand, el("div", { class: "topbar-spacer" }), theme]);
@@ -210,7 +210,7 @@ function buildPager(article) {
   article.append(pager);
   article.append(el("p", {
     class: "site-footer",
-    text: "Empire Engine 0.2.5 documentation. Empire Engine is open source under the Apache License 2.0; these pages live in the repository's docs/ folder.",
+    text: "Empire Engine 0.2.6 documentation. Empire Engine is open source under the Apache License 2.0; these pages live in the repository's docs/ folder.",
   }));
 }
 
