@@ -131,6 +131,9 @@ public sealed class VisualScriptView
     // Set by the editor: the names of the objects in the current scene.
     public Func<IReadOnlyList<string>>? ObjectNames { get; set; }
 
+    // The tags used in the scene, for the tag dropdowns.
+    public Func<IReadOnlyList<string>>? TagNames { get; set; }
+
     // Pointer interaction.
     private PendingKind _pending = PendingKind.None;
     private string? _pendingId;
@@ -474,10 +477,10 @@ public sealed class VisualScriptView
         IsPicker(kind) ? Math.Max(120f, c.MeasureText(PickerShown(value, kind)) + 34f) : Math.Max(44f, c.MeasureText(value) + 14f);
 
     // Inputs that open a list to pick from, instead of being typed: an object in the scene, or a function of this script.
-    private static bool IsPicker(InputKind kind) => kind is InputKind.Object or InputKind.Function;
+    private static bool IsPicker(InputKind kind) => kind is InputKind.Object or InputKind.Function or InputKind.Tag;
 
     private static string PickerShown(string value, InputKind kind) =>
-        value.Length == 0 ? (kind == InputKind.Function ? "choose function" : "choose object") : value;
+        value.Length == 0 ? kind switch { InputKind.Function => "choose function", InputKind.Tag => "choose tag", _ => "choose object" } : value;
 
     // A field that shows the chosen object's name and opens a list of the scene's objects when clicked.
     private void ObjectField(Canvas2D c, string nodeId, string input, Box box, string value, InputKind kind)
@@ -492,6 +495,7 @@ public sealed class VisualScriptView
         ? _graph.Nodes.Where(n => _registry.Get(n.Type) is { Definition: true })
                       .Select(n => n.Inputs.TryGetValue("name", out var v) ? v.Literal?.Trim() ?? "" : "")
                       .Where(name => name.Length > 0).Distinct().ToList()
+        : kind == InputKind.Tag ? TagNames?.Invoke() ?? Array.Empty<string>()
         : ObjectNames?.Invoke() ?? Array.Empty<string>();
 
     private Box MenuBox(float2 size, int count)
@@ -519,7 +523,7 @@ public sealed class VisualScriptView
         c.Rect(box.X, box.Y, box.W, box.H, HeaderColor);
         if (names.Count == 0)
         {
-            c.Text(_menu.Kind == InputKind.Function ? "No functions defined yet" : "No objects in the scene", box.X + 8f, TopOf(box.Y + 2f, MenuRowH), Dim);
+            c.Text(_menu.Kind switch { InputKind.Function => "No functions defined yet", InputKind.Tag => "No tags yet: set one in the Inspector", _ => "No objects in the scene" }, box.X + 8f, TopOf(box.Y + 2f, MenuRowH), Dim);
             return;
         }
 

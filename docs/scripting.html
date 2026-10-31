@@ -54,6 +54,8 @@ public class Bob : Behaviour
     <tr><td><code>Update()</code></td><td>Every frame while the game plays.</td></tr>
     <tr><td><code>OnCollisionEnter(SceneObject other)</code></td><td>When this object's colliders start touching another object's.</td></tr>
     <tr><td><code>OnCollisionExit(SceneObject other)</code></td><td>When they stop touching.</td></tr>
+    <tr><td><code>OnTriggerEnter(SceneObject other)</code></td><td>When this object and another start overlapping, where one of their colliders is a trigger.</td></tr>
+    <tr><td><code>OnTriggerExit(SceneObject other)</code></td><td>When they stop overlapping.</td></tr>
     <tr><td><code>OnDestroy()</code></td><td>Once, when this object is destroyed with <code>Destroy</code>, just before it leaves the scene. Children destroyed with it get it too, after their parent. Only for scripts that had started. It is <em>not</em> called when a scene is unloaded or the game stops.</td></tr>
     <tr><td><code>OnGameLoaded()</code></td><td>After <code>SaveGame.Load</code> put a saved game back, on scripts that had already started when it was saved. Rebuild cached references here. See <a href="scene-management.html#saving-the-game">Saving the game</a>.</td></tr>
   </tbody>
@@ -202,6 +204,29 @@ animator.Play("Walk");</code></pre>
 }</code></pre>
 <p>Collision events need colliders on both objects, and at least one of the two must have a Rigidbody. Use <a href="physics.html#raycasts">raycasts</a> to find things without touching them.</p>
 
+<h2>Triggers</h2>
+<p>Tick <strong>Is Trigger</strong> on a collider to make a zone: it pushes nothing and nothing pushes it, but both objects hear when something starts and stops overlapping it. As with collisions, one of the two needs a Rigidbody (a kinematic one is fine). Raycasts pass through triggers.</p>
+<pre><code class="language-cs">public class FinishLine : Behaviour
+{
+    public override void OnTriggerEnter(SceneObject other)
+    {
+        if (other.CompareTag("Player")) Console.WriteLine("You win!");
+    }
+}</code></pre>
+
+<h2>Tags</h2>
+<p>Give objects of one kind the same <strong>Tag</strong> in the Inspector (under the name), such as <em>Enemy</em> or <em>Coin</em>, and tell them apart without relying on names. Tags are matched exactly, capital letters included.</p>
+<pre><code class="language-cs">if (other.CompareTag("Enemy")) TakeDamage();
+var player = FindWithTag("Player");                  // the first one, or null
+foreach (var coin in FindObjectsWithTag("Coin")) Destroy(coin);</code></pre>
+
+<h2>Saved values (Prefs)</h2>
+<p><code>Prefs</code> keeps small values between plays of the game, such as settings and high scores. Unlike <code>SaveGame</code> they don't belong to a save slot, and each <code>Set</code> writes the file straight away.</p>
+<pre><code class="language-cs">Prefs.SetInt("highScore", Math.Max(score, Prefs.GetInt("highScore")));
+float volume = Prefs.GetFloat("volume", 1f);         // 1 when it was never set
+Prefs.SetString("playerName", "Ada");</code></pre>
+<p>There are <code>Set</code> and <code>Get</code> versions for <code>int</code>, <code>float</code>, <code>bool</code> and <code>string</code>, plus <code>HasKey</code>, <code>DeleteKey</code> and <code>DeleteAll</code>. They are kept in <code>prefs.json</code> in the game's folder in the user's application data. Values set while playing in the editor are kept apart from the built game's.</p>
+
 <h2>Making and removing objects</h2>
 <p><strong>Destroy</strong> takes an object, and everything under it, out of the scene. Any script can destroy any object it has a reference to, its own included:</p>
 <pre><code class="language-cs">Destroy(sceneObject);                 // this object
@@ -244,7 +269,8 @@ Destroy(ball);                              // takes it and its children out at 
     <tr><td><code>GameObject.Find</code></td><td><code>Scene.FindObjectWithName</code></td></tr>
     <tr><td><code>Instantiate</code> / <code>Destroy</code></td><td><code>SceneManager.World.Add</code> / <code>Destroy(obj)</code>, or additive scene loading</td></tr>
     <tr><td><code>[SerializeField] private</code></td><td>Not supported: only public fields are shown and saved</td></tr>
-    <tr><td><code>PlayerPrefs</code></td><td><code>SaveGame.SetInt</code> and friends, which travel with a save slot</td></tr>
+    <tr><td><code>PlayerPrefs</code></td><td><code>Prefs.SetInt</code> and friends (or <code>SaveGame.SetInt</code> for values that travel with a save slot)</td></tr>
+    <tr><td><code>GameObject.FindWithTag</code>, <code>CompareTag</code></td><td><code>FindWithTag</code>, <code>CompareTag</code></td></tr>
     <tr><td><code>Vector3</code>, <code>Quaternion</code></td><td><code>System.Numerics</code> types (<code>Vector3.UnitZ</code>, <code>Quaternion.CreateFromYawPitchRoll</code>, radians)</td></tr>
   </tbody>
 </table></div>

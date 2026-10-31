@@ -104,6 +104,7 @@
 
 <h3>Moving and scaling</h3>
 <p>Pick <em>Move</em> or <em>Scale</em> from the tool buttons and drag a handle. Move uses the world axes (arrow tips). Scale uses the object's own axes (box tips), and the center box scales evenly: drag right to grow and left to shrink. You can also type values in the Inspector's Position, Rotation and Scale fields, or drag across them.</p>
+<p>Hold <kbd>Ctrl</kbd> while dragging a handle to snap. A move puts the object on a grid along that axis, every <em>Move Snap</em> world units (0.5 unless you change it); with several objects selected, the others keep their distance to the primary one. Scaling along an axis rounds the scale to a multiple of <em>Scale Snap</em> (0.1), and the center box scales in steps of it (0.1 is 10% at a time). Both steps are in <a href="#project-settings">Project settings</a>.</p>
 
 <h3>Components</h3>
 <p>Press <em>Add Component</em> for the list of built-in components, followed by components from your own scripts and turned-on packages. Each component's section has an <strong>X</strong> on its title bar that removes it. See the <a href="components.html">Component reference</a>.</p>
@@ -163,6 +164,7 @@
   <thead><tr><th>Setting</th><th>What it does</th></tr></thead>
   <tbody>
     <tr><td><strong>Position Type</strong> (Float or Double, usually Float)</td><td>How precisely object positions are kept. <em>Float</em> keeps about 7 digits, which suits most games. <em>Double</em> keeps about 16, for very large worlds: far from the origin an object can still be placed and moved in tiny steps, and small movements added up over time stay exact. With Double the Inspector's Position boxes take every digit you type, and scripts read the full value as <code>transform.positionD</code> (see <a href="scripting.html">Scripting</a>). Physics, rendering and audio still work in floats, so a Rigidbody's position is rounded to a float every physics step. Switching back to Float rounds every position in the scene. The built game uses the same type.</td></tr>
+    <tr><td><strong>Move Snap</strong>, <strong>Scale Snap</strong> (usually 0.5 and 0.1)</td><td>The grid steps used when you hold <kbd>Ctrl</kbd> while dragging a move or scale handle.</td></tr>
     <tr><td><strong>Editor Far Clip Plane</strong> (10 to 100000, usually 500)</td><td>How far from the editor's camera the scene is drawn, in world units. Anything farther away isn't drawn. Raise it to see distant objects, such as a big terrain's far edge, while you edit; lower it for finer depth detail close up.</td></tr>
     <tr><td><strong>Editor Near Clip Plane</strong> (0.01 to 100, usually 0.1)</td><td>How close to the editor's camera things can be and still be drawn. Anything nearer isn't drawn. Lower it to look at small things up close without them being cut off; raise it for finer depth detail far away. It is never more than half the far plane, so lowering the far plane can pull the near plane in with it.</td></tr>
   </tbody>
@@ -174,6 +176,7 @@
   <li><strong>File &gt; Build Project…</strong> builds a standalone game. See <a href="building.html">Building and publishing</a>.</li>
   <li><strong>File &gt; Package Manager…</strong> turns packages on and off. See <a href="packages.html">Packages</a>.</li>
   <li><strong>File &gt; Project Settings…</strong> holds settings that belong to the project. See <a href="#project-settings">Project settings</a> below.</li>
+  <li><strong>Window &gt; Show FPS Counter</strong> shows frames per second and milliseconds per frame in a small box in the top-right corner of the scene view, averaged over half a second. In a narrow window it shows only the frames per second, and moves just below the toolbar if even that doesn't fit beside it. It is remembered in the project's <code>project-settings.json</code>.</li>
   <li><strong>Help &gt; Credits</strong> lists third-party software and licenses.</li>
 </ul>
 

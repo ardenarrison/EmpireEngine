@@ -74,6 +74,13 @@ public sealed class SceneObject
     public Guid Id { get; }
     public string Name { get; set; } = "GameObject";
 
+    // A label shared by objects of one kind ("Enemy", "Coin"), for finding them and telling them apart in collisions. Empty
+    // means untagged. Matched exactly, capital letters included.
+    public string Tag { get; set; } = "";
+
+    // True when this object has exactly this tag.
+    public bool CompareTag(string tag) => Tag.Length > 0 && Tag == tag;
+
     public SceneObject? Parent { get; internal set; }
     public List<SceneObject> Children { get; } = new();   // mutated only through Scene
 
@@ -219,6 +226,13 @@ public sealed class SceneEnvironment : Component
     // How much the sky lights the scene: soft light from above (and the horizon and ground) on surfaces,
     // and reflections of the sky on shiny ones. 0 turns it off.
     public float SkyLighting { get; set; } = 0.5f;
+
+    // Distance fog: surfaces fade into FogColor between FogStart and FogEnd world units from the camera (fully hidden beyond
+    // FogEnd). The sky itself isn't fogged, so a FogColor near the horizon color blends best.
+    public bool Fog { get; set; }
+    public Vector3 FogColor { get; set; } = new(0.75f, 0.82f, 0.9f);
+    public float FogStart { get; set; } = 20f;
+    public float FogEnd { get; set; } = 120f;
 }
 
 // Viewpoint for play mode. The camera looks down its local -Z axis, like the Editor's fly camera at yaw 0.
@@ -236,6 +250,14 @@ public sealed class CameraComponent : Component
 
     // Samples per pixel when AntiAliasing is Msaa: 2, 4 or 8. A GPU that can't do that many uses its highest.
     public int MsaaSamples { get; set; } = 4;
+
+    // Color effects on the finished picture; the defaults change nothing. Exposure brightens (positive) or darkens (negative) in
+    // photographic stops, so +1 doubles the light. Contrast stretches colors away from middle gray (1 is unchanged, 0 is flat
+    // gray). Vignette darkens toward the corners (0 to 1). Sharpen crisps edges (0 to 1); it is a nice match for FXAA.
+    public float Exposure { get; set; }
+    public float Contrast { get; set; } = 1f;
+    public float Vignette { get; set; }
+    public float Sharpen { get; set; }
 
     // The nearest allowed MSAA sample count (2, 4 or 8) to any number.
     public static int NormalizeMsaaSamples(int samples) => samples <= 2 ? 2 : samples <= 4 ? 4 : 8;

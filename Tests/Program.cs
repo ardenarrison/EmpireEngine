@@ -2870,6 +2870,162 @@ if (!OperatingSystem.IsWindows())
     Directory.Delete(hookDir, true);
 }
 
+// The visual code "when destroyed" block: runs when its object is destroyed, up to its first wait.
+{
+    string whenDir = Path.Combine(Path.GetTempPath(), "empire-whendestroyed-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(whenDir);
+    var graph = new VisualCode.Model.VcGraph { Name = "Bomb" };
+    graph.Nodes.Add(new() { Id = "hat", Type = "when_destroyed", Next = "boom" });
+    graph.Nodes.Add(new() { Id = "boom", Type = "destroy_object", Next = "pause", Inputs = { ["object"] = new() { Literal = "Wall" } } });
+    graph.Nodes.Add(new() { Id = "pause", Type = "wait", Next = "late", Inputs = { ["seconds"] = new() { Literal = "1" } } });
+    graph.Nodes.Add(new() { Id = "late", Type = "destroy_object", Inputs = { ["object"] = new() { Literal = "Tower" } } });
+    var bomb = new VisualCode.Transpiler.VcTranspiler().Transpile(graph, "Bomb");
+    Check(!bomb.HasErrors && bomb.Code.Contains("public override void OnDestroy()") && !bomb.Code.Contains("Spawn("),
+          "a 'when destroyed' script runs from OnDestroy, not when the scene starts");
+    File.WriteAllText(Path.Combine(whenDir, "Bomb.cs"), bomb.Code);
+    string whenDll = Path.Combine(whenDir, "bomb.dll");
+    Check(Engine.Scripting.Build.ScriptBuilder.Compile(whenDir, whenDll,
+              Engine.Scripting.Build.ScriptBuilder.DefaultReferences(typeof(Behaviour).Assembly.Location), out string whenErrors),
+          "a 'when destroyed' script compiles" + (whenErrors.Length > 0 ? ": " + whenErrors : ""));
+    var whenWorld = new Scene();
+    var bombObj = new SceneObject { Name = "Bomb" };
+    var wall = new SceneObject { Name = "Wall" };
+    var tower = new SceneObject { Name = "Tower" };
+    whenWorld.Add(bombObj); whenWorld.Add(wall); whenWorld.Add(tower);
+    bombObj.Components.Add(new ScriptComponent { ScriptName = "Bomb" });
+    ScriptRuntime.Load(whenWorld, new[] { Assembly.LoadFrom(whenDll) });
+    SceneUpdate.Update(whenWorld, 1f / 60f);
+    Check(whenWorld.Contains(wall), "nothing happens while the object is still there");
+    Scene.Destroy(bombObj);
+    SceneUpdate.Update(whenWorld, 1f / 60f);   // the bomb goes; its script asks for the wall, which goes at the next frame's end
+    SceneUpdate.Update(whenWorld, 1f / 60f);
+    for (int i = 0; i < 120; i++) SceneUpdate.Update(whenWorld, 1f / 60f);
+    Check(!whenWorld.Contains(bombObj) && !whenWorld.Contains(wall) && whenWorld.Contains(tower),
+          "'when destroyed' runs its steps up to the first wait, and nothing after it");
+    Directory.Delete(whenDir, true);
+}
+
+// ---- snapping and the FPS counter ----
+{
+    Check(Math.Abs(Editor.Snapping.Move(0.2f, 0.4f, 0.5f) - 0.3f) < 1e-5f,
+          "a snapped move lands the object on the grid (0.2 dragged 0.4 goes to 0.5)");
+    Check(Math.Abs(Editor.Snapping.Move(1f, -0.2f, 0.5f)) < 1e-6f, "a small drag stays on the same grid line");
+    Check(Editor.Snapping.Move(0.2f, 0.4f, 0f) == 0.4f, "a zero step leaves the move alone");
+    Check(Math.Abs(Editor.Snapping.Scale(1.23f, 0.1f) - 1.2f) < 1e-5f && Math.Abs(Editor.Snapping.Scale(0.01f, 0.1f) - 0.1f) < 1e-6f,
+          "a snapped scale rounds to the step and never goes below one step");
+    Check(Math.Abs(Editor.Snapping.Factor(1.37f, 0.25f) - 1.25f) < 1e-6f, "an even scale changes in whole steps");
+
+    var counter = new Editor.FrameRateCounter();
+    for (int i = 0; i <= 60; i++) counter.Tick(i / 60.0);
+    Check(Math.Abs(counter.Fps - 60) < 0.5 && Math.Abs(counter.FrameMilliseconds - 1000.0 / 60) < 0.1, "the FPS counter reports 60 frames a second");
+
+    string snapDir = Path.Combine(Path.GetTempPath(), "snap-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(snapDir);
+    new ProjectSettings { MoveSnap = 0.25f, ScaleSnap = 0.05f, ShowFpsCounter = true }.Save(snapDir);
+    var snapBack = ProjectSettings.Load(snapDir);
+    Check(snapBack.MoveSnap == 0.25f && snapBack.ScaleSnap == 0.05f && snapBack.ShowFpsCounter, "snap steps and the FPS counter are saved in project-settings.json");
+    Check(new ProjectSettings().MoveSnap == 0.5f && new ProjectSettings { MoveSnap = -3f }.MoveSnap == ProjectSettings.MinSnap &&
+          new ProjectSettings { ScaleSnap = float.NaN }.ScaleSnap == 0.1f, "snap steps default to 0.5 and 0.1 and stay in range");
+    Directory.Delete(snapDir, true);
+}
+
+// ---- tags, triggers, prefs, fog and camera effects ----
+{
+    // Tags
+    var tagScene = new Scene();
+    var coinA = new SceneObject { Name = "Coin", Tag = "Coin" };
+    var coinB = new SceneObject { Name = "Gold", Tag = "Coin" };
+    var plain = new SceneObject { Name = "Rock" };
+    tagScene.Add(coinA); tagScene.Add(plain); tagScene.Add(coinB);
+    Check(tagScene.FindByTag("Coin") == coinA && tagScene.FindAllByTag("Coin").Count == 2 && tagScene.FindByTag("coin") is null,
+          "objects are found by tag, exactly");
+    Check(coinA.CompareTag("Coin") && !plain.CompareTag("") && !plain.CompareTag("Coin"), "CompareTag matches only a set tag");
+    var tagBack = SceneSerializer.FromJson(SceneSerializer.ToJson(tagScene));
+    Check(tagBack.Find(coinB.Id)!.Tag == "Coin" && tagBack.Find(plain.Id)!.Tag == "" && !SceneSerializer.ToJson(tagScene).Contains("\"tag\": \"\""),
+          "tags survive saving and loading, and an empty tag is left out");
+
+    // Triggers: a falling ball passes through a trigger zone, which reports it, and still lands on the ground.
+    var zoneScene = PhysicsScene();
+    var zone = new SceneObject { Name = "Zone", Position = new(0, 2, 0) };
+    zone.Components.Add(new BoxCollider { Size = new(4, 1, 4), IsTrigger = true });
+    zoneScene.Add(zone);
+    var ball = Dynamic(zoneScene, new(0, 4, 0), new SphereCollider());
+    ball.Name = "Ball";
+    ball.Components.Add(new ScriptComponent { ScriptName = nameof(TriggerProbe) });
+    zone.Components.Add(new ScriptComponent { ScriptName = nameof(TriggerProbe) });
+    TriggerProbe.Log.Clear();
+    ScriptRuntime.Load(zoneScene, typeof(TriggerProbe).Assembly);
+    Simulate(zoneScene, 3);
+    Check(MathF.Abs(ball.Position.Y - 0.5f) < 0.03f, "a trigger doesn't stop a falling ball; the ground does");
+    Check(TriggerProbe.Log.Contains("Ball enter Zone") && TriggerProbe.Log.Contains("Ball exit Zone") &&
+          TriggerProbe.Log.Contains("Zone enter Ball") && TriggerProbe.Log.Contains("Zone exit Ball") &&
+          !TriggerProbe.Log.Any(l => l.Contains("Ground")),
+          "both objects hear OnTriggerEnter and OnTriggerExit, and touching the ground is not a trigger (" + string.Join("; ", TriggerProbe.Log) + ")");
+    Check(Engine.Core.Scripting.Physics.Raycast(new Vector3(0, 10, 0), -Vector3.UnitY, out var zoneHit, 20f, ignore: ball) && zoneHit.Object.Name == "Ground",
+          "raycasts pass through triggers");
+    var trigBack = SceneSerializer.FromJson(SceneSerializer.ToJson(zoneScene)).Find(zone.Id)!.Components.OfType<BoxCollider>().Single();
+    Check(trigBack.IsTrigger, "Is Trigger survives saving and loading");
+
+    // Visual code: the trigger and tag blocks
+    var vcGraph = new VisualCode.Model.VcGraph { Name = "Zones" };
+    vcGraph.Nodes.Add(new() { Id = "h", Type = "when_every_frame", Next = "if1" });
+    vcGraph.Nodes.Add(new() { Id = "if1", Type = "if", Inputs = { ["condition"] = new() { Node = "t1" } }, Next = "if2" });
+    vcGraph.Nodes.Add(new() { Id = "t1", Type = "trigger_enter", Inputs = { ["object"] = new() { Literal = "Zone" } } });
+    vcGraph.Nodes.Add(new() { Id = "if2", Type = "if", Inputs = { ["condition"] = new() { Node = "t2" } } });
+    vcGraph.Nodes.Add(new() { Id = "t2", Type = "collision_now_tag", Inputs = { ["tag"] = new() { Literal = "Enemy" } } });
+    var vcOut = new VisualCode.Transpiler.VcTranspiler().Transpile(vcGraph, "Zones");
+    Check(!vcOut.HasErrors && vcOut.Code.Contains("TriggerEnter(\"Zone\")") && vcOut.Code.Contains("CollidingTag(\"Enemy\")"),
+          "the trigger and tag blocks turn into code" + (vcOut.HasErrors ? ": " + string.Join("; ", vcOut.Diagnostics.Select(d => d.Message)) : ""));
+    string vcDir = Path.Combine(Path.GetTempPath(), "empire-zones-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(vcDir);
+    File.WriteAllText(Path.Combine(vcDir, "Zones.cs"), vcOut.Code);
+    Check(Engine.Scripting.Build.ScriptBuilder.Compile(vcDir, Path.Combine(vcDir, "zones.dll"),
+              Engine.Scripting.Build.ScriptBuilder.DefaultReferences(typeof(Behaviour).Assembly.Location), out string zoneErrors),
+          "a script with the trigger and tag blocks compiles" + (zoneErrors.Length > 0 ? ": " + zoneErrors : ""));
+    Directory.Delete(vcDir, true);
+
+    // Prefs
+    string prefsDir = Path.Combine(Path.GetTempPath(), "empire-prefs-" + Guid.NewGuid().ToString("N"));
+    string prefsFile = Path.Combine(prefsDir, "prefs.json");
+    Prefs.FilePath = prefsFile;
+    Check(Prefs.GetInt("highScore") == 0 && Prefs.GetString("name", "Player") == "Player" && !Prefs.HasKey("highScore"),
+          "unset prefs give their defaults");
+    Prefs.SetInt("highScore", 120);
+    Prefs.SetFloat("volume", 0.8f);
+    Prefs.SetBool("music", true);
+    Prefs.SetString("name", "Ada");
+    Prefs.FilePath = Path.Combine(prefsDir, "other.json");   // forget what is in memory...
+    Prefs.FilePath = prefsFile;                                // ...and read the file again
+    Check(Prefs.GetInt("highScore") == 120 && Prefs.GetFloat("volume") == 0.8f && Prefs.GetBool("music") && Prefs.GetString("name") == "Ada",
+          "prefs are written at once and read back from the file");
+    Prefs.DeleteKey("name");
+    Check(!Prefs.HasKey("name") && Prefs.HasKey("highScore"), "a pref can be deleted");
+    Prefs.DeleteAll();
+    Check(!Prefs.HasKey("highScore"), "every pref can be deleted");
+    Directory.Delete(prefsDir, true);
+
+    // Fog and camera effects
+    var envScene = new Scene();
+    var envObj = new SceneObject { Name = "Environment" };
+    envObj.Components.Add(new SceneEnvironment { Fog = true, FogColor = new(0.5f, 0.6f, 0.7f), FogStart = 10f, FogEnd = 50f });
+    var camObj = new SceneObject { Name = "Camera" };
+    camObj.Components.Add(new CameraComponent { Exposure = 0.5f, Contrast = 1.2f, Vignette = 0.3f, Sharpen = 0.4f });
+    envScene.Add(envObj); envScene.Add(camObj);
+    var envBack = SceneSerializer.FromJson(SceneSerializer.ToJson(envScene));
+    var env2 = envBack.Find(envObj.Id)!.Components.OfType<SceneEnvironment>().Single();
+    var cam2 = envBack.Find(camObj.Id)!.Components.OfType<CameraComponent>().Single();
+    Check(env2.Fog && env2.FogColor == new Vector3(0.5f, 0.6f, 0.7f) && env2.FogStart == 10f && env2.FogEnd == 50f, "fog settings survive saving and loading");
+    Check(cam2.Exposure == 0.5f && cam2.Contrast == 1.2f && cam2.Vignette == 0.3f && cam2.Sharpen == 0.4f, "camera effects survive saving and loading");
+    var fogData = Engine.Core.Rendering.EnvironmentData.From(env2);
+    Check(fogData.Fog && fogData.FogEnd == 50f && !Engine.Core.Rendering.EnvironmentData.From(new SceneEnvironment { Fog = true, FogStart = 50f, FogEnd = 10f }).Fog,
+          "fog reaches the renderer, and is off when its end is nearer than its start");
+    var plainCam = new SceneObject();
+    plainCam.Components.Add(new CameraComponent());
+    var plainScene = new Scene(); plainScene.Add(plainCam);
+    string plainJson = SceneSerializer.ToJson(plainScene);
+    Check(!plainJson.Contains("exposure") && !plainJson.Contains("vignette"), "a camera without effects saves none");
+}
+
 // ---- double positions ----
 {
     var before = SceneObject.PositionPrecision;
@@ -2973,3 +3129,10 @@ public class FieldsScript : Behaviour
 }
 
 class TransformProbe : Engine.Core.Scripting.Behaviour { }
+
+public class TriggerProbe : Behaviour
+{
+    public static List<string> Log = new();
+    public override void OnTriggerEnter(SceneObject other) => Log.Add($"{sceneObject.Name} enter {other.Name}");
+    public override void OnTriggerExit(SceneObject other) => Log.Add($"{sceneObject.Name} exit {other.Name}");
+}

@@ -31,6 +31,7 @@ internal static class StandardBlocks
     private static InputSpec Axis(string name = "axis") => new(name, InputKind.Choice, "X", AxisNames);
     private static InputSpec SceneObject(string name = "object") => new(name, InputKind.Object, "");
     private static InputSpec FunctionName(string name = "name") => new(name, InputKind.Function, "");
+    private static InputSpec TagName(string name = "tag") => new(name, InputKind.Tag, "");
     private static InputSpec Var(string name = "var") => new(name, InputKind.Variable, "");
 
     private static BlockSpec Hat(string type, string label, Func<VcNode, Emit, List<string>, List<string>> wrap, params InputSpec[] inputs) => new()
@@ -93,6 +94,13 @@ internal static class StandardBlocks
         Hat("when_mouse_pressed", "when {button} mouse pressed",
             (n, e, body) => Code.Loop(Code.Block($"if (Input.GetMouseButtonDown({e.Value(n, "button")}))", body)),
             Button()),
+
+        // Runs once, just before the object is destroyed. The object is leaving, so the script stops at its first wait.
+        new BlockSpec
+        {
+            Type = "when_destroyed", Category = "Events", Label = "when destroyed", Shape = BlockShape.Hat, OnDestroy = true,
+            Wrap = (n, e, body) => body.Append("yield break;").ToList(),
+        },
 
         // ---------- Functions ----------
         new BlockSpec
@@ -228,6 +236,25 @@ internal static class StandardBlocks
 
         Reporter("collision_now", "Sensing", "collision now with {object}", "bool",
             (n, e) => $"Colliding({e.Value(n, "object")})", SceneObject()),
+
+        Reporter("collision_enter_tag", "Sensing", "collision enter with tag {tag}", "bool",
+            (n, e) => $"CollisionEnterTag({e.Value(n, "tag")})", TagName()),
+
+        Reporter("collision_end_tag", "Sensing", "collision end with tag {tag}", "bool",
+            (n, e) => $"CollisionExitTag({e.Value(n, "tag")})", TagName()),
+
+        Reporter("collision_now_tag", "Sensing", "collision now with tag {tag}", "bool",
+            (n, e) => $"CollidingTag({e.Value(n, "tag")})", TagName()),
+
+        // Triggers: true when this object starts or stops overlapping an object (one of them a trigger), or while it does.
+        Reporter("trigger_enter", "Sensing", "entered trigger {object}", "bool",
+            (n, e) => $"TriggerEnter({e.Value(n, "object")})", SceneObject()),
+
+        Reporter("trigger_exit", "Sensing", "left trigger {object}", "bool",
+            (n, e) => $"TriggerExit({e.Value(n, "object")})", SceneObject()),
+
+        Reporter("trigger_inside", "Sensing", "inside trigger {object}", "bool",
+            (n, e) => $"InsideTrigger({e.Value(n, "object")})", SceneObject()),
 
         Reporter("timer", "Sensing", "timer", "number", (n, e) => "Timer"),
         Reporter("delta_time", "Sensing", "delta time", "number", (n, e) => "Time.deltaTime"),

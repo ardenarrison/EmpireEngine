@@ -96,6 +96,9 @@
   </tbody>
 </table></div>
 
+<h2>Fog</h2>
+<p>Turn on <strong>Fog</strong> on the Environment component to fade surfaces into <strong>Fog Color</strong> with distance: nothing nearer than <strong>Fog Start</strong>, rising evenly to the full color at <strong>Fog End</strong> (world units from the camera) and beyond. It hides the far edge of a big scene and gives depth to haze, mist or dust. The sky itself isn't fogged, so a fog color close to the horizon color blends best. Models and terrain are fogged; particles are not.</p>
+
 <h2>Transparency</h2>
 <p>Materials can be cut out (glTF alpha mode <code>MASK</code>, for leaves and fences) or see-through (<code>BLEND</code>, for glass and water). See-through surfaces are drawn after all solid ones, blended over what's already drawn. They're hidden behind solid surfaces but don't hide each other, so several panes of glass in a row all show.</p>
 
@@ -119,7 +122,18 @@
     <tr><td><strong>SMAA</strong></td><td>Also works on the finished picture, in three steps: find the edges, work out how to blend across each one, then blend. Cleaner and sharper than FXAA, and a little slower. This is SMAA 1x at the high preset, from the reference implementation by Jimenez et al. (MIT license).</td></tr>
   </tbody>
 </table></div>
-<p>FXAA and SMAA make the scene draw into a second picture the size of the window first, which is smoothed into the screen; SMAA uses two more for its in-between steps. Nothing is made until a camera asks for one of them. Only the scene is smoothed: the UI is drawn afterwards and stays sharp. A mesh your own Vulkan code draws during the scene is smoothed with the rest.</p>
+<h3>Effects</h3>
+<p>Each camera also has four color effects, made to the finished picture after anti-aliasing. Their defaults change nothing.</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>Effect</th><th>Default</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td>Exposure</td><td>0</td><td>Brighter (positive) or darker (negative), in photographic stops: +1 doubles the light, -1 halves it.</td></tr>
+    <tr><td>Contrast</td><td>1</td><td>Pushes colors away from middle gray (above 1) or toward it (below 1).</td></tr>
+    <tr><td>Vignette</td><td>0</td><td>Darkens the picture toward its corners, 0 to 1.</td></tr>
+    <tr><td>Sharpen</td><td>0</td><td>Crisps edges and fine detail, 0 to 1. It goes well with FXAA, which softens the picture a little.</td></tr>
+  </tbody>
+</table></div>
+<p>FXAA and SMAA make the scene draw into a second picture the size of the window first, which is smoothed into the screen; SMAA uses two more for its in-between steps. Effects do the same, with one more full-screen pass at the end (and one more picture when they are combined with FXAA or SMAA). Nothing is made until a camera asks for one of them. Only the scene is smoothed: the UI is drawn afterwards and stays sharp. A mesh your own Vulkan code draws during the scene is smoothed with the rest.</p>
 <p>The main camera's anti-aliasing also applies to the editor's view. In the editor, cameras are drawn as a small body with lines showing what they see: yellow when selected, green for the camera play mode uses, gray otherwise.</p>
 <p>The game view is 16:9. In a built game, <kbd>F11</kbd> switches between a window and fullscreen.</p>
 
