@@ -27,6 +27,8 @@
     <tr><td><code>virtual void Update()</code></td><td>Every frame while playing</td></tr>
     <tr><td><code>virtual void OnCollisionEnter(SceneObject other)</code></td><td>Colliders started touching</td></tr>
     <tr><td><code>virtual void OnCollisionExit(SceneObject other)</code></td><td>Colliders stopped touching</td></tr>
+    <tr><td><code>virtual void OnTriggerEnter(SceneObject other)</code>, <code>OnTriggerExit</code></td><td>Started or stopped overlapping, where one collider is a trigger</td></tr>
+    <tr><td><code>SceneObject? FindWithTag(string)</code>, <code>List&lt;SceneObject&gt; FindObjectsWithTag(string)</code>, <code>bool CompareTag(string)</code></td><td>Find objects by tag; check this object's tag</td></tr>
     <tr><td><code>virtual void OnDestroy()</code></td><td>Once, when the object is destroyed with <code>Destroy</code>, just before it leaves the scene</td></tr>
     <tr><td><code>virtual void OnGameLoaded()</code></td><td>After a save game is loaded, on scripts that had started</td></tr>
     <tr><td><code>T? GetComponent&lt;T&gt;()</code></td><td>First component of type <code>T</code> on this object, or null</td></tr>
@@ -75,6 +77,7 @@
   <tbody>
     <tr><td><code>Guid Id</code></td><td>Permanent id</td></tr>
     <tr><td><code>string Name</code></td><td></td></tr>
+    <tr><td><code>string Tag</code>, <code>bool CompareTag(string)</code></td><td>A label shared by objects of one kind; empty when untagged</td></tr>
     <tr><td><code>Vector3 Position</code>, <code>Quaternion Rotation</code>, <code>Vector3 Scale</code></td><td>Relative to the parent</td></tr>
     <tr><td><code>SceneObject? Parent</code>, <code>List&lt;SceneObject&gt; Children</code></td><td>Read these, and change them only through <code>Scene.SetParent</code>, <code>Add</code> and <code>Remove</code></td></tr>
     <tr><td><code>List&lt;Component&gt; Components</code></td><td>In the order they were added</td></tr>
@@ -92,6 +95,7 @@
     <tr><td><code>static void Destroy(SceneObject?, float delay = 0)</code></td><td>The same as <code>Destroy</code> in a script, for code that is not in a Behaviour</td></tr>
     <tr><td><code>static SceneObject? FindObjectWithName(string)</code></td><td>First object with that exact name in the playing scene</td></tr>
     <tr><td><code>static List&lt;SceneObject&gt; FindObjectsWithName(string)</code></td><td>Every such object</td></tr>
+    <tr><td><code>static SceneObject? FindWithTag(string)</code>, <code>static List&lt;SceneObject&gt; FindObjectsWithTag(string)</code></td><td>The first object with that tag, or every one</td></tr>
     <tr><td><code>IEnumerable&lt;SceneObject&gt; All</code>, <code>Roots</code>, <code>InHierarchyOrder</code></td><td>Every object; top-level ones; parents before children</td></tr>
     <tr><td><code>void Add(SceneObject, SceneObject? parent = null)</code></td><td>Add an object (and its children)</td></tr>
     <tr><td><code>void Remove(SceneObject)</code></td><td>Take it and its children out</td></tr>
@@ -182,6 +186,18 @@
     <tr><td><code>GetInt</code>, <code>GetFloat</code>, <code>GetBool</code>, <code>GetString</code> (with defaults)</td><td></td></tr>
     <tr><td><code>HasKey</code>, <code>DeleteKey</code>, <code>ClearData</code></td><td></td></tr>
     <tr><td><code>string Directory</code></td><td>Where slots are written</td></tr>
+  </tbody>
+</table>
+
+<h2>Prefs</h2>
+<p><a href="scripting.html#saved-values-prefs">Guide →</a></p>
+<table>
+  <thead><tr><th>Member</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>SetInt</code>, <code>SetFloat</code>, <code>SetBool</code>, <code>SetString</code></td><td>Store a value; written to the file at once</td></tr>
+    <tr><td><code>GetInt</code>, <code>GetFloat</code>, <code>GetBool</code>, <code>GetString</code> (with defaults)</td><td></td></tr>
+    <tr><td><code>HasKey</code>, <code>DeleteKey</code>, <code>DeleteAll</code></td><td></td></tr>
+    <tr><td><code>string FilePath</code></td><td>The file they are kept in (next to <code>SaveGame.Directory</code> unless set)</td></tr>
   </tbody>
 </table>
 

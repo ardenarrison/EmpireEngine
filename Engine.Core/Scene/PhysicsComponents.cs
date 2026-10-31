@@ -81,6 +81,10 @@ public abstract class Collider : Component
     public Vector3 Center { get; set; }
     public float Friction { get; set; } = 0.5f;     // 0 is ice; 1 is rubber
     public float Bounciness { get; set; }           // 0 stops dead; 1 bounces back at full speed
+
+    // A trigger pushes nothing and is never pushed: it only reports when another collider starts and stops overlapping it
+    // (OnTriggerEnter / OnTriggerExit), for zones like a finish line or a pickup. One of the two objects needs a Rigidbody.
+    public bool IsTrigger { get; set; }
 }
 
 // A box of Size local units, centered on Center. Scales with the object.

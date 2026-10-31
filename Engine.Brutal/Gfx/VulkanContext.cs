@@ -11,6 +11,13 @@ namespace Engine.Brutal.Gfx;
 // Anti-aliasing done after the scene is drawn, on the finished picture (MSAA is separate: it happens while drawing).
 public enum PostAntiAliasing { None, Fxaa, Smaa }
 
+// Color adjustments made to the finished scene. The defaults change nothing.
+public readonly record struct PostEffects(float Exposure = 0f, float Contrast = 1f, float Vignette = 0f, float Sharpen = 0f)
+{
+    public static PostEffects Off => new();
+    public bool Any => Exposure != 0f || Contrast != 1f || Vignette > 0f || Sharpen > 0f;
+}
+
 // Owns instance, device, swapchain, depth buffer, a UI render pass, command buffers and per-frame sync.
 public sealed unsafe class VulkanContext : IDisposable
 {
@@ -53,6 +60,8 @@ public sealed unsafe class VulkanContext : IDisposable
     private VkDeviceMemory _sceneColorMemory;
     private VkImageView _sceneColorView;
     private PostAntiAliasing _post = PostAntiAliasing.None;
+    private PostEffects _effects = PostEffects.Off;
+    private bool _postTarget;   // the scene is drawn into _sceneColorImage, for anti-aliasing or effects
 
     private VkRenderPass _uiPass;
     private VkFramebuffer[] _framebuffers = [];
@@ -131,10 +140,14 @@ public sealed unsafe class VulkanContext : IDisposable
         Gpu.Attach(this);
     }
 
-    // The anti-aliasing applied after the scene is drawn.
+    // The anti-aliasing and color effects applied after the scene is drawn.
     public PostAntiAliasing PostAntiAliasing => _post;
+    public PostEffects PostEffects => _effects;
 
-    // The image the scene is drawn into while PostAntiAliasing is on. Only valid then.
+    // True while the scene is drawn into its own image (SceneColorImage) and AfterScenePass puts it on screen.
+    public bool PostProcessing => _postTarget;
+
+    // The image the scene is drawn into while PostProcessing is on. Only valid then.
     public VkImage SceneColorImage => _sceneColorImage;
     public VkImageView SceneColorView => _sceneColorView;
 
@@ -158,17 +171,22 @@ public sealed unsafe class VulkanContext : IDisposable
         }
     }
 
-    // Turns FXAA or SMAA on or off. Waits for the GPU and makes or frees the scene image, so call it between frames, and only
-    // when the value changes. Does nothing if AfterScenePass isn't set (nothing could then put the scene on screen).
-    public void SetPostAntiAliasing(PostAntiAliasing mode)
+    // Sets FXAA or SMAA and the color effects. When either is on the scene is drawn into its own image first; making or freeing
+    // that image waits for the GPU, so call this between frames. Only does work when something changed, and keeps everything off
+    // if AfterScenePass isn't set (nothing could then put the scene on screen).
+    public void SetPostProcessing(PostAntiAliasing mode, PostEffects effects)
     {
-        if (mode == _post || (mode != PostAntiAliasing.None && AfterScenePass is null)) return;
+        if (AfterScenePass is null) { mode = PostAntiAliasing.None; effects = PostEffects.Off; }
+        _post = mode;
+        _effects = effects;
+        bool needTarget = mode != PostAntiAliasing.None || effects.Any;
+        if (needTarget == _postTarget) return;
 
         _device.WaitIdle();
-        if (_post != PostAntiAliasing.None)
+        if (_postTarget)
             DestroyPostTarget();
-        _post = mode;
-        if (_post != PostAntiAliasing.None)
+        _postTarget = needTarget;
+        if (_postTarget)
             CreatePostTarget();
     }
 
@@ -209,17 +227,17 @@ public sealed unsafe class VulkanContext : IDisposable
         SampleCountChanged?.Invoke(samples);
     }
 
-    // Sets MSAA and post-process anti-aliasing from a camera's settings (no camera means none). Call between frames; it does
-    // work only when something changed.
-    public void ApplyAntiAliasing(Engine.Core.Scene.CameraComponent? camera)
+    // Sets MSAA, post-process anti-aliasing and the color effects from a camera's settings (no camera means none). Call
+    // between frames; it does work only when something changed.
+    public void ApplyCamera(Engine.Core.Scene.CameraComponent? camera)
     {
         SetSampleCount(camera?.RequestedSamples ?? 1);
-        SetPostAntiAliasing(camera?.AntiAliasing switch
+        SetPostProcessing(camera?.AntiAliasing switch
         {
             Engine.Core.Scene.AntiAliasingMode.Fxaa => PostAntiAliasing.Fxaa,
             Engine.Core.Scene.AntiAliasingMode.Smaa => PostAntiAliasing.Smaa,
             _ => PostAntiAliasing.None,
-        });
+        }, camera is null ? PostEffects.Off : new PostEffects(camera.Exposure, camera.Contrast, camera.Vignette, camera.Sharpen));
     }
 
     // Raised after the sample count changes, so things that depend on it (pipelines) can follow.
@@ -583,7 +601,7 @@ public sealed unsafe class VulkanContext : IDisposable
         foreach (var framebuffer in _framebuffers)
             _device.DestroyFramebuffer(framebuffer, null);
         DestroySceneTargets();
-        if (_post != PostAntiAliasing.None)
+        if (_postTarget)
             DestroyPostTarget();
         foreach (var view in _views)
             _device.DestroyImageView(view, null);
@@ -591,7 +609,7 @@ public sealed unsafe class VulkanContext : IDisposable
 
         CreateSwapchain(_window.FramebufferSize.X, _window.FramebufferSize.Y);
         CreateDepthBuffer();
-        if (_post != PostAntiAliasing.None)
+        if (_postTarget)
             CreatePostTarget();
         CreateFramebuffers();
 
@@ -635,7 +653,7 @@ public sealed unsafe class VulkanContext : IDisposable
         if (_samples > 1)
             VkUtil.Transition(cmd, _msaaImage, ColorAspect, 0, 2, 0x400, 0x400, 0x180, 0x100);
         // The scene image was read by the anti-aliasing pass of the frame before (fragment shader, 0x80), so wait for that.
-        if (_post != PostAntiAliasing.None)
+        if (_postTarget)
             VkUtil.Transition(cmd, _sceneColorImage, ColorAspect, 0, 2, 0x480, 0x400, 0x120, 0x100);
 
         _scenePassOpen = false;
@@ -648,7 +666,7 @@ public sealed unsafe class VulkanContext : IDisposable
     {
         var cmd = _cmds[_frame];
         // With FXAA or SMAA the scene goes into its own image; the anti-aliasing passes then write the swapchain image.
-        var target = _post != PostAntiAliasing.None ? _sceneColorView : _views[_imageIndex];
+        var target = _postTarget ? _sceneColorView : _views[_imageIndex];
         var color = new VkRenderingAttachmentInfo
         {
             ImageView = target,
@@ -708,7 +726,7 @@ public sealed unsafe class VulkanContext : IDisposable
         var cmd = _cmds[_frame];
         cmd.EndRendering();
 
-        if (_post != PostAntiAliasing.None)
+        if (_postTarget)
         {
             // Hand the scene to the fragment shaders of the anti-aliasing passes, which write the swapchain image.
             VkUtil.Transition(cmd, _sceneColorImage, ColorAspect, 2, 5, 0x400, 0x80, 0x100, 0x20);
@@ -808,7 +826,7 @@ public sealed unsafe class VulkanContext : IDisposable
         _device.DestroyRenderPass(_uiPass, null);
 
         DestroySceneTargets();
-        if (_post != PostAntiAliasing.None)
+        if (_postTarget)
             DestroyPostTarget();
 
         foreach (var view in _views)

@@ -40,6 +40,10 @@
     <tr><td>Far</td><td><code>float</code></td><td>500</td><td>Farthest distance drawn</td></tr>
     <tr><td>Anti Aliasing</td><td><code>AntiAliasingMode</code></td><td>None</td><td>None, Msaa, Fxaa or Smaa</td></tr>
     <tr><td>Msaa Samples</td><td><code>int</code></td><td>4</td><td>2, 4 or 8 (used by Msaa only)</td></tr>
+    <tr><td>Exposure</td><td><code>float</code></td><td>0</td><td>Brighter or darker, in stops (+1 doubles the light)</td></tr>
+    <tr><td>Contrast</td><td><code>float</code></td><td>1</td><td>1 is unchanged, 0 is flat gray, up to 2</td></tr>
+    <tr><td>Vignette</td><td><code>float</code></td><td>0</td><td>Darkens toward the corners, 0 to 1</td></tr>
+    <tr><td>Sharpen</td><td><code>float</code></td><td>0</td><td>Crisper edges, 0 to 1</td></tr>
   </tbody>
 </table>
 
@@ -94,6 +98,9 @@
     <tr><td>Ambient Color</td><td><code>Vector3</code></td><td>white</td><td></td></tr>
     <tr><td>Ambient Intensity</td><td><code>float</code></td><td>0.08</td><td>Flat light on every surface</td></tr>
     <tr><td>Sky Lighting</td><td><code>float</code></td><td>0.5</td><td>Light and reflections from the sky; 0 is off</td></tr>
+    <tr><td>Fog</td><td><code>bool</code></td><td>off</td><td>Distance fog</td></tr>
+    <tr><td>Fog Color</td><td><code>Vector3</code></td><td>pale blue</td><td>What surfaces fade into</td></tr>
+    <tr><td>Fog Start, Fog End</td><td><code>float</code></td><td>20, 120</td><td>World units from the camera where the fog begins and where it hides everything</td></tr>
   </tbody>
 </table>
 
@@ -119,6 +126,7 @@
     <tr><td>Center</td><td>all</td><td>(0, 0, 0)</td><td>In the object's local space</td></tr>
     <tr><td>Friction</td><td>all</td><td>0.5</td><td>0 ice to 1 rubber (up to 2)</td></tr>
     <tr><td>Bounciness</td><td>all</td><td>0</td><td>0 to 1</td></tr>
+    <tr><td>Is Trigger</td><td>all</td><td>off</td><td>Pushes nothing; reports overlaps with <code>OnTriggerEnter</code> / <code>OnTriggerExit</code></td></tr>
     <tr><td>Size</td><td>Box</td><td>(1, 1, 1)</td><td>Local units</td></tr>
     <tr><td>Radius</td><td>Sphere</td><td>0.5</td><td>Scales with the largest axis</td></tr>
     <tr><td>Model</td><td>Mesh</td><td>empty</td><td>Empty uses the object's Mesh</td></tr>

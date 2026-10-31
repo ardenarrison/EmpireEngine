@@ -161,6 +161,28 @@ public static class ScriptRuntime
         }
     }
 
+    // Tells every script on obj that it started (enter) or stopped overlapping other, where one of the two is a trigger.
+    internal static void Trigger(SceneObject obj, SceneObject other, bool enter)
+    {
+        foreach (var comp in obj.Components.OfType<ScriptComponent>())
+        {
+            if (comp.Instance is not { } script)
+                continue;
+            try
+            {
+                script.RecordTrigger(other, enter);
+                if (enter) script.OnTriggerEnter(other);
+                else script.OnTriggerExit(other);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Script error in {comp.ScriptName}.{(enter ? "OnTriggerEnter" : "OnTriggerExit")} " +
+                                  $"on '{obj.Name}': {ex.Message}. The script is stopped.");
+                comp.Instance = null;
+            }
+        }
+    }
+
     // Runs Start (once) and then Update for every script. Called once per frame while the scene plays.
     internal static void Run(Engine.Core.Scene.Scene scene)
     {

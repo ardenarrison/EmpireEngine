@@ -21,7 +21,8 @@ public sealed class BrutalRenderer : IRenderer
     private const int MaxLights = SceneLighting.MaxLights;
     private const int FrameLightVp = 24 + MaxLights * 16;     // where the sun's view-projection sits in the frame block
     private const int FrameShadow = FrameLightVp + 16;        // shadow settings, after the sun matrix
-    private const int FrameFloats = FrameShadow + 4;          // ambient, sky parameters and colors, the lights, the sun matrix, shadows
+    private const int FrameFog = FrameShadow + 4;             // fog distances, then its color
+    private const int FrameFloats = FrameFog + 8;             // ambient, sky parameters and colors, the lights, the sun matrix, shadows, fog
     private const int MaxPanoramaWidth = 4096;                // wider sky images are shrunk, which looks the same
     private int _shadowSize = 2048;   // the shadow map's width and height; SetShadows changes it
     private int? _maxImageSize;       // the GPU's largest image side, read once
@@ -64,6 +65,8 @@ public sealed class BrutalRenderer : IRenderer
             Light lights[MAX_LIGHTS];
             mat4 lightViewProj;   // sun view * projection: world space to shadow map clip space
             vec4 shadow;          // x = strength (0 = no shadows), y = one shadow texel in depth units, z = one texel in world units
+            vec4 fog;             // x = start, y = end (world units from the camera), z = 1 when fog is on
+            vec4 fogColor;        // rgb
         } frame;
         layout(set = 0, binding = 2) uniform sampler2D panorama;
 
@@ -296,6 +299,11 @@ public sealed class BrutalRenderer : IRenderer
             color += (ambient + sky) * ao;
             // Emission is self-lit: added after lighting and not scaled by the sun or the base color.
             color += pc.emission.rgb * emissiveSample;
+            // Distance fog: from nothing at fog.x to the full fog color at fog.y.
+            if (frame.fog.z > 0.5) {
+                float fogAmount = clamp((length(inWorldPos - pc.camera.xyz) - frame.fog.x) / max(frame.fog.y - frame.fog.x, 0.001), 0.0, 1.0);
+                color = mix(color, frame.fogColor.rgb, fogAmount);
+            }
             outColor = vec4(color, baseColor.a);
         }
         """;
@@ -420,11 +428,11 @@ public sealed class BrutalRenderer : IRenderer
         CreateDescriptors();
         _particles = new ParticleRenderer(ctx, shaders);
         _ctx.BeforeEndFrame = FlushFrame;
-        _antiAliasing = new AntiAliasingPass(ctx, shaders);
-        _ctx.AfterScenePass = cmd => _antiAliasing.Record(cmd, _ctx.PostAntiAliasing);
+        _postProcess = new PostProcessPass(ctx, shaders);
+        _ctx.AfterScenePass = cmd => _postProcess.Record(cmd, _ctx.PostAntiAliasing, _ctx.PostEffects);
     }
 
-    private readonly AntiAliasingPass _antiAliasing;
+    private readonly PostProcessPass _postProcess;
 
     private VkPipelineLayout CreateLayout()
     {
@@ -979,6 +987,8 @@ public sealed class BrutalRenderer : IRenderer
         d[FrameShadow + 1] = _shadowTexelDepth;
         d[FrameShadow + 2] = _shadowDistance * 2f / _shadowSize;
         d[FrameShadow + 3] = 0;
+        d[FrameFog] = e.FogStart; d[FrameFog + 1] = e.FogEnd; d[FrameFog + 2] = e.Fog ? 1 : 0; d[FrameFog + 3] = 0;
+        d[FrameFog + 4] = e.FogColor.X; d[FrameFog + 5] = e.FogColor.Y; d[FrameFog + 6] = e.FogColor.Z; d[FrameFog + 7] = 0;
         _device.WriteMemory<float>(d, _frameMemories[slot], default, default);
     }
 
@@ -1332,7 +1342,7 @@ public sealed class BrutalRenderer : IRenderer
     {
         _ctx.WaitIdle();
         _ctx.AfterScenePass = null;
-        _antiAliasing.Dispose();
+        _postProcess.Dispose();
         _particles.Dispose();
         _meshes.Dispose();
         foreach (var list in _dynamicBuffers)

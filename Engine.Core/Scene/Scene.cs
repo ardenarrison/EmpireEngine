@@ -61,6 +61,16 @@ public sealed class Scene
     // Every object with exactly this name, in hierarchy order.
     public List<SceneObject> FindAllByName(string name) => InHierarchyOrder.Where(o => o.Name == name).ToList();
 
+    // The first object with this tag, in hierarchy order, or null; and every object with it.
+    public SceneObject? FindByTag(string tag) => InHierarchyOrder.FirstOrDefault(o => o.CompareTag(tag));
+    public List<SceneObject> FindAllByTag(string tag) => InHierarchyOrder.Where(o => o.CompareTag(tag)).ToList();
+
+    // For scripts: the first object with this tag in the scene that is playing, or null; and every object with it.
+    //     foreach (var coin in Scene.FindObjectsWithTag("Coin")) ...
+    public static SceneObject? FindWithTag(string tag) => Scripting.SceneManager.World?.FindByTag(tag);
+    public static List<SceneObject> FindObjectsWithTag(string tag) =>
+        Scripting.SceneManager.World?.FindAllByTag(tag) ?? new List<SceneObject>();
+
     // For scripts: the first object with exactly this name in the scene that is playing (top to bottom as the
     // Hierarchy lists them), or null when there is none.
     //     var player = Scene.FindObjectWithName("Player");

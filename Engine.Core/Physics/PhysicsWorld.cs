@@ -24,6 +24,7 @@ public sealed partial class PhysicsWorld
 
     private float _accumulator;
     private HashSet<(Guid, Guid)> _touching = new();
+    private HashSet<(Guid, Guid)> _overlapping = new();   // pairs where at least one collider is a trigger
     private Dictionary<(Guid, Guid), List<Contact>> _previous = new();
 
     // Forgets contact history, so a scene that was replaced does not raise collision events for objects that are gone.
@@ -31,6 +32,7 @@ public sealed partial class PhysicsWorld
     {
         _accumulator = 0f;
         _touching = new();
+        _overlapping = new();
         _previous = new();
     }
 
@@ -55,21 +57,40 @@ public sealed partial class PhysicsWorld
 
         var contacts = new List<Contact>();
         var touching = new HashSet<(Guid, Guid)>();
+        var overlapping = new HashSet<(Guid, Guid)>();
+        var scratch = new List<Contact>();
         var byPair = new Dictionary<(Guid, Guid), List<Contact>>();
         for (int i = 0; i < bodies.Count; i++)
             for (int j = i + 1; j < bodies.Count; j++)
             {
                 var a = bodies[i];
                 var b = bodies[j];
-                if (a.InvMass == 0f && b.InvMass == 0f) continue;
+                // Two bodies that can't move never push each other, but a trigger still notices a kinematic rigidbody.
+                bool bothStill = a.InvMass == 0f && b.InvMass == 0f;
+                bool canTrigger = (a.HasTrigger || b.HasTrigger) && (a.Rigidbody is not null || b.Rigidbody is not null);
+                if (bothStill && !canTrigger) continue;
                 if (Vector3.DistanceSquared(a.BoundsCenter, b.BoundsCenter) >
                     (a.BoundsRadius + b.BoundsRadius) * (a.BoundsRadius + b.BoundsRadius))
                     continue;
 
                 int before = contacts.Count;
+                bool overlap = false;
                 foreach (var sa in a.Shapes)
                     foreach (var sb in b.Shapes)
-                        Collide(a, sa, b, sb, contacts);
+                    {
+                        if (sa.IsTrigger || sb.IsTrigger)
+                        {
+                            // A trigger only needs to know that the shapes overlap; its contacts push nothing.
+                            if (!canTrigger || overlap) continue;
+                            scratch.Clear();
+                            Collide(a, sa, b, sb, scratch);
+                            overlap = scratch.Count > 0;
+                        }
+                        else if (!bothStill)
+                            Collide(a, sa, b, sb, contacts);
+                    }
+                if (overlap)
+                    overlapping.Add(Key(a.Object, b.Object));
                 if (contacts.Count > before)
                 {
                     touching.Add(Key(a.Object, b.Object));
@@ -93,6 +114,7 @@ public sealed partial class PhysicsWorld
             b.IntegratePosition(h);
 
         RaiseEvents(scene, touching);
+        RaiseTriggerEvents(scene, overlapping);
     }
 
     // ---- bodies ----------------------------------------------------------------------
@@ -125,11 +147,17 @@ public sealed partial class PhysicsWorld
                 {
                     // Moving bodies collide as the mesh's convex hull; static and kinematic ones use its triangles.
                     if ((dynamicOwner ? Shape.FromHull(mesh, obj, world) : Shape.FromMesh(mesh, obj, world)) is { } meshShape)
+                    {
+                        meshShape.IsTrigger = mesh.IsTrigger;
                         body.Shapes.Add(meshShape);
+                    }
                     continue;
                 }
                 if (Shape.From(collider, world) is { } shape)
+                {
+                    shape.IsTrigger = collider.IsTrigger;
                     body.Shapes.Add(shape);
+                }
             }
         }
 
@@ -169,6 +197,7 @@ public sealed partial class PhysicsWorld
         }
 
         public bool IsDynamic => InvMass > 0f;
+        public bool HasTrigger => Shapes.Any(s => s.IsTrigger);
 
         public void Finish()
         {
@@ -195,7 +224,8 @@ public sealed partial class PhysicsWorld
         private Vector3 InverseInertia(float mass)
         {
             Vector3 inertia;
-            if (Shapes.FirstOrDefault() is { } s && (s.IsBox || s.IsHull))
+            var solid = Shapes.FirstOrDefault(sh => !sh.IsTrigger) ?? Shapes.FirstOrDefault();   // triggers don't weigh anything
+            if (solid is { } s && (s.IsBox || s.IsHull))
             {
                 var size = s.HalfExtents * 2f;
                 inertia = mass / 12f * new Vector3(
@@ -205,7 +235,7 @@ public sealed partial class PhysicsWorld
             }
             else
             {
-                float r = Shapes.FirstOrDefault()?.Radius ?? 0.5f;
+                float r = solid?.Radius ?? 0.5f;
                 inertia = new Vector3(0.4f * mass * r * r);
             }
             return new Vector3(Inv(inertia.X), Inv(inertia.Y), Inv(inertia.Z));
@@ -289,6 +319,7 @@ public sealed partial class PhysicsWorld
     private sealed partial class Shape
     {
         public bool IsBox;
+        public bool IsTrigger;        // overlaps are reported, nothing is pushed
         public Vector3 Center;
         public Quaternion Rotation;
         public Vector3 HalfExtents;   // boxes
@@ -685,6 +716,26 @@ public sealed partial class PhysicsWorld
             if (!touching.Contains(pair))
                 Notify(scene, pair, enter: false);
         _touching = touching;
+    }
+
+    private void RaiseTriggerEvents(Scene.Scene scene, HashSet<(Guid, Guid)> overlapping)
+    {
+        foreach (var pair in overlapping)
+            if (!_overlapping.Contains(pair))
+                NotifyTrigger(scene, pair, enter: true);
+        foreach (var pair in _overlapping)
+            if (!overlapping.Contains(pair))
+                NotifyTrigger(scene, pair, enter: false);
+        _overlapping = overlapping;
+    }
+
+    private static void NotifyTrigger(Scene.Scene scene, (Guid A, Guid B) pair, bool enter)
+    {
+        var a = scene.Find(pair.A);
+        var b = scene.Find(pair.B);
+        if (a is null || b is null) return;
+        ScriptRuntime.Trigger(a, b, enter);
+        ScriptRuntime.Trigger(b, a, enter);
     }
 
     private static void Notify(Scene.Scene scene, (Guid A, Guid B) pair, bool enter)

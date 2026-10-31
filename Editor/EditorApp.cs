@@ -84,6 +84,8 @@ public sealed class EditorApp
     private readonly CreditsWindow _credits = new();
     private readonly Editor.Assistant.AssistantWindow _assistant = new();
     private ProjectSettingsWindow _projectSettings = null!;
+    private ProjectSettings _settings = null!;
+    private readonly FrameRateCounter _frameRate = new();
     private Editor.Terminal.TerminalWindow _terminal = null!;
     private string _buildName = "";
     private BuildStage _buildStage = BuildStage.Off;
@@ -144,6 +146,7 @@ public sealed class EditorApp
         _vc = new VisualScriptView(Path.Combine(contentRoot, "Scripts"))
         {
             ObjectNames = () => _scene.InHierarchyOrder.Select(o => o.Name).Distinct().ToList(),
+            TagNames = () => _scene.InHierarchyOrder.Select(o => o.Tag).Where(t => t.Length > 0).Distinct().OrderBy(t => t, StringComparer.Ordinal).ToList(),
         };
         _code = new CodeEditorView(Path.Combine(contentRoot, "Scripts"));
         _scriptFields = new ScriptFieldCache(contentRoot);
@@ -155,6 +158,7 @@ public sealed class EditorApp
         _camera.Far = projectSettings.EditorFarClipPlane;
         _camera.Near = projectSettings.EditorNearClipPlane;
         _projectSettings = new ProjectSettingsWindow(projectSettings, _camera, contentRoot, SetPositionType);
+        _settings = projectSettings;
         _packages.Changed += _scriptFields.Invalidate;
         // The code view checks scripts against the enabled packages too, so using their classes isn't an error.
         Editor.Code.CodeEditorView.ExtraReferences = () => Packages.Enabled(_contentRoot)
@@ -268,6 +272,7 @@ public sealed class EditorApp
             double now = clock.Elapsed.TotalSeconds;
             float dt = (float)Math.Min(now - lastTime, 0.1);
             lastTime = now;
+            _frameRate.Tick(now);
 
             _scriptFields.Update(now);   // re-reads script fields in the background after a .cs file is saved
 
@@ -301,8 +306,9 @@ public sealed class EditorApp
                 else RequestExit();
             }
 
-            // Ctrl+` shows and hides the terminal (it works while the terminal has the keyboard, too).
-            if (ImGui.IsKeyPressed(ImGuiKey.GraveAccent, false) && ImGui.GetIO().KeyCtrl)
+            // Ctrl+` shows and hides the terminal (it works while the terminal has the keyboard, too), except in the visual code
+            // editor, which never shows it.
+            if (ImGui.IsKeyPressed(ImGuiKey.GraveAccent, false) && ImGui.GetIO().KeyCtrl && !InVisualCode)
                 _terminal.Toggle();
 
             bool playDown = window.GetKey(GlfwKey.P) == GlfwKeyAction.Press;
@@ -346,6 +352,8 @@ public sealed class EditorApp
 
             if (!FullView)
                 DrawToolbar();
+            if (_settings.ShowFpsCounter)
+                DrawFpsCounter();
 
             // The asset panel runs along the bottom while editing, so the scene is fitted above it.
             ctx.BottomReservedFraction = _mode == EditorMode.Edit && !FullView
@@ -441,7 +449,11 @@ public sealed class EditorApp
             bool sculptingNow = _mode == EditorMode.Edit && !FullView && !_uiMode &&
                                 UpdateTerrainSculpt(window, uiCanvas, viewProj, SceneArea(ctx), uiWantsMouse, dt);
             if (_mode == EditorMode.Edit && !FullView && !_uiMode && !sculptingNow)
+            {
+                _gizmo.MoveSnap = _settings.MoveSnap;
+                _gizmo.ScaleSnap = _settings.ScaleSnap;
                 _gizmo.Update(window, uiCanvas, _selected, SelectedExtras(), viewProj, eye, SceneArea(ctx), uiWantsMouse);
+            }
             UpdateSceneClick(window, viewProj, eye, SceneArea(ctx), uiWantsMouse,
                 canStart: _mode == EditorMode.Edit && !FullView && !_uiMode && !sculptingNow && !_gizmo.IsDragging &&
                           !_gui.AnyActive && _hierDragId is null);
@@ -463,7 +475,7 @@ public sealed class EditorApp
 
             // The main camera's anti-aliasing applies in the editor view and in play mode. Changing it rebuilds the
             // scene's images, so it only does work when the setting actually changes.
-            ctx.ApplyAntiAliasing(GameCamera()?.Cam);
+            ctx.ApplyCamera(GameCamera()?.Cam);
 
             // The sky, ambient light and every light besides the sun.
             var (environment, extraLights) = SceneLighting.Collect(_scene, eye);
@@ -669,6 +681,9 @@ public sealed class EditorApp
             g.TextDisabled("Editing is disabled in play mode.");
 
         DrawNameField(obj, editing);
+        string tag = obj.Tag;
+        if (g.InputText($"Tag##{obj.Id:N}", ref tag, 64) && editing)
+            obj.Tag = tag;
         DrawParentPicker(obj, editing);
         g.Separator();
 
@@ -1990,6 +2005,12 @@ public sealed class EditorApp
         float bounciness = collider.Bounciness;
         if (g.DragFloat("Bounciness", ref bounciness, 0.01f, 0f, 1f) && editing)
             collider.Bounciness = Math.Clamp(bounciness, 0f, 1f);
+        bool trigger = collider.IsTrigger;
+        if (g.Checkbox("Is Trigger", ref trigger) && editing)
+            collider.IsTrigger = trigger;
+        if (collider.IsTrigger)
+            g.TextWrapped("Pushes nothing: it reports when something starts and stops overlapping it (OnTriggerEnter / OnTriggerExit). " +
+                          "One of the two objects needs a Rigidbody.", Gui.DimColor);
     }
 
     // A new collider is fitted to the object's model when it has one, otherwise it is a unit shape.
@@ -2177,11 +2198,31 @@ public sealed class EditorApp
         else if (cam.AntiAliasing == AntiAliasingMode.Smaa)
             g.TextWrapped("SMAA finds the edges in the finished picture and blends across them. Cleaner than FXAA, slightly slower.", Gui.DimColor);
 
+        // Color effects on the finished picture. The defaults change nothing.
+        float exposure = cam.Exposure;
+        if (g.DragFloat("Exposure", ref exposure, 0.02f, -5f, 5f) && editing) cam.Exposure = exposure;
+        float contrast = cam.Contrast;
+        if (g.DragFloat("Contrast", ref contrast, 0.01f, 0f, 2f) && editing) cam.Contrast = contrast;
+        float vignette = cam.Vignette;
+        if (g.DragFloat("Vignette", ref vignette, 0.01f, 0f, 1f) && editing) cam.Vignette = vignette;
+        float sharpen = cam.Sharpen;
+        if (g.DragFloat("Sharpen", ref sharpen, 0.01f, 0f, 1f) && editing) cam.Sharpen = sharpen;
+        bool effectsOn = cam.Exposure != 0f || cam.Contrast != 1f || cam.Vignette > 0f || cam.Sharpen > 0f;
+        if (effectsOn && editing && g.Button("Reset Effects"))
+        {
+            cam.Exposure = 0f;
+            cam.Contrast = 1f;
+            cam.Vignette = 0f;
+            cam.Sharpen = 0f;
+        }
+        g.TextWrapped("Exposure brightens or darkens in stops (+1 doubles the light). Contrast 1 is unchanged. Vignette darkens the " +
+                      "corners. Sharpen crisps edges, which suits FXAA.", Gui.DimColor);
+
         bool isMainCamera = GameCamera()?.Obj == obj;
         if (isMainCamera)
             g.TextDisabled("Used for play mode");
-        else if (cam.AntiAliasing != AntiAliasingMode.None)
-            g.TextWrapped("Only the main camera's anti-aliasing is used.", Gui.DimColor);
+        else if (cam.AntiAliasing != AntiAliasingMode.None || effectsOn)
+            g.TextWrapped("Only the main camera's anti-aliasing and effects are used.", Gui.DimColor);
     }
 
     private void DrawLightBody(DirectionalLight light, bool editing)
@@ -2319,6 +2360,22 @@ public sealed class EditorApp
         float ambientIntensity = env.AmbientIntensity;
         if (g.DragFloat("Ambient Brightness", ref ambientIntensity, 0.005f, 0f, 2f) && editing)
             env.AmbientIntensity = ambientIntensity;
+
+        bool fog = env.Fog;
+        if (g.Checkbox("Fog", ref fog) && editing)
+            env.Fog = fog;
+        if (env.Fog)
+        {
+            var fogColor = env.FogColor;
+            if (g.ColorEdit3("Fog Color", ref fogColor) && editing) env.FogColor = fogColor;
+            float fogStart = env.FogStart;
+            if (g.DragFloat("Fog Start", ref fogStart, 0.5f, 0f, 100_000f) && editing) env.FogStart = fogStart;
+            float fogEnd = env.FogEnd;
+            if (g.DragFloat("Fog End", ref fogEnd, 0.5f, 0f, 100_000f) && editing) env.FogEnd = fogEnd;
+            g.TextWrapped(env.FogEnd > env.FogStart
+                ? "Surfaces fade into the fog color between Fog Start and Fog End (world units from the camera). The sky isn't fogged, so a color near the horizon blends best."
+                : "Fog End must be farther than Fog Start, or there is no fog.", Gui.DimColor);
+        }
     }
 
     // The list under Add Component. Script opens the script picker, which adds a script component.
@@ -2626,11 +2683,38 @@ public sealed class EditorApp
     // ---- toolbar ---------------------------------------------------------------------
 
     // Play / Stop button centered at the top of the window. Drawn in both modes so play can always be stopped.
+    // Frames per second and milliseconds per frame, small, in the top-right corner of the scene view (Window > Show FPS Counter).
+    // When the window is too narrow for both beside the toolbar, only the frames per second are shown, and when even that doesn't
+    // fit, it moves just below the toolbar, still on the right.
+    private void DrawFpsCounter()
+    {
+        var g = _gui;
+        const float pad = 6f, height = 24f;
+        bool panels = _mode == EditorMode.Edit && !FullView;   // the Inspector is docked on the right while editing
+        float right = panels ? g.Size.X - SideWidth - 6f : g.Size.X - 6f;
+        float top = panels ? PanelTop : 6f;
+        float toolbarRight = (g.Size.X + ToolbarWidth) / 2f;
+
+        string text = _frameRate.Fps > 0 ? $"{_frameRate.Fps:0} FPS {_frameRate.FrameMilliseconds:0.0} ms" : "-- FPS";
+        if (right - (g.C.MeasureText(text) + 2 * pad) < toolbarRight + 6f && _frameRate.Fps > 0)
+            text = $"{_frameRate.Fps:0} FPS";
+        float width = g.C.MeasureText(text) + 2 * pad;
+        if (right - width < toolbarRight + 6f)
+            top += 38f + 6f;   // below the toolbar (38 high)
+
+        g.BeginWindow("FpsCounter", new Box(right - width, top, width, height), flags: WindowFlags.NoScroll | WindowFlags.NoPadding);
+        g.C.Text(text, right - width + pad, top + (height - g.C.FontSize) / 2f, Gui.TextColor);
+        g.EndWindow();
+    }
+
+    // The width of the bar with UI, Play, VC and Code (Stop while playing), centered along the top.
+    private float ToolbarWidth => _mode == EditorMode.Edit ? 4 * 92f + 3 * 6f + 16f : 260f;
+
     private void DrawToolbar()
     {
         var g = _gui;
         const float height = 38f;
-        float width = _mode == EditorMode.Edit ? 4 * 92f + 3 * 6f + 16f : 260f;
+        float width = ToolbarWidth;
         float y = _mode == EditorMode.Edit ? PanelTop : 6f;   // below the menu bar while editing
 
         g.BeginWindow("Toolbar", new Box((g.Size.X - width) / 2f, y, width, height), flags: WindowFlags.NoScroll);
@@ -2886,8 +2970,18 @@ public sealed class EditorApp
         }
         if (g.BeginMenu("Window"))
         {
-            if (g.MenuItem("Terminal", "Ctrl+`"))
+            // The terminal covers the asset browser, so this switches between the two and is named after the one it shows.
+            if (g.MenuItem(_terminal.IsOpen ? "Asset Browser" : "Terminal", "Ctrl+`", enabled: !InVisualCode))
                 _terminal.Toggle();
+            if (g.MenuItem(_settings.ShowFpsCounter ? "Hide FPS Counter" : "Show FPS Counter"))
+            {
+                _settings.ShowFpsCounter = !_settings.ShowFpsCounter;
+                try { _settings.Save(_contentRoot); }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    Console.WriteLine("Couldn't save the project's settings: " + ex.Message);
+                }
+            }
             g.EndMenu();
         }
         if (g.BeginMenu("Help"))
@@ -2903,12 +2997,19 @@ public sealed class EditorApp
         if (_mode == EditorMode.Edit)
             _assistant.Draw(g, AssistantContext());
         _terminal.Update();
-        _terminal.Draw(g, Environment.TickCount64 / 1000.0);
+        // The visual code editor hides the terminal; it stays open (and its shell running) and comes back when you leave.
+        if (InVisualCode)
+            g.ExternalTyping = false;
+        else
+            _terminal.Draw(g, Environment.TickCount64 / 1000.0);
         if (_mode == EditorMode.Edit)
             _projectSettings.Draw(g);
         if (_mode == EditorMode.Edit)
             _packages.Draw(g, _scene, _scriptFields.Classes, _scriptFields.Errors, _scriptFields.IsCompiling);
     }
+
+    // True while the visual code editor fills the window.
+    private bool InVisualCode => _mode == EditorMode.Edit && _vcMode;
 
     // Project Settings changed the position type. Float rounds every position in the scene to a float (double needs no change).
     private void SetPositionType(PositionType type)

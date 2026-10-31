@@ -11,7 +11,8 @@ other people.
 ## What's in it
 
 - **Renderer**: Vulkan, with physically based materials and textures, directional, point and spot lights, sun shadows,
-  skies, see-through surfaces and MSAA, FXAA and SMAA
+  skies, distance fog, see-through surfaces, MSAA, FXAA and SMAA, and camera effects (exposure, contrast, vignette,
+  sharpen)
 - **Editor**: Hierarchy, Inspector, asset browser, move and scale handles, undo, a built-in C# code editor with live error
   checking, and a block-based visual scripting editor
 - **Scripting**: C# classes in your project, compiled with Roslyn. Public fields show up in the Inspector, with coroutines,

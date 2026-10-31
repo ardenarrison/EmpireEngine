@@ -16,12 +16,24 @@ public readonly record struct LightData(LightType Type, Vector3 Position, Vector
 public sealed record EnvironmentData(SkyMode Sky, Vector3 Zenith, Vector3 Horizon, Vector3 Ground, string Panorama,
     float SkyIntensity, Vector3 Ambient, float SkyLighting)
 {
+    // Distance fog (see SceneEnvironment.Fog). Off unless FogEnd is beyond FogStart.
+    public bool Fog { get; init; }
+    public Vector3 FogColor { get; init; }
+    public float FogStart { get; init; }
+    public float FogEnd { get; init; }
+
     // What a scene without a SceneEnvironment looks like: the dark blue backdrop and 0.08 flat ambient it has always had.
     public static EnvironmentData Default { get; } = new(SkyMode.Color, new(0.05f, 0.08f, 0.15f), new(0.05f, 0.08f, 0.15f),
         new(0.05f, 0.08f, 0.15f), "", 1f, new Vector3(0.08f), 0f);
 
     public static EnvironmentData From(SceneEnvironment e) => new(e.Sky, e.SkyColor, e.HorizonColor, e.GroundColor,
-        e.Panorama, e.SkyIntensity, e.AmbientColor * e.AmbientIntensity, e.SkyLighting);
+        e.Panorama, e.SkyIntensity, e.AmbientColor * e.AmbientIntensity, e.SkyLighting)
+    {
+        Fog = e.Fog && e.FogEnd > e.FogStart,
+        FogColor = e.FogColor,
+        FogStart = Math.Max(0f, e.FogStart),
+        FogEnd = e.FogEnd,
+    };
 }
 
 // Gathers a scene's lighting for the renderer. Editor and built games both use it, so they light a scene the same way.

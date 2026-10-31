@@ -134,7 +134,7 @@ public sealed class BrutalPlayer
             Input.SetView(new Vector2(gameArea.Z, gameArea.W), viewProj);   // for Input.GetMouseRay and the game's UI
 
             // The scene camera's anti-aliasing; only does work when the setting changes.
-            ctx.ApplyAntiAliasing(gameCam?.Cam);
+            ctx.ApplyCamera(gameCam?.Cam);
 
             // The sky, ambient light and every light besides the sun.
             var (environment, lights) = SceneLighting.Collect(scene, eye);

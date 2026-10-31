@@ -4,7 +4,7 @@ using Engine.Core.Scene;
 namespace Editor;
 
 // File > Project Settings: settings that belong to the project and are kept in its project-settings.json.
-// That is the position type (float or double) and the editor's near and far clip planes.
+// That is the position type (float or double), the snapping steps and the editor's near and far clip planes.
 public sealed class ProjectSettingsWindow(ProjectSettings settings, EditorCamera camera, string projectFolder, Action<PositionType> positionTypeChanged)
 {
     private bool _open;
@@ -27,7 +27,7 @@ public sealed class ProjectSettingsWindow(ProjectSettings settings, EditorCamera
 
         float w = Math.Min(560f, g.Size.X - 40f), h = Math.Min(560f, g.Size.Y - 80f);
         var rect = new Box((g.Size.X - w) * 0.5f, 70f, w, h);
-        if (!g.BeginWindow("ProjectSettings", rect, "Project Settings", WindowFlags.Closable | WindowFlags.NoScroll))
+        if (!g.BeginWindow("ProjectSettings", rect, "Project Settings", WindowFlags.Closable))
         {
             Close();
             g.EndWindow();
@@ -44,6 +44,25 @@ public sealed class ProjectSettingsWindow(ProjectSettings settings, EditorCamera
         g.TextWrapped("Float keeps about 7 digits of precision, which is plenty for most games. Double keeps about 16, for very large worlds: far from the " +
                       "origin an object can still move in tiny steps, and small movements added up over time stay exact. Double positions are edited in the Inspector " +
                       "and read in scripts as transform.positionD. Physics, rendering and audio still work in floats. Going back to Float rounds every position now in the scene.", Gui.DimColor);
+        g.Spacing();
+
+        g.Text("Move Snap");
+        float moveSnap = settings.MoveSnap;
+        if (g.DragFloat("##moveSnap", ref moveSnap, 0.01f, ProjectSettings.MinSnap, ProjectSettings.MaxSnap))
+        {
+            settings.MoveSnap = moveSnap;
+            _dirty = true;
+        }
+        g.Text("Scale Snap");
+        float scaleSnap = settings.ScaleSnap;
+        if (g.DragFloat("##scaleSnap", ref scaleSnap, 0.01f, ProjectSettings.MinSnap, ProjectSettings.MaxSnap))
+        {
+            settings.ScaleSnap = scaleSnap;
+            _dirty = true;
+        }
+        g.TextWrapped($"Hold Ctrl while dragging a move or scale handle to snap. A move puts the object on a grid of Move Snap world units along " +
+                      $"that axis (usually {ProjectSettings.DefaultMoveSnap:0.0}); a scale rounds to a multiple of Scale Snap (usually {ProjectSettings.DefaultScaleSnap:0.0}), " +
+                      "and the center box scales in steps of it (0.1 is 10% at a time).", Gui.DimColor);
         g.Spacing();
 
         g.Text("Editor Far Clip Plane");

@@ -61,6 +61,33 @@ public abstract class Behaviour
     protected bool CollisionExit(string objectName) => _exitNow.Any(o => o.Name == objectName);
     protected bool Colliding(string objectName) => _touching.Any(o => o.Name == objectName && StillInScene(o));
 
+    // The same, matching the other object by its tag.
+    protected bool CollisionEnterTag(string tag) => _enterNow.Any(o => o.CompareTag(tag));
+    protected bool CollisionExitTag(string tag) => _exitNow.Any(o => o.CompareTag(tag));
+    protected bool CollidingTag(string tag) => _touching.Any(o => o.CompareTag(tag) && StillInScene(o));
+
+    // Triggers as the visual script blocks read them, kept the same way as collisions.
+    private readonly HashSet<SceneObject> _inside = new();
+    private List<SceneObject> _triggerEnterPending = new(), _triggerExitPending = new(), _triggerEnterNow = new(), _triggerExitNow = new();
+
+    internal void RecordTrigger(SceneObject other, bool enter)
+    {
+        if (enter)
+        {
+            _inside.Add(other);
+            _triggerEnterPending.Add(other);
+        }
+        else
+        {
+            _inside.Remove(other);
+            _triggerExitPending.Add(other);
+        }
+    }
+
+    protected bool TriggerEnter(string objectName) => _triggerEnterNow.Any(o => o.Name == objectName);
+    protected bool TriggerExit(string objectName) => _triggerExitNow.Any(o => o.Name == objectName);
+    protected bool InsideTrigger(string objectName) => _inside.Any(o => o.Name == objectName && StillInScene(o));
+
     // An object that was destroyed while touching this one never sends an end of collision, so it is checked for here.
     private static bool StillInScene(SceneObject obj) => SceneManager.World?.Contains(obj) ?? true;
 
@@ -79,6 +106,17 @@ public abstract class Behaviour
     // Called when this object's colliders start touching another object's, and when they stop.
     public virtual void OnCollisionEnter(SceneObject other) { }
     public virtual void OnCollisionExit(SceneObject other) { }
+
+    // Called when this object and another start and stop overlapping, where one of them has a collider set to Is Trigger.
+    public virtual void OnTriggerEnter(SceneObject other) { }
+    public virtual void OnTriggerExit(SceneObject other) { }
+
+    // For scripts: the first object with this tag in the scene, or null, and every object with it (see SceneObject.Tag).
+    public SceneObject? FindWithTag(string tag) => Scene.Scene.FindWithTag(tag);
+    public List<SceneObject> FindObjectsWithTag(string tag) => Scene.Scene.FindObjectsWithTag(tag);
+
+    // True when this object has exactly this tag.
+    public bool CompareTag(string tag) => Object.CompareTag(tag);
 
     // The first component of type T on this object, e.g. GetComponent<Rigidbody>(). Null when there is none.
     public T? GetComponent<T>() where T : Component => Object.Components.OfType<T>().FirstOrDefault();
@@ -156,6 +194,14 @@ public abstract class Behaviour
     protected void Spawn(IEnumerable<Wait> routine) =>
         _routines.Add(new Routine { Enumerator = routine.GetEnumerator() });
 
+    // Runs a routine at once, up to its first wait (or a loop's first pass), and drops the rest. For the visual code
+    // "when destroyed" block: the object is leaving the scene, so nothing would be left to wait for.
+    protected static void RunUntilWait(IEnumerable<Wait> routine)
+    {
+        using var steps = routine.GetEnumerator();
+        steps.MoveNext();
+    }
+
     // Runs every running coroutine. Call once per frame from Update.
     protected void TickRoutines()
     {
@@ -165,6 +211,11 @@ public abstract class Behaviour
         _enterPending.Clear();
         _exitPending.Clear();
         _touching.RemoveWhere(o => !StillInScene(o));
+        (_triggerEnterNow, _triggerEnterPending) = (_triggerEnterPending, _triggerEnterNow);
+        (_triggerExitNow, _triggerExitPending) = (_triggerExitPending, _triggerExitNow);
+        _triggerEnterPending.Clear();
+        _triggerExitPending.Clear();
+        _inside.RemoveWhere(o => !StillInScene(o));
 
         float dt = Time.deltaTime;
         _timer += dt;

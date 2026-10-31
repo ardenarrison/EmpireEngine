@@ -10,7 +10,9 @@ public enum GizmoTool { None, Move, Scale }
 // Move and scale handles drawn over the selected object in the 3D view. Left-drag a handle to edit the object.
 // Move uses world axes with arrow tips. Scale uses the object's own axes with box tips, and the center box
 // scales evenly (drag right to grow, left to shrink). With several objects selected, the handles sit on the
-// primary one and every selected object moves or scales by the same amount.
+// primary one and every selected object moves or scales by the same amount. Holding Ctrl while dragging snaps: a move puts the
+// primary object on a grid of MoveSnap along that axis (the others keep their distance to it), a scale along an axis rounds it to
+// a multiple of ScaleSnap, and the center box scales in steps of ScaleSnap (0.1 is 10% at a time).
 public sealed class TransformGizmo
 {
     private const float HandlePixels = 8f;    // how close the mouse must be to a handle to grab it
@@ -27,6 +29,10 @@ public sealed class TransformGizmo
     private static readonly float4 ActiveColor = new(1f, 0.85f, 0.2f, 1f);
 
     public GizmoTool Tool { get; set; } = GizmoTool.None;
+
+    // Grid steps for snapping, in world units and in scale (Project Settings).
+    public float MoveSnap { get; set; } = 0.5f;
+    public float ScaleSnap { get; set; } = 0.1f;
 
     private bool _prevLeft;
     private int _dragAxis = -1;       // 0..2 for X, Y, Z, Uniform for the center box, -1 when not dragging
@@ -49,6 +55,7 @@ public sealed class TransformGizmo
         bool left = window.GetMouseButton(GlfwMouseButton.Left) == GlfwButtonAction.Press;
         bool pressed = left && !_prevLeft;
         _prevLeft = left;
+        bool snap = window.GetKey(GlfwKey.LeftControl) == GlfwKeyAction.Press || window.GetKey(GlfwKey.RightControl) == GlfwKeyAction.Press;
 
         if (obj is null || Tool == GizmoTool.None)
         {
@@ -75,7 +82,7 @@ public sealed class TransformGizmo
         if (_dragAxis >= 0 && !left)
             _dragAxis = -1;
         else if (_dragAxis >= 0)
-            changed = Drag(mouse, viewProj, area, length);
+            changed = Drag(mouse, viewProj, area, length, snap);
 
         int hover = -1;
         if (_dragAxis < 0 && !uiWantsMouse && Inside(mouse, area))
@@ -105,11 +112,12 @@ public sealed class TransformGizmo
         _startParam = axis == Uniform ? 0f : AxisParam(mouse, viewProj, area) ?? 0f;
     }
 
-    private bool Drag(float2 mouse, Matrix4x4 viewProj, float4 area, float length)
+    private bool Drag(float2 mouse, Matrix4x4 viewProj, float4 area, float length, bool snap)
     {
         if (_dragAxis == Uniform)
         {
             float factor = MathF.Max(0.01f, 1f + (mouse.X - _startMouse.X) / 100f);
+            if (snap) factor = Snapping.Factor(factor, ScaleSnap);
             foreach (var (obj, _, scale) in _targets)
                 obj.Scale = ClampScale(scale * factor);
             return true;
@@ -120,7 +128,9 @@ public sealed class TransformGizmo
 
         if (Tool == GizmoTool.Move)
         {
-            var offset = _dragDir * (param - _startParam);
+            float moved = param - _startParam;
+            if (snap) moved = Snapping.Move(Vector3.Dot(_startWorld, _dragDir), moved, MoveSnap);   // move handles are world axes
+            var offset = _dragDir * moved;
             foreach (var (obj, world, _) in _targets)
             {
                 var target = world + offset;
@@ -140,9 +150,9 @@ public sealed class TransformGizmo
                 var scale = start;
                 switch (_dragAxis)
                 {
-                    case 0: scale.X *= factor; break;
-                    case 1: scale.Y *= factor; break;
-                    default: scale.Z *= factor; break;
+                    case 0: scale.X = snap ? Snapping.Scale(scale.X * factor, ScaleSnap) : scale.X * factor; break;
+                    case 1: scale.Y = snap ? Snapping.Scale(scale.Y * factor, ScaleSnap) : scale.Y * factor; break;
+                    default: scale.Z = snap ? Snapping.Scale(scale.Z * factor, ScaleSnap) : scale.Z * factor; break;
                 }
                 obj.Scale = ClampScale(scale);
             }

@@ -88,6 +88,7 @@ public sealed class VcTranspiler
 
         var methods = new List<string>();
         var startCalls = new List<string>();
+        var destroyCalls = new List<string>();
         int scriptIndex = 0;
 
         var definitions = FindFunctions(graph, emit, diagnostics);
@@ -116,7 +117,10 @@ public sealed class VcTranspiler
             methods.AddRange(Code.Indent(body));
             methods.Add("}");
             methods.Add(string.Empty);
-            startCalls.Add($"Spawn({name}());");
+            if (spec.OnDestroy)
+                destroyCalls.Add($"RunUntilWait({name}());");
+            else
+                startCalls.Add($"Spawn({name}());");
         }
 
         var referenced = graph.ReferencedIds();
@@ -174,6 +178,14 @@ public sealed class VcTranspiler
         lines.Add("        TickRoutines();");
         lines.Add("    }");
         lines.Add("");
+        if (destroyCalls.Count > 0)
+        {
+            lines.Add("    public override void OnDestroy()");
+            lines.Add("    {");
+            lines.AddRange(destroyCalls.Select(c => "        " + c));
+            lines.Add("    }");
+            lines.Add("");
+        }
         lines.AddRange(Code.Indent(methods));
         lines.Add("}");
 

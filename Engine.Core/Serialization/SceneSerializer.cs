@@ -47,6 +47,7 @@ public static class SceneSerializer
         public Guid Id { get; set; }
         public Guid? Parent { get; set; }
         public string Name { get; set; } = "";
+        public string? Tag { get; set; }             // empty tags are left out
         public float[] Position { get; set; } = [0, 0, 0];
         public double[]? PositionD { get; set; }    // only when the position has digits a float can't hold; Position is then its rounded copy
         public float[] Rotation { get; set; } = [0, 0, 0, 1];
@@ -107,11 +108,19 @@ public static class SceneSerializer
         public float[]? AmbientColor { get; set; }
         public float? AmbientIntensity { get; set; }
         public float? SkyLighting { get; set; }
+        public bool? Fog { get; set; }
+        public float[]? FogColor { get; set; }
+        public float? FogStart { get; set; }
+        public float? FogEnd { get; set; }
         public float? FocalLength { get; set; }
         public float? Near { get; set; }
         public float? Far { get; set; }
         public string? AntiAliasing { get; set; }
         public int? MsaaSamples { get; set; }
+        public float? Exposure { get; set; }      // camera effects; each left out at its default
+        public float? Contrast { get; set; }
+        public float? Vignette { get; set; }
+        public float? Sharpen { get; set; }
         public string? ScriptName { get; set; }
         public string? UiKind { get; set; }
         public string? Label { get; set; }
@@ -135,6 +144,7 @@ public static class SceneSerializer
         public float? Radius { get; set; }
         public float? Friction { get; set; }
         public float? Bounciness { get; set; }
+        public bool? IsTrigger { get; set; }          // colliders; left out when false
         public Dictionary<string, string>? Fields { get; set; }
         public string? Clip { get; set; }
         public bool? Mute { get; set; }
@@ -285,6 +295,7 @@ public static class SceneSerializer
             Id = o.Id,
             Parent = o.Parent?.Id,
             Name = o.Name,
+            Tag = o.Tag.Length > 0 ? o.Tag : null,
             Position = [o.Position.X, o.Position.Y, o.Position.Z],
             PositionD = o.PositionD == o.PositionD.ToFloatPrecision() ? null : [o.PositionD.X, o.PositionD.Y, o.PositionD.Z],
             Rotation = [o.Rotation.X, o.Rotation.Y, o.Rotation.Z, o.Rotation.W],
@@ -391,6 +402,10 @@ public static class SceneSerializer
                         AmbientColor = [env.AmbientColor.X, env.AmbientColor.Y, env.AmbientColor.Z],
                         AmbientIntensity = env.AmbientIntensity,
                         SkyLighting = env.SkyLighting,
+                        Fog = env.Fog ? true : null,
+                        FogColor = env.Fog ? [env.FogColor.X, env.FogColor.Y, env.FogColor.Z] : null,
+                        FogStart = env.Fog ? env.FogStart : null,
+                        FogEnd = env.Fog ? env.FogEnd : null,
                     });
                     break;
                 case CameraComponent cam:
@@ -403,6 +418,10 @@ public static class SceneSerializer
                         // Written only when on, so scenes without anti-aliasing stay as they were.
                         AntiAliasing = cam.AntiAliasing == AntiAliasingMode.None ? null : cam.AntiAliasing.ToString(),
                         MsaaSamples = cam.AntiAliasing == AntiAliasingMode.Msaa ? CameraComponent.NormalizeMsaaSamples(cam.MsaaSamples) : null,
+                        Exposure = cam.Exposure != 0f ? cam.Exposure : null,
+                        Contrast = cam.Contrast != 1f ? cam.Contrast : null,
+                        Vignette = cam.Vignette != 0f ? cam.Vignette : null,
+                        Sharpen = cam.Sharpen != 0f ? cam.Sharpen : null,
                     });
                     break;
                 case UiElement ui:
@@ -447,6 +466,7 @@ public static class SceneSerializer
                         Size = [box.Size.X, box.Size.Y, box.Size.Z],
                         Friction = box.Friction,
                         Bounciness = box.Bounciness,
+                        IsTrigger = box.IsTrigger ? true : null,
                     });
                     break;
                 case Terrain terrain:
@@ -493,6 +513,7 @@ public static class SceneSerializer
                         Center = [meshCollider.Center.X, meshCollider.Center.Y, meshCollider.Center.Z],
                         Friction = meshCollider.Friction,
                         Bounciness = meshCollider.Bounciness,
+                        IsTrigger = meshCollider.IsTrigger ? true : null,
                     });
                     break;
                 case SphereCollider sphere:
@@ -503,6 +524,7 @@ public static class SceneSerializer
                         Radius = sphere.Radius,
                         Friction = sphere.Friction,
                         Bounciness = sphere.Bounciness,
+                        IsTrigger = sphere.IsTrigger ? true : null,
                     });
                     break;
             }
@@ -516,6 +538,7 @@ public static class SceneSerializer
         var o = new SceneObject(id)
         {
             Name = rec.Name,
+            Tag = rec.Tag ?? "",
             PositionD = rec.PositionD is { Length: 3 } d ? new(d[0], d[1], d[2]) : new Vector3D(rec.Position[0], rec.Position[1], rec.Position[2]),
             Rotation = new(rec.Rotation[0], rec.Rotation[1], rec.Rotation[2], rec.Rotation[3]),
             Scale = new(rec.Scale[0], rec.Scale[1], rec.Scale[2]),
@@ -619,6 +642,10 @@ public static class SceneSerializer
                         AmbientColor = Vec3(c.AmbientColor, defaults.AmbientColor),
                         AmbientIntensity = c.AmbientIntensity ?? defaults.AmbientIntensity,
                         SkyLighting = c.SkyLighting ?? defaults.SkyLighting,
+                        Fog = c.Fog ?? false,
+                        FogColor = Vec3(c.FogColor, defaults.FogColor),
+                        FogStart = c.FogStart ?? defaults.FogStart,
+                        FogEnd = c.FogEnd ?? defaults.FogEnd,
                     });
                     break;
                 }
@@ -630,6 +657,10 @@ public static class SceneSerializer
                         Far = c.Far ?? 500f,
                         AntiAliasing = Enum.TryParse<AntiAliasingMode>(c.AntiAliasing, out var aa) ? aa : AntiAliasingMode.None,
                         MsaaSamples = CameraComponent.NormalizeMsaaSamples(c.MsaaSamples ?? 4),
+                        Exposure = c.Exposure ?? 0f,
+                        Contrast = c.Contrast ?? 1f,
+                        Vignette = c.Vignette ?? 0f,
+                        Sharpen = c.Sharpen ?? 0f,
                     });
                     break;
                 case "Ui":
@@ -680,6 +711,7 @@ public static class SceneSerializer
                         Size = Vec3(c.Size, Vector3.One),
                         Friction = c.Friction ?? 0.5f,
                         Bounciness = c.Bounciness ?? 0f,
+                        IsTrigger = c.IsTrigger ?? false,
                     });
                     break;
                 case "Terrain":
@@ -729,6 +761,7 @@ public static class SceneSerializer
                         Center = Vec3(c.Center, Vector3.Zero),
                         Friction = c.Friction ?? 0.5f,
                         Bounciness = c.Bounciness ?? 0f,
+                        IsTrigger = c.IsTrigger ?? false,
                     });
                     break;
                 case "SphereCollider":
@@ -738,6 +771,7 @@ public static class SceneSerializer
                         Radius = c.Radius ?? 0.5f,
                         Friction = c.Friction ?? 0.5f,
                         Bounciness = c.Bounciness ?? 0f,
+                        IsTrigger = c.IsTrigger ?? false,
                     });
                     break;
                 default:

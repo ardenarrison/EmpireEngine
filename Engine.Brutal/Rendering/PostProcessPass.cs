@@ -7,20 +7,24 @@ using Engine.Brutal.Gfx;
 
 namespace Engine.Brutal.Rendering;
 
-// Runs FXAA or SMAA over the finished scene. VulkanContext draws the scene into its own image when one of them is on, then calls
-// Record, which reads that image and draws the smoothed picture into the swapchain image (and clears the rest of it, since the
-// scene pass no longer does). Everything here is made the first time it is needed: a game that never uses these pays nothing.
-internal sealed unsafe class AntiAliasingPass : IDisposable
+// Runs FXAA or SMAA and the color effects (exposure, contrast, vignette, sharpen) over the finished scene. VulkanContext draws the
+// scene into its own image when any of them is on, then calls Record, which reads that image and draws the finished picture into
+// the swapchain image (and clears the rest of it, since the scene pass no longer does). With both anti-aliasing and effects, the
+// anti-aliased picture goes into an image of its own first and the effects pass reads that. Everything here is made the first time
+// it is needed: a game that never uses these pays nothing.
+internal sealed unsafe class PostProcessPass : IDisposable
 {
     private const int FormatR8 = 9;           // VK_FORMAT_R8_UNORM
     private const int FormatRg8 = 16;         // VK_FORMAT_R8G8_UNORM
     private const int FormatRgba8 = 37;       // VK_FORMAT_R8G8B8A8_UNORM
     private const int Bindings = 3;           // the most textures any pass reads
+    private const int PushFloats = 12;        // metrics, the scene rectangle, the effect settings (see PostProcessShaders)
+    private static readonly float4 Backdrop = new(0.05f, 0.08f, 0.15f, 1f);   // the scene pass's clear color, outside the scene
 
     private readonly VulkanContext _ctx;
     private readonly Device _device;
     private readonly ShaderLibrary _shaders;
-    private readonly float[] _push = new float[4];
+    private readonly float[] _push = new float[PushFloats];
 
     private VkSampler _linear;
     private VkSampler _point;
@@ -29,14 +33,15 @@ internal sealed unsafe class AntiAliasingPass : IDisposable
     private VkDescriptorPool _pool;
     private bool _basicsReady;
 
-    private VkPipeline? _fxaa;
+    private VkPipeline? _fxaa, _effects;
     private VkPipeline? _smaaEdges, _smaaWeights, _smaaBlend;
 
-    // SMAA's lookup tables, and its two in-between pictures, which are as big as the window.
-    private Texture? _area, _search, _edges, _weights;
+    // SMAA's lookup tables; its two in-between pictures; and the anti-aliased picture the effects read. The last three are as
+    // big as the window.
+    private Texture? _area, _search, _edges, _weights, _graded;
     private int _targetWidth, _targetHeight;
     private int _sceneGeneration = -1;
-    private VkDescriptorSet _fxaaSet, _edgesSet, _weightsSet, _blendSet;
+    private VkDescriptorSet _fxaaSet, _edgesSet, _weightsSet, _blendSet, _effectsFromScene, _effectsFromGraded;
     private bool _setsAllocated;
 
     private readonly struct Texture(VkImage image, VkDeviceMemory memory, VkImageView view)
@@ -46,39 +51,61 @@ internal sealed unsafe class AntiAliasingPass : IDisposable
         public readonly VkImageView View = view;
     }
 
-    public AntiAliasingPass(VulkanContext ctx, ShaderLibrary shaders)
+    public PostProcessPass(VulkanContext ctx, ShaderLibrary shaders)
     {
         _ctx = ctx;
         _device = ctx.Device;
         _shaders = shaders;
     }
 
-    // Draws the anti-aliased scene into the swapchain image. The scene image is already in shader-read layout.
-    public void Record(CommandBuffer cmd, PostAntiAliasing mode)
+    // Draws the finished scene into the swapchain image. The scene image is already in shader-read layout.
+    public void Record(CommandBuffer cmd, PostAntiAliasing mode, PostEffects effects)
     {
-        if (mode == PostAntiAliasing.None) return;
+        bool fx = effects.Any;
+        if (mode == PostAntiAliasing.None && !fx) return;
         EnsureBasics();
-        EnsureTargets(mode);
+        EnsureTargets(mode, fx);
 
         int width = _ctx.Width, height = _ctx.Height;
+        var rect = _ctx.SceneRectPixels;
         _push[0] = 1f / width;
         _push[1] = 1f / height;
         _push[2] = width;
         _push[3] = height;
-        var rect = _ctx.SceneRectPixels;
+        _push[4] = (float)rect.X / width;
+        _push[5] = (float)rect.Y / height;
+        _push[6] = (float)rect.Width / width;
+        _push[7] = (float)rect.Height / height;
+        _push[8] = MathF.Pow(2f, Math.Clamp(effects.Exposure, -10f, 10f));
+        _push[9] = Math.Clamp(effects.Contrast, 0f, 4f);
+        _push[10] = Math.Clamp(effects.Vignette, 0f, 1f);
+        _push[11] = Math.Clamp(effects.Sharpen, 0f, 1f);
 
+        // The anti-aliased picture goes on screen, or into _graded when the effects pass comes after.
+        var swapchain = _ctx.CurrentSwapchainView;
         if (mode == PostAntiAliasing.Fxaa)
+            Output(cmd, fx, rect, PipelineFxaa(), _fxaaSet);
+        else if (mode == PostAntiAliasing.Smaa)
         {
-            Draw(cmd, _ctx.CurrentSwapchainView, new float4(0.05f, 0.08f, 0.15f, 1f), rect, PipelineFxaa(), _fxaaSet);
-            return;
+            // SMAA: where the edges are, then how much of each neighbor to blend across them, then the blend itself.
+            var clear = new float4(0f, 0f, 0f, 0f);
+            DrawIntermediate(cmd, _edges!.Value, clear, rect, Pipeline(ref _smaaEdges, "smaa.edges", PostProcessShaders.SmaaEdgeVertex, PostProcessShaders.SmaaEdgeFragment, FormatRg8), _edgesSet);
+            DrawIntermediate(cmd, _weights!.Value, clear, rect, Pipeline(ref _smaaWeights, "smaa.weights", PostProcessShaders.SmaaWeightsVertex, PostProcessShaders.SmaaWeightsFragment, FormatRgba8), _weightsSet);
+            Output(cmd, fx, rect, Pipeline(ref _smaaBlend, "smaa.blend", PostProcessShaders.SmaaBlendVertex, PostProcessShaders.SmaaBlendFragment, (int)_ctx.ColorFormat), _blendSet);
         }
 
-        // SMAA: where the edges are, then how much of each neighbor to blend across them, then the blend itself.
-        var clear = new float4(0f, 0f, 0f, 0f);
-        DrawIntermediate(cmd, _edges!.Value, clear, rect, PipelineSmaa(ref _smaaEdges, "smaa.edges", AntiAliasingShaders.SmaaEdgeVertex, AntiAliasingShaders.SmaaEdgeFragment, FormatRg8), _edgesSet);
-        DrawIntermediate(cmd, _weights!.Value, clear, rect, PipelineSmaa(ref _smaaWeights, "smaa.weights", AntiAliasingShaders.SmaaWeightsVertex, AntiAliasingShaders.SmaaWeightsFragment, FormatRgba8), _weightsSet);
-        Draw(cmd, _ctx.CurrentSwapchainView, new float4(0.05f, 0.08f, 0.15f, 1f), rect,
-            PipelineSmaa(ref _smaaBlend, "smaa.blend", AntiAliasingShaders.SmaaBlendVertex, AntiAliasingShaders.SmaaBlendFragment, (int)_ctx.ColorFormat), _blendSet);
+        if (fx)
+            Draw(cmd, swapchain, Backdrop, rect, Pipeline(ref _effects, "effects", PostProcessShaders.FullscreenVertex, PostProcessShaders.EffectsFragment, (int)_ctx.ColorFormat),
+                mode == PostAntiAliasing.None ? _effectsFromScene : _effectsFromGraded);
+    }
+
+    // The last anti-aliasing pass: into the swapchain image, or into _graded when effects follow.
+    private void Output(CommandBuffer cmd, bool effectsFollow, (int X, int Y, int Width, int Height) rect, VkPipeline pipeline, VkDescriptorSet set)
+    {
+        if (effectsFollow)
+            DrawIntermediate(cmd, _graded!.Value, Backdrop, rect, pipeline, set);
+        else
+            Draw(cmd, _ctx.CurrentSwapchainView, Backdrop, rect, pipeline, set);
     }
 
     // One full-screen triangle into a target, inside the scene's rectangle; the rest of the target is cleared.
@@ -111,7 +138,7 @@ internal sealed unsafe class AntiAliasingPass : IDisposable
         cmd.EndRendering();
     }
 
-    // The same into one of SMAA's own pictures, which has to be made writable first and readable after.
+    // The same into one of the in-between pictures, which has to be made writable first and readable after.
     private void DrawIntermediate(CommandBuffer cmd, Texture target, float4 clearColor, (int X, int Y, int Width, int Height) rect, VkPipeline pipeline, VkDescriptorSet set)
     {
         // 0x480: the previous frame's passes read it in a fragment shader (0x80); 0x400 is color output.
@@ -144,11 +171,11 @@ internal sealed unsafe class AntiAliasingPass : IDisposable
             _setLayout = _device.CreateDescriptorSetLayout(in info, null);
         }
 
-        var range = new VkPushConstantRange { StageFlags = (VkShaderStageFlags)0x11, Offset = (ByteSize32)0, Size = (ByteSize32)16 };
+        var range = new VkPushConstantRange { StageFlags = (VkShaderStageFlags)0x11, Offset = (ByteSize32)0, Size = (ByteSize32)(PushFloats * 4) };
         _layout = _device.CreatePipelineLayout(new[] { _setLayout }, new[] { range }, null);
 
-        var size = new VkDescriptorPoolSize { Type = (VkDescriptorType)1, DescriptorCount = 4 * Bindings };
-        var poolInfo = new VkDescriptorPoolCreateInfo { MaxSets = 4, PoolSizeCount = 1, PoolSizes = &size };
+        var size = new VkDescriptorPoolSize { Type = (VkDescriptorType)1, DescriptorCount = 6 * Bindings };
+        var poolInfo = new VkDescriptorPoolCreateInfo { MaxSets = 6, PoolSizeCount = 1, PoolSizes = &size };
         _pool = _device.CreateDescriptorPool(in poolInfo, null);
         _basicsReady = true;
     }
@@ -170,26 +197,38 @@ internal sealed unsafe class AntiAliasingPass : IDisposable
         return _device.CreateSampler(in info, null);
     }
 
-    // Makes what the chosen method needs, and points the descriptor sets at the current scene image.
-    private void EnsureTargets(PostAntiAliasing mode)
+    // Makes what the chosen settings need, and points the descriptor sets at the current pictures.
+    private void EnsureTargets(PostAntiAliasing mode, bool effects)
     {
         bool smaa = mode == PostAntiAliasing.Smaa;
-        bool resized = _targetWidth != _ctx.Width || _targetHeight != _ctx.Height;
+        bool graded = effects && mode != PostAntiAliasing.None;
 
-        if (smaa && (resized || _edges is null))
+        if (_targetWidth != _ctx.Width || _targetHeight != _ctx.Height)
         {
-            _ctx.WaitIdle();
-            DestroyIntermediates();
-            _edges = CreateTarget(FormatRg8);
-            _weights = CreateTarget(FormatRgba8);
+            if (_edges is not null || _graded is not null)
+            {
+                _ctx.WaitIdle();
+                DestroyIntermediates();
+                _sceneGeneration = -1;              // the sets point at the old pictures
+            }
             _targetWidth = _ctx.Width;
             _targetHeight = _ctx.Height;
-            _sceneGeneration = -1;                  // the sets point at the old pictures
+        }
+        if (smaa && _edges is null)
+        {
+            _edges = CreateTarget(FormatRg8);
+            _weights = CreateTarget(FormatRgba8);
+            _sceneGeneration = -1;
+        }
+        if (graded && _graded is null)
+        {
+            _graded = CreateTarget((int)_ctx.ColorFormat);
+            _sceneGeneration = -1;
         }
         if (smaa && _area is null)
         {
-            _area = UploadTexture(FormatRg8, 160, 560, AntiAliasingShaders.AreaTexture);
-            _search = UploadTexture(FormatR8, 64, 16, AntiAliasingShaders.SearchTexture);
+            _area = UploadTexture(FormatRg8, 160, 560, PostProcessShaders.AreaTexture);
+            _search = UploadTexture(FormatR8, 64, 16, PostProcessShaders.SearchTexture);
             _sceneGeneration = -1;
         }
 
@@ -199,6 +238,8 @@ internal sealed unsafe class AntiAliasingPass : IDisposable
             _edgesSet = AllocateSet();
             _weightsSet = AllocateSet();
             _blendSet = AllocateSet();
+            _effectsFromScene = AllocateSet();
+            _effectsFromGraded = AllocateSet();
             _setsAllocated = true;
             _sceneGeneration = -1;
         }
@@ -208,12 +249,15 @@ internal sealed unsafe class AntiAliasingPass : IDisposable
             var scene = _ctx.SceneColorView;
             // Every binding gets something valid, even ones a pass doesn't read.
             WriteSet(_fxaaSet, (scene, _linear), (scene, _linear), (scene, _linear));
-            if (smaa)
+            WriteSet(_effectsFromScene, (scene, _linear), (scene, _linear), (scene, _linear));
+            if (_edges is not null && _area is not null)
             {
                 WriteSet(_edgesSet, (scene, _linear), (scene, _linear), (scene, _linear));
-                WriteSet(_weightsSet, (_edges!.Value.View, _linear), (_area!.Value.View, _point), (_search!.Value.View, _point));
+                WriteSet(_weightsSet, (_edges.Value.View, _linear), (_area.Value.View, _point), (_search!.Value.View, _point));
                 WriteSet(_blendSet, (scene, _linear), (_weights!.Value.View, _linear), (scene, _linear));
             }
+            if (_graded is { } g)
+                WriteSet(_effectsFromGraded, (g.View, _linear), (g.View, _linear), (g.View, _linear));
             _sceneGeneration = _ctx.SceneColorGeneration;
         }
     }
@@ -337,15 +381,16 @@ internal sealed unsafe class AntiAliasingPass : IDisposable
     {
         Destroy(_edges);
         Destroy(_weights);
-        _edges = _weights = null;
+        Destroy(_graded);
+        _edges = _weights = _graded = null;
     }
 
     // ---- pipelines -------------------------------------------------------------------------------------------------------
 
     private VkPipeline PipelineFxaa() =>
-        _fxaa ??= CreatePipeline("fxaa", AntiAliasingShaders.FxaaVertex, AntiAliasingShaders.FxaaFragment, (int)_ctx.ColorFormat);
+        _fxaa ??= CreatePipeline("fxaa", PostProcessShaders.FullscreenVertex, PostProcessShaders.FxaaFragment, (int)_ctx.ColorFormat);
 
-    private VkPipeline PipelineSmaa(ref VkPipeline? cache, string name, string vertex, string fragment, int format) =>
+    private VkPipeline Pipeline(ref VkPipeline? cache, string name, string vertex, string fragment, int format) =>
         cache ??= CreatePipeline(name, vertex, fragment, format);
 
     // A pipeline for a full-screen triangle into one color target: no vertex data, no depth, no blending.
@@ -407,7 +452,7 @@ internal sealed unsafe class AntiAliasingPass : IDisposable
     {
         if (!_basicsReady) return;
         _ctx.WaitIdle();
-        foreach (var pipeline in new[] { _fxaa, _smaaEdges, _smaaWeights, _smaaBlend })
+        foreach (var pipeline in new[] { _fxaa, _effects, _smaaEdges, _smaaWeights, _smaaBlend })
             if (pipeline is { } p) _device.DestroyPipeline(p, null);
         DestroyIntermediates();
         Destroy(_area);

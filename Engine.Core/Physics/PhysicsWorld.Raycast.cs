@@ -23,7 +23,7 @@ public sealed partial class PhysicsWorld
         {
             if (ignore is not null && IsSelfOrDescendant(obj, ignore)) continue;
             foreach (var collider in obj.Components.OfType<Collider>())
-                if (RayCollider(collider, obj, origin, dir, maxDistance, out float t, out var normal))
+                if (!collider.IsTrigger && RayCollider(collider, obj, origin, dir, maxDistance, out float t, out var normal))
                     hits.Add(new RaycastHit(obj, collider, origin + dir * t, normal, t));
         }
         hits.Sort((a, b) => a.Distance.CompareTo(b.Distance));

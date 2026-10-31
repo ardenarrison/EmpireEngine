@@ -51,6 +51,7 @@
   <tbody>
     <tr><td><em>when scene starts</em></td><td>Once, when play starts</td></tr>
     <tr><td><em>every frame</em></td><td>Again and again, every frame</td></tr>
+    <tr><td><em>when destroyed</em></td><td>Once, just before the object is destroyed (by <em>destroy</em> or by a script's <code>Destroy</code>). The object is leaving, so the blocks run at once and stop at the first <em>wait</em>; blocks after it never run.</td></tr>
     <tr><td><em>when [key] pressed</em></td><td>Each time the key goes down</td></tr>
     <tr><td><em>while [key] held</em></td><td>Every frame the key is held</td></tr>
     <tr><td><em>when [button] mouse pressed</em></td><td>Each time the mouse button goes down</td></tr>
@@ -100,6 +101,9 @@
     <tr><td><em>distance to x: () y: () z: ()</em></td><td>How far the object is from a point</td></tr>
     <tr><td><em>collision enter with [object]</em></td><td>True for one frame when this object's collider starts touching the named object's</td></tr>
     <tr><td><em>collision now with [object]</em></td><td>True for as long as the two are touching</td></tr>
+    <tr><td><em>collision enter / end / now with tag [tag]</em></td><td>The same, for any object with that tag (picked from the tags used in the scene)</td></tr>
+    <tr><td><em>entered trigger [object]</em>, <em>left trigger [object]</em></td><td>True during the frame after this object starts or stops overlapping that object, where one of the two is a trigger</td></tr>
+    <tr><td><em>inside trigger [object]</em></td><td>True for as long as they overlap</td></tr>
     <tr><td><em>collision end with [object]</em></td><td>True for one frame when they stop touching</td></tr>
     <tr><td><em>timer</em>, <em>reset timer</em></td><td>Seconds since the script started or the timer was last reset</td></tr>
     <tr><td><em>delta time</em></td><td>Seconds since the last frame (multiply speeds by it)</td></tr>

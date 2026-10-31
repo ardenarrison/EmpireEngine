@@ -26,6 +26,24 @@ public sealed class ProjectSettings
     // Whether object positions keep float (32-bit) or double (64-bit) precision. Float is what every project used before.
     public PositionType PositionType { get; set; } = PositionType.Float;
 
+    // Grid steps for snapping with the move and scale handles (hold Ctrl while dragging): world units, and scale.
+    public const float DefaultMoveSnap = 0.5f;
+    public const float DefaultScaleSnap = 0.1f;
+    public const float MinSnap = 0.001f;
+    public const float MaxSnap = 1000f;
+
+    private float _moveSnap = DefaultMoveSnap;
+    private float _scaleSnap = DefaultScaleSnap;
+
+    public float MoveSnap { get => _moveSnap; set => _moveSnap = ClampSnap(value, DefaultMoveSnap); }
+    public float ScaleSnap { get => _scaleSnap; set => _scaleSnap = ClampSnap(value, DefaultScaleSnap); }
+
+    public static float ClampSnap(float value, float fallback) =>
+        float.IsNaN(value) || float.IsInfinity(value) ? fallback : Math.Clamp(value, MinSnap, MaxSnap);
+
+    // Whether the scene view shows frames per second in its top-right corner (Window > FPS Counter).
+    public bool ShowFpsCounter { get; set; }
+
     private float _editorFarClipPlane = DefaultFarClipPlane;
     private float _editorNearClipPlane = DefaultNearClipPlane;
 
@@ -67,6 +85,12 @@ public sealed class ProjectSettings
                 if (root["positionType"] is JsonValue kind && kind.TryGetValue(out string? name) &&
                     Enum.TryParse(name, ignoreCase: true, out PositionType type))
                     settings.PositionType = type;
+                if (root["moveSnap"] is JsonValue moveSnap && moveSnap.TryGetValue(out double moveSnapValue))
+                    settings.MoveSnap = (float)moveSnapValue;
+                if (root["scaleSnap"] is JsonValue scaleSnap && scaleSnap.TryGetValue(out double scaleSnapValue))
+                    settings.ScaleSnap = (float)scaleSnapValue;
+                if (root["showFpsCounter"] is JsonValue fps && fps.TryGetValue(out bool showFps))
+                    settings.ShowFpsCounter = showFps;
                 if (root["editorFarClipPlane"] is JsonValue far && far.TryGetValue(out double farValue))
                     settings.EditorFarClipPlane = (float)farValue;   // first, because the near plane's limit depends on it
                 if (root["editorNearClipPlane"] is JsonValue near && near.TryGetValue(out double nearValue))
@@ -90,6 +114,9 @@ public sealed class ProjectSettings
         catch (Exception ex) when (ex is IOException or JsonException or InvalidOperationException) { }   // a broken file is replaced
 
         root["positionType"] = PositionType.ToString().ToLowerInvariant();
+        root["moveSnap"] = MoveSnap;
+        root["scaleSnap"] = ScaleSnap;
+        root["showFpsCounter"] = ShowFpsCounter;
         root["editorFarClipPlane"] = EditorFarClipPlane;
         root["editorNearClipPlane"] = EditorNearClipPlane;
         string temp = file + ".tmp-" + Guid.NewGuid().ToString("N");
