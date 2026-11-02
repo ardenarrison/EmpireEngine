@@ -150,6 +150,13 @@ public sealed class EditorApp
         };
         _code = new CodeEditorView(Path.Combine(contentRoot, "Scripts"));
         _scriptFields = new ScriptFieldCache(contentRoot);
+        // Objects with a renamed script follow it to the new name.
+        _code.ScriptRenamed += (oldName, newName) =>
+        {
+            foreach (var obj in _scene.All)
+                foreach (var script in obj.Components.OfType<ScriptComponent>().Where(s => s.ScriptName == oldName))
+                    script.ScriptName = newName;
+        };
         _terminal = new Editor.Terminal.TerminalWindow(contentRoot);
         AppDomain.CurrentDomain.ProcessExit += (_, _) => _terminal.Shutdown();   // stops the shell, and anything running in it, with the editor
         _packages = new PackageManagerWindow(contentRoot);
@@ -1385,7 +1392,11 @@ public sealed class EditorApp
             return;
         }
         if (_scriptFields.Errors.Length > 0)
-            g.TextWrapped("The scripts have compile errors, so these fields may be out of date.", Gui.ErrorColor);
+        {
+            string firstError = _scriptFields.Errors.Split('\n')[0];
+            g.TextWrapped("The scripts have compile errors, so these fields may be out of date. " +
+                          SafeLabel.Of(firstError, 300), Gui.ErrorColor);
+        }
         if (fields.Count == 0)
         {
             g.TextDisabled("No public fields.");
