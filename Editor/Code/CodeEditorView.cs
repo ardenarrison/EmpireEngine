@@ -26,6 +26,7 @@ public sealed class CodeEditorView
     private const float TextPad = 10f;
     private const double CheckDelay = 0.4;   // seconds after the last edit before the scripts are compiled again
     private const int MaxNameLength = 40;
+    private const float MenuW = 190f;
 
     private static float4 Background => Theme.Pick(0x1E1E1E, 0xFFFFFF);
     private static float4 PanelColor => Theme.Pick(0x252526, 0xF3F3F3);
@@ -130,7 +131,18 @@ public sealed class CodeEditorView
     private string _newName = "";
     private bool _nameFocused;
 
+    // The right-click menu on a script in the list, and the rename field that replaces its row.
+    private readonly List<(Box Box, string Path)> _fileRows = new();
+    private string? _menuFile;
+    private float2 _menuPos;
+    private bool _menuConfirmDelete;
+    private string? _renamePath;
+    private string _renameText = "";
+
     public CodeEditorView(string scriptsFolder) => _folder = scriptsFolder;
+
+    // Raised after a script was renamed, with the old and new class names, so scenes can follow.
+    public event Action<string, string>? ScriptRenamed;
 
     public bool HasUnsavedChanges => _docs.Values.Any(d => d.Dirty);
 
@@ -213,8 +225,47 @@ public sealed class CodeEditorView
             }
         }
 
+        if (!uiWantsMouse && ImGui.IsMouseClicked(ImGuiMouseButton.Right))
+        {
+            _menuFile = null;
+            _menuConfirmDelete = false;
+            foreach (var (box, path) in _fileRows)
+                if (box.Contains(p))
+                {
+                    _menuFile = path;
+                    _menuPos = p;
+                    _renamePath = null;
+                    break;
+                }
+        }
+
         if (_mouse.Pressed && !uiWantsMouse)
         {
+            if (_menuFile is not null)
+            {
+                string file = _menuFile;
+                var rename = MenuItemBox(0);
+                var delete = MenuItemBox(1);
+                if (rename.Contains(p))
+                {
+                    _menuFile = null;
+                    BeginRename(file);
+                }
+                else if (delete.Contains(p))
+                {
+                    if (_menuConfirmDelete)
+                    {
+                        _menuFile = null;
+                        DeleteScript(file);
+                    }
+                    else
+                        _menuConfirmDelete = true;
+                }
+                else
+                    _menuFile = null;
+                return;
+            }
+            _renamePath = null;
             _nameFocused = false;
             foreach (var (box, click) in _clickables)
                 if (box.Contains(p))
@@ -266,6 +317,11 @@ public sealed class CodeEditorView
         }
         if (cmd) typed.Clear();
 
+        if (_renamePath is not null)
+        {
+            HandleRenameField(typed.ToString());
+            return;
+        }
         if (_nameFocused)
         {
             HandleNameField(typed.ToString());
@@ -357,7 +413,95 @@ public sealed class CodeEditorView
         if (Pressed(ImGuiKey.Escape)) _nameFocused = false;
     }
 
+    private void HandleRenameField(string typed)
+    {
+        foreach (char ch in typed)
+            if ((char.IsLetterOrDigit(ch) || ch == '_') && _renameText.Length < MaxNameLength) _renameText += ch;
+        if (Pressed(ImGuiKey.Backspace) && _renameText.Length > 0) _renameText = _renameText[..^1];
+        if (Pressed(ImGuiKey.Enter) || Pressed(ImGuiKey.KeypadEnter)) CommitRename();
+        if (Pressed(ImGuiKey.Escape)) _renamePath = null;
+    }
+
     // ---- files -----------------------------------------------------------------------------
+
+    private Box MenuItemBox(int index) => new(_menuPos.X, _menuPos.Y + index * RowH, MenuW, RowH);
+
+    private bool IsGenerated(string path)
+    {
+        try { return (_docs.TryGetValue(path, out var doc) ? doc : CodeDocument.Load(path)).ReadOnly; }
+        catch (IOException) { return false; }
+    }
+
+    private void BeginRename(string path)
+    {
+        if (IsGenerated(path))
+        {
+            Status($"{Path.GetFileName(path)} is generated from a VC script. Rename that instead.");
+            return;
+        }
+        _renamePath = path;
+        _renameText = Path.GetFileNameWithoutExtension(path);
+        _nameFocused = false;
+    }
+
+    private void CommitRename()
+    {
+        string oldPath = _renamePath!;
+        _renamePath = null;
+        string oldName = Path.GetFileNameWithoutExtension(oldPath);
+        string newName = ScriptFiles.ToClassName(_renameText);
+        if (newName.Length == 0 || newName == oldName) return;
+
+        string newPath = Path.Combine(_folder, newName + ".cs");
+        if (File.Exists(newPath))
+        {
+            Status($"{newName}.cs already exists.");
+            return;
+        }
+        try
+        {
+            if (_docs.TryGetValue(oldPath, out var open) && open.Dirty) open.Save();
+            // The class name has to match the file name, so the declaration is renamed with it.
+            string text = File.ReadAllText(oldPath);
+            File.WriteAllText(newPath, System.Text.RegularExpressions.Regex.Replace(
+                text, $@"\b(class|struct)(\s+){System.Text.RegularExpressions.Regex.Escape(oldName)}\b", $"$1$2{newName}"));
+            File.Delete(oldPath);
+        }
+        catch (Exception ex)
+        {
+            Status($"Could not rename {oldName}.cs: {ex.Message}");
+            return;
+        }
+        bool wasCurrent = _doc is not null && string.Equals(_doc.Path, oldPath, StringComparison.OrdinalIgnoreCase);
+        _docs.Remove(oldPath);
+        if (wasCurrent) _doc = null;
+        Open(newPath);
+        _checkQueued = true;
+        ScriptRenamed?.Invoke(oldName, newName);
+        Status($"Renamed {oldName}.cs to {newName}.cs.");
+    }
+
+    private void DeleteScript(string path)
+    {
+        if (IsGenerated(path))
+        {
+            Status($"{Path.GetFileName(path)} is generated from a VC script. Delete that instead.");
+            return;
+        }
+        try
+        {
+            File.Delete(path);
+        }
+        catch (Exception ex)
+        {
+            Status($"Could not delete {Path.GetFileName(path)}: {ex.Message}");
+            return;
+        }
+        _docs.Remove(path);
+        if (_doc is not null && string.Equals(_doc.Path, path, StringComparison.OrdinalIgnoreCase)) _doc = null;
+        _checkQueued = true;
+        Status($"Deleted {Path.GetFileName(path)}.");
+    }
 
     private List<string> ListScripts() =>
         Directory.Exists(_folder)
@@ -513,6 +657,7 @@ public sealed class CodeEditorView
         _size = size;
         _charW = c.MeasureText("M");
         _clickables.Clear();
+        _fileRows.Clear();
 
         c.Begin();
         c.Rect(0, 0, size.X, size.Y, Background);
@@ -521,6 +666,21 @@ public sealed class CodeEditorView
         DrawProblems(c, size);   // after the editor, so the last code line can't show through it
         DrawHeader(c, size);     // and the header over anything scrolled up behind it
         DrawTooltip(c);
+        DrawFileMenu(c);
+    }
+
+    private void DrawFileMenu(Canvas2D c)
+    {
+        if (_menuFile is null) return;
+        var rename = MenuItemBox(0);
+        var delete = MenuItemBox(1);
+        c.Rect(rename.X - 1, rename.Y - 1, MenuW + 2, RowH * 2 + 2, BorderColor);
+        c.Rect(rename.X, rename.Y, MenuW, RowH * 2, TooltipColor);
+        foreach (var (box, label) in new[] { (rename, "Rename"), (delete, _menuConfirmDelete ? "Click again to delete" : "Delete") })
+        {
+            if (box.Contains(_mouse.Mouse)) c.Rect(box.X, box.Y, box.W, box.H, RowHover);
+            c.Text(label, box.X + 10f, box.Y + 2f, label == "Rename" ? TextColor : ErrorColor);
+        }
     }
 
     private void DrawHeader(Canvas2D c, float2 size)
@@ -577,8 +737,16 @@ public sealed class CodeEditorView
                     right -= c.MeasureText(count) + 4f;
                     c.Text(count, right, y + 2f, ErrorColor);
                 }
-                c.Text(Fit(c, name, right - 22f), 14f, y + 2f, errors > 0 ? ErrorColor : TextColor);
                 string path = file;
+                _fileRows.Add((box, path));
+                if (string.Equals(_renamePath, file, StringComparison.OrdinalIgnoreCase))
+                {
+                    c.Rect(box.X, box.Y, box.W, box.H, FieldColor);
+                    c.Text(Fit(c, _renameText + (Blink() ? "|" : "") + ".cs", FileListW - 24f), 14f, y + 2f, TextColor);
+                    y += RowH;
+                    continue;
+                }
+                c.Text(Fit(c, name, right - 22f), 14f, y + 2f, errors > 0 ? ErrorColor : TextColor);
                 _clickables.Add((box, () => Open(path)));
             }
             y += RowH;
