@@ -126,6 +126,10 @@ public abstract class Behaviour
     public Rigidbody rigidbody => GetComponent<Rigidbody>() ??
         throw new InvalidOperationException($"'{Object.Name}' has no Rigidbody; add one in the Inspector");
 
+    // This object's Rigidbody2D, as in this.rigidbody2D.Velocity2D. Stops the script with a clear message when it has none.
+    public Rigidbody2D rigidbody2D => GetComponent<Rigidbody2D>() ??
+        throw new InvalidOperationException($"'{Object.Name}' has no Rigidbody 2D; add one in the Inspector");
+
     // This object's AudioSource, as in this.audioSource.Play(). Stops the script with a clear message when the object has none.
     public AudioSource audioSource
     {

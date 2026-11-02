@@ -41,7 +41,7 @@ public sealed class BrutalRenderer : IRenderer
             vec4 light;       // xyz = direction toward the sun
             vec4 lightColor;  // rgb = radiance (color * intensity)
             vec4 emission;    // rgb = emitted light (emissiveFactor * emissive strength), added unlit
-            vec4 extra;      // x = occlusion map strength (0 = none), y = normal map scale (0 = no normal map)
+            vec4 extra;      // x = occlusion map strength (0 = none), y = normal map scale (0 = no normal map), z = 1 for unlit
         } pc;
         """;
 
@@ -209,6 +209,13 @@ public sealed class BrutalRenderer : IRenderer
             return (diffuse + specular) * NdotL * radiance;
         }
 
+        // Distance fog: from nothing at fog.x to the full fog color at fog.y.
+        vec3 applyFog(vec3 color) {
+            if (frame.fog.z < 0.5) return color;
+            float fogAmount = clamp((length(inWorldPos - pc.camera.xyz) - frame.fog.x) / max(frame.fog.y - frame.fog.x, 0.001), 0.0, 1.0);
+            return mix(color, frame.fogColor.rgb, fogAmount);
+        }
+
         void main() {
             // Every map is read up front, before any branch, so the screen-space derivatives below stay well defined.
             vec4 baseSample = texture(baseColorMap, inUv);
@@ -240,6 +247,11 @@ public sealed class BrutalRenderer : IRenderer
 
             vec4 baseColor = inBaseColor * baseSample * inVertexColor;
             if (inMaterial.w > 0.0 && baseColor.a < inMaterial.w) discard;
+            if (pc.extra.z > 0.5) {
+                // Unlit (sprites): the colors as they are, only fogged.
+                outColor = vec4(applyFog(baseColor.rgb), baseColor.a);
+                return;
+            }
 
             vec3 V = normalize(inCamera - inWorldPos);
             float roughness = clamp(inMaterial.x * metalRough.g, 0.04, 1.0);
@@ -299,12 +311,7 @@ public sealed class BrutalRenderer : IRenderer
             color += (ambient + sky) * ao;
             // Emission is self-lit: added after lighting and not scaled by the sun or the base color.
             color += pc.emission.rgb * emissiveSample;
-            // Distance fog: from nothing at fog.x to the full fog color at fog.y.
-            if (frame.fog.z > 0.5) {
-                float fogAmount = clamp((length(inWorldPos - pc.camera.xyz) - frame.fog.x) / max(frame.fog.y - frame.fog.x, 0.001), 0.0, 1.0);
-                color = mix(color, frame.fogColor.rgb, fogAmount);
-            }
-            outColor = vec4(color, baseColor.a);
+            outColor = vec4(applyFog(color), baseColor.a);
         }
         """;
 
@@ -1271,6 +1278,7 @@ public sealed class BrutalRenderer : IRenderer
         _push[OffEmission + 3] = 0;
         _push[OffExtra + 0] = material.OcclusionImage is null ? 0f : material.OcclusionStrength;
         _push[OffExtra + 1] = material.NormalImage is null ? 0f : MathF.Max(material.NormalScale, 0.0001f);
+        _push[OffExtra + 2] = material.Unlit ? 1f : 0f;
         cmd.PushConstants(_layout, (VkShaderStageFlags)StageVertexFragment, default, _push);
         cmd.BindDescriptorSets((VkPipelineBindPoint)0, _layout, 1, new[] { mesh.MaterialSet }, default);
 

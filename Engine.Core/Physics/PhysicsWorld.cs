@@ -208,6 +208,13 @@ public sealed partial class PhysicsWorld
                 Velocity = rb.Velocity;
                 AngularVelocity = rb.FreezeRotation ? Vector3.Zero : rb.AngularVelocity;
                 InvInertia = rb.FreezeRotation ? Vector3.Zero : InverseInertia(rb.Mass);
+                if (rb is Rigidbody2D)
+                {
+                    // On the plane: no movement in Z and no turning except around Z.
+                    Velocity.Z = 0f;
+                    AngularVelocity = new Vector3(0f, 0f, AngularVelocity.Z);
+                    InvInertia = new Vector3(0f, 0f, InvInertia.Z);
+                }
             }
 
             if (Shapes.Count == 0)
@@ -279,6 +286,11 @@ public sealed partial class PhysicsWorld
                 AngularVelocity = Vector3.Zero;
             }
 
+            if (rb is Rigidbody2D)
+            {
+                Velocity.Z = 0f;
+                AngularVelocity = new Vector3(0f, 0f, AngularVelocity.Z);
+            }
             Position += Velocity * h;
             if (AngularVelocity != Vector3.Zero)
             {
@@ -356,6 +368,16 @@ public sealed partial class PhysicsWorld
                     break;
                 case SphereCollider sphere:
                     shape.Radius = MathF.Abs(sphere.Radius) * MathF.Max(scale.X, MathF.Max(scale.Y, scale.Z));
+                    if (shape.Radius <= 0f) return null;
+                    break;
+                case BoxCollider2D box2:
+                    shape.IsBox = true;
+                    shape.HalfExtents = new Vector3(MathF.Abs(box2.Size.X) * scale.X, MathF.Abs(box2.Size.Y) * scale.Y, MathF.Max(MathF.Abs(box2.Depth), 0.01f)) * 0.5f;
+                    if (shape.HalfExtents.X <= 0f || shape.HalfExtents.Y <= 0f) return null;
+                    break;
+                case CircleCollider2D circle:
+                    // A ball, which meets others as a circle does while everything stays on the plane.
+                    shape.Radius = MathF.Abs(circle.Radius) * MathF.Max(scale.X, scale.Y);
                     if (shape.Radius <= 0f) return null;
                     break;
                 default:

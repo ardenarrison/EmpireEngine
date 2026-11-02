@@ -3026,6 +3026,103 @@ if (!OperatingSystem.IsWindows())
     Check(!plainJson.Contains("exposure") && !plainJson.Contains("vignette"), "a camera without effects saves none");
 }
 
+// ---- 2D projects and sprites ----
+{
+    string twoDRoot = Path.Combine(Path.GetTempPath(), "empire-2d-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(twoDRoot);
+    string flat = EmpireHub.ProjectTemplate.Create("Flat Game", twoDRoot, "0.2.7", is2D: true);
+    string deep = EmpireHub.ProjectTemplate.Create("Deep Game", twoDRoot, "0.2.7");
+    Check(EmpireProject.TryRead(flat)!.Type == "2D" && EmpireProject.TryRead(deep)!.Type == "3D" &&
+          Editor.ProjectFile.Is2D(flat) && !Editor.ProjectFile.Is2D(deep) && !Editor.ProjectFile.Is2D(twoDRoot),
+          "a project records whether it is 2D or 3D, and the editor reads it (no project file means 3D)");
+    Check(Directory.Exists(Path.Combine(flat, "Sprites")) && Directory.Exists(Path.Combine(deep, "Models")), "a 2D project starts with a Sprites folder");
+    EmpireProject.SetEditorVersion(flat, "0.3.0");
+    Check(EmpireProject.TryRead(flat)!.Type == "2D", "changing the editor version keeps the project's type");
+    var flatScene = SceneSerializer.Load(Path.Combine(flat, "Scenes", "Main.empirescene"));
+    var flatCam = flatScene.All.SelectMany(o => o.Components.OfType<CameraComponent>()).Single();
+    Check(flatCam.Orthographic && flatCam.OrthographicSize == 5f && !flatScene.All.Any(o => o.Components.OfType<DirectionalLight>().Any()),
+          "the 2D starter scene has an orthographic camera and no sun");
+    Check(!File.ReadAllText(Path.Combine(twoDRoot, "Deep Game", "project.empire")).Contains("is2D", StringComparison.OrdinalIgnoreCase),
+          "project.empire stores the type, not a derived flag");
+
+    // The pictures a sprite can show.
+    Check(SpriteRenderer.IsSpriteImage("a.png") && SpriteRenderer.IsSpriteImage("b.JPEG") && SpriteRenderer.IsSpriteImage("c.jpg") &&
+          SpriteRenderer.IsSpriteImage("d.bmp") && SpriteRenderer.IsSpriteImage("e.gif") && !SpriteRenderer.IsSpriteImage("f.glb"),
+          "PNG, JPEG, BMP and GIF can be sprites");
+    var png = Engine.Core.Assets.ImageData.Decode(Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="), "dot.png");
+    var gif = Engine.Core.Assets.ImageData.Decode(Convert.FromBase64String("R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw=="), "dot.gif");
+    var bmpBytes = new byte[58];
+    "BM"u8.CopyTo(bmpBytes);
+    BitConverter.GetBytes(58).CopyTo(bmpBytes, 2); BitConverter.GetBytes(54).CopyTo(bmpBytes, 10); BitConverter.GetBytes(40).CopyTo(bmpBytes, 14);
+    BitConverter.GetBytes(1).CopyTo(bmpBytes, 18); BitConverter.GetBytes(1).CopyTo(bmpBytes, 22); BitConverter.GetBytes((short)1).CopyTo(bmpBytes, 26);
+    BitConverter.GetBytes((short)24).CopyTo(bmpBytes, 28); bmpBytes[54] = 255; bmpBytes[55] = 0; bmpBytes[56] = 0;   // one blue pixel (stored B, G, R)
+    var bmp = Engine.Core.Assets.ImageData.Decode(bmpBytes, "dot.bmp");
+    Check(png.Width == 1 && gif.Width == 1 && bmp.Width == 1 && bmp.Pixels![2] == 255 && bmp.Pixels[0] == 0,
+          "PNG, GIF and BMP pictures decode");
+
+    var picture = new Engine.Core.Assets.ImageData { Name = "hero.png", Width = 200, Height = 100, Pixels = new byte[200 * 100 * 4] };
+    var spriteQuad = Engine.Core.Assets.SpriteMesh.Build(picture, 100f);
+    Check(spriteQuad.BoundsMin == new Vector3(-1f, -0.5f, 0f) && spriteQuad.BoundsMax == new Vector3(1f, 0.5f, 0f) && spriteQuad.Meshes.Single().Material.Unlit &&
+          spriteQuad.Meshes.Single().Material.AlphaBlend, "a 200 x 100 picture at 100 pixels per unit is a 2 x 1 unlit, see-through rectangle");
+    var flipped = Engine.Core.Assets.SpriteMesh.Build(picture, 50f, flipX: true);
+    Check(flipped.BoundsMax.X == 2f && flipped.Meshes.Single().TexCoords[0] > flipped.Meshes.Single().TexCoords[2], "pixels per unit sizes the sprite, and Flip X mirrors it");
+
+    var spriteScene = new Scene();
+    var hero = new SceneObject { Name = "Hero" };
+    hero.Components.Add(new SpriteRenderer { Sprite = "Sprites/hero.png", Tint = new Vector4(1, 0.5f, 0.5f, 1), PixelsPerUnit = 32f, FlipX = true });
+    var ortho = new SceneObject { Name = "Cam" };
+    ortho.Components.Add(new CameraComponent { Orthographic = true, OrthographicSize = 7.5f });
+    spriteScene.Add(hero); spriteScene.Add(ortho);
+    var spriteBack = SceneSerializer.FromJson(SceneSerializer.ToJson(spriteScene));
+    var sr = spriteBack.Find(hero.Id)!.Components.OfType<SpriteRenderer>().Single();
+    var oc = spriteBack.Find(ortho.Id)!.Components.OfType<CameraComponent>().Single();
+    Check(sr.Sprite == "Sprites/hero.png" && sr.Tint == new Vector4(1, 0.5f, 0.5f, 1) && sr.PixelsPerUnit == 32f && sr.FlipX && !sr.FlipY,
+          "a sprite survives saving and loading");
+    Check(oc.Orthographic && oc.OrthographicSize == 7.5f, "an orthographic camera survives saving and loading");
+    Directory.Delete(twoDRoot, true);
+}
+
+// ---- 2D physics ----
+{
+    var world2D = new Scene();
+    var floor2D = new SceneObject { Name = "Floor", Position = new(0, -0.5f, 0) };
+    floor2D.Components.Add(new BoxCollider2D { Size = new(20, 1) });
+    world2D.Add(floor2D);
+    SceneObject Body2D(Vector3 at, Collider shape, Quaternion? turn = null)
+    {
+        var o = new SceneObject { Position = at, Rotation = turn ?? Quaternion.Identity };
+        o.Components.Add(new Rigidbody2D());
+        o.Components.Add(shape);
+        world2D.Add(o);
+        return o;
+    }
+    var crate2D = Body2D(new(0, 3, 0.1f), new BoxCollider2D());
+    var ball2D = Body2D(new(3, 3, -0.2f), new CircleCollider2D());
+    // A box dropped on its corner, tipped around Z and pushed out of the plane: it must topple flat without leaving it.
+    var tipped = Body2D(new(-4, 3, 0), new BoxCollider2D(), Quaternion.CreateFromAxisAngle(Vector3.UnitZ, 0.6f));
+    tipped.Components.OfType<Rigidbody2D>().Single().Velocity = new Vector3(0, 0, 5);
+    tipped.Components.OfType<Rigidbody2D>().Single().AngularVelocity = new Vector3(3, 2, 0);
+    for (int i = 0; i < 240; i++) world2D.Physics.Step(world2D, 1f / 60f);
+    Check(MathF.Abs(crate2D.Position.Y - 0.5f) < 0.03f && MathF.Abs(ball2D.Position.Y - 0.5f) < 0.03f,
+          "2D boxes and circles fall and rest on a 2D box");
+    Check(crate2D.Position.Z == 0.1f && ball2D.Position.Z == -0.2f && tipped.Position.Z == 0f, "2D bodies never leave their plane");
+    Check(MathF.Abs(tipped.Rotation.X) < 1e-4f && MathF.Abs(tipped.Rotation.Y) < 1e-4f && MathF.Abs(tipped.Position.Y - 0.5f) < 0.05f,
+          "a 2D body turns only around Z, and a tipped box settles flat");
+
+    var back2D = SceneSerializer.FromJson(SceneSerializer.ToJson(world2D));
+    Check(back2D.Find(crate2D.Id)!.Components.OfType<Rigidbody2D>().Count() == 1 &&
+          back2D.Find(floor2D.Id)!.Components.OfType<BoxCollider2D>().Single().Size == new Vector2(20, 1) &&
+          back2D.Find(ball2D.Id)!.Components.OfType<CircleCollider2D>().Single().Radius == 0.5f,
+          "Rigidbody 2D and the 2D colliders survive saving and loading");
+    Check(world2D.Find(crate2D.Id)!.Components.OfType<Rigidbody>().Single() is Rigidbody2D, "GetComponent<Rigidbody>() finds a Rigidbody 2D too");
+
+    ScriptRuntime.Load(world2D, Array.Empty<System.Reflection.Assembly>());   // makes it the playing scene, for Physics.Raycast
+    Check(Engine.Core.Scripting.Physics.Raycast(new Vector3(0, 10, 0.1f), -Vector3.UnitY, out var hit2D, 20f) && hit2D.Object == crate2D &&
+          MathF.Abs(hit2D.Point.Y - 1f) < 0.05f, "raycasts hit 2D colliders");
+    var rb2 = new Rigidbody2D { Velocity2D = new Vector2(1, 2), AngularVelocity2D = 3f };
+    Check(rb2.Velocity == new Vector3(1, 2, 0) && rb2.AngularVelocity == new Vector3(0, 0, 3), "Velocity2D and AngularVelocity2D read and write the plane");
+}
+
 // ---- double positions ----
 {
     var before = SceneObject.PositionPrecision;

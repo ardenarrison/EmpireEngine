@@ -7,6 +7,10 @@ namespace Editor;
 // Fly camera: right-drag to look; hold right-drag and use WASD (Q/E down/up, Shift to go faster).
 // Scrolling (a mouse wheel, or two fingers on a trackpad) over the 3D view zooms by moving the camera along its view
 // direction: scroll up to move in, down to move out. Hold Shift to zoom faster.
+//
+// In a 2D project (Is2D) it looks straight down -Z at the X-Y plane through an orthographic view instead, and never turns:
+// right-drag (or a left-drag on empty space, see EditorApp) pans, WASD pans while the right button is held, and scrolling or
+// pinching zooms by changing OrthoSize, half the height of what it shows.
 public sealed class EditorCamera
 {
     public Vector3 Position;
@@ -16,6 +20,23 @@ public sealed class EditorCamera
     public float Near = ProjectSettings.DefaultNearClipPlane;   // how close things can be and still be drawn (File > Project Settings)
 
     private double2? _lastCursor;
+
+    public bool Is2D;
+    public float OrthoSize = 5f;
+    public float ViewHeightPixels = 600f;   // the scene view's height in mouse units, for panning in 2D (set each frame)
+
+    public const float MinOrthoSize = 0.05f;
+    public const float MaxOrthoSize = 10_000f;
+
+    // World units one mouse unit covers in 2D.
+    public float UnitsPerPixel => OrthoSize * 2f / MathF.Max(1f, ViewHeightPixels);
+
+    // Moves a 2D view by a mouse movement, so the world follows the cursor.
+    public void Pan(float dxPixels, float dyPixels)
+    {
+        float k = UnitsPerPixel;
+        Position += new Vector3(-dxPixels * k, dyPixels * k, 0f);
+    }
 
     // The point zooming is measured from. Each scroll step moves the camera a tenth of its distance to this point
     // (at least 0.5 units), so zooming is fine up close and quick when far away.
@@ -41,6 +62,11 @@ public sealed class EditorCamera
     public void Pinch(float amount)
     {
         if (amount == 0f) return;
+        if (Is2D)
+        {
+            OrthoSize = Math.Clamp(OrthoSize * (1f - Math.Clamp(amount, -0.9f, 0.9f)), MinOrthoSize, MaxOrthoSize);
+            return;
+        }
         float distance = MathF.Max(0.5f, Vector3.Distance(Position, Focus));
         Position += Forward * (distance * Math.Clamp(amount, -0.9f, 0.9f));
     }
@@ -49,6 +75,11 @@ public sealed class EditorCamera
     // scroll is this frame's vertical scroll amount: about 1 per wheel notch, in small fractions on a trackpad.
     public void Update(GlfwWindow window, float dt, bool uiWantsMouse, float scroll = 0f)
     {
+        if (Is2D)
+        {
+            Update2D(window, dt, uiWantsMouse, scroll);
+            return;
+        }
         if (!uiWantsMouse && scroll != 0f)
         {
             float step = MathF.Max(0.5f, Vector3.Distance(Position, Focus) * 0.1f);
@@ -80,6 +111,38 @@ public sealed class EditorCamera
         if (IsDown(window, GlfwKey.A)) move -= Right;
         if (IsDown(window, GlfwKey.E)) move += Vector3.UnitY;
         if (IsDown(window, GlfwKey.Q)) move -= Vector3.UnitY;
+        if (move != Vector3.Zero)
+            Position += Vector3.Normalize(move) * speed;
+    }
+
+    private void Update2D(GlfwWindow window, float dt, bool uiWantsMouse, float scroll)
+    {
+        Yaw = 0f;
+        Pitch = 0f;
+        if (!uiWantsMouse && scroll != 0f)
+        {
+            bool fast = IsDown(window, GlfwKey.LeftShift) || IsDown(window, GlfwKey.RightShift);
+            OrthoSize = Math.Clamp(OrthoSize * MathF.Pow(0.9f, scroll * (fast ? 3f : 1f)), MinOrthoSize, MaxOrthoSize);
+        }
+
+        bool drag = !uiWantsMouse && window.GetMouseButton(GlfwMouseButton.Right) == GlfwButtonAction.Press;
+        var cursor = window.CursorPos;
+        if (!drag)
+        {
+            _lastCursor = null;
+            return;
+        }
+        if (_lastCursor is { } last)
+            Pan((float)(cursor.X - last.X), (float)(cursor.Y - last.Y));
+        _lastCursor = cursor;
+
+        // WASD pans by about the view's height per second (three times that with Shift).
+        float speed = OrthoSize * 2f * dt * (IsDown(window, GlfwKey.LeftShift) ? 3f : 1f);
+        var move = Vector3.Zero;
+        if (IsDown(window, GlfwKey.W)) move += Vector3.UnitY;
+        if (IsDown(window, GlfwKey.S)) move -= Vector3.UnitY;
+        if (IsDown(window, GlfwKey.D)) move += Vector3.UnitX;
+        if (IsDown(window, GlfwKey.A)) move -= Vector3.UnitX;
         if (move != Vector3.Zero)
             Position += Vector3.Normalize(move) * speed;
     }

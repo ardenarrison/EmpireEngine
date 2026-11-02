@@ -54,6 +54,12 @@ public sealed partial class PhysicsWorld
         var world = obj.WorldMatrix;
         switch (collider)
         {
+            // The 2D shapes are hit as the box and ball they collide as.
+            case BoxCollider2D box2:
+                return RayCollider(new BoxCollider { Center = box2.Center, Size = new Vector3(box2.Size, MathF.Max(MathF.Abs(box2.Depth), 0.01f)) },
+                    obj, origin, dir, maxDistance, out t, out normal);
+            case CircleCollider2D circle:
+                return RayCollider(new SphereCollider { Center = circle.Center, Radius = circle.Radius }, obj, origin, dir, maxDistance, out t, out normal);
             case SphereCollider sphere:
             {
                 Decompose(world, out var scale, out _, out _);

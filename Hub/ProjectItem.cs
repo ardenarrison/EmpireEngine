@@ -7,9 +7,10 @@ public sealed class ProjectItem
     public required string Path { get; init; }
     public required DateTime LastOpened { get; init; }
     public string? EditorVersion { get; init; }
+    public string Type { get; init; } = "3D";
     public bool Exists { get; init; }
 
-    public string VersionText => !Exists ? "Missing" : EditorVersion is null ? "Any version" : "Empire Engine " + EditorVersion;
+    public string VersionText => !Exists ? "Missing" : (EditorVersion is null ? "Any version" : "Empire Engine " + EditorVersion) + " · " + Type;
     public double RowOpacity => Exists ? 1.0 : 0.5;
 
     public string LastOpenedText
@@ -35,6 +36,7 @@ public sealed class ProjectItem
             Path = entry.Path,
             LastOpened = entry.LastOpened,
             EditorVersion = project?.EditorVersion,
+            Type = project is { Is2D: true } ? "2D" : "3D",
             Exists = exists,
         };
     }

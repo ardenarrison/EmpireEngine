@@ -12,6 +12,13 @@ public sealed class EmpireProject
     public string? EditorVersion { get; set; }
     public string StartScene { get; set; } = "Scenes/Main.empirescene";
 
+    // "2D" or "3D". The editor works in that mode: a 2D project is laid out flat on X and Y, seen straight on through an
+    // orthographic camera, with pictures (sprites) for objects. A project without a type is 3D.
+    public string Type { get; set; } = "3D";
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool Is2D => string.Equals(Type, "2D", StringComparison.OrdinalIgnoreCase);
+
     public static EmpireProject? TryRead(string folder)
     {
         try

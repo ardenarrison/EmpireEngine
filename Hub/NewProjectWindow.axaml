@@ -19,6 +19,14 @@
     </Grid>
     <TextBlock x:Name="PathPreview" Classes="dim" TextTrimming="CharacterEllipsis" />
 
+    <TextBlock Text="Type" Margin="0,10,0,0" />
+    <StackPanel Orientation="Horizontal" Spacing="16">
+      <RadioButton x:Name="Type3D" GroupName="ProjectType" Content="3D" IsChecked="True" />
+      <RadioButton x:Name="Type2D" GroupName="ProjectType" Content="2D" />
+    </StackPanel>
+    <TextBlock Classes="dim" TextWrapping="Wrap"
+               Text="3D starts with a sky, a sun and ground. 2D lays the scene out flat with an orthographic camera, for games made of pictures (sprites): drop a PNG, JPEG, BMP or GIF into the scene." />
+
     <TextBlock Text="Empire Engine version" Margin="0,10,0,0" />
     <ComboBox x:Name="VersionBox" HorizontalAlignment="Stretch">
       <ComboBox.ItemTemplate>

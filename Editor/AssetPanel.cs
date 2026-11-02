@@ -254,6 +254,7 @@ public sealed class AssetPanel
             bool isDir = entry is DirectoryInfo;
             bool isModel = !isDir && ModelLoader.IsModel(entry.Name);
             bool isSound = !isDir && AudioClip.IsAudio(entry.Name);
+            bool isSprite = !isDir && Engine.Core.Scene.SpriteRenderer.IsSpriteImage(entry.Name);
             bool isScene = !isDir && entry.Name.EndsWith(SceneFiles.Extension, StringComparison.OrdinalIgnoreCase);
             var animations = isModel ? AnimationsOf(entry.FullName) : Array.Empty<string>();
 
@@ -279,7 +280,7 @@ public sealed class AssetPanel
                 navigateTo = entry.FullName;
             if (isScene && clicked)
                 _clickedScene = RelativePath(entry.FullName);
-            if ((isModel || isSound) && g.MousePressed && hovered && !overArrow && _dragPath is null)
+            if ((isModel || isSound || isSprite) && g.MousePressed && hovered && !overArrow && _dragPath is null)
             {
                 _pressedFile = RelativePath(entry.FullName);
                 _pressCursor = g.Mouse;

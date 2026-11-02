@@ -30,6 +30,9 @@ public sealed class TransformGizmo
 
     public GizmoTool Tool { get; set; } = GizmoTool.None;
 
+    // In a 2D project there is no Z handle: everything is moved and scaled in the X-Y plane.
+    public bool Flat { get; set; }
+
     // Grid steps for snapping, in world units and in scale (Project Settings).
     public float MoveSnap { get; set; } = 0.5f;
     public float ScaleSnap { get; set; } = 0.1f;
@@ -75,7 +78,7 @@ public sealed class TransformGizmo
         for (int i = 0; i < 3; i++)
         {
             axes[i] = Tool == GizmoTool.Move ? Unit(i) : LocalAxis(world, i);
-            visible[i] = TryProject(origin + axes[i] * length, viewProj, area, out tips[i]);
+            visible[i] = !(Flat && i == 2) && TryProject(origin + axes[i] * length, viewProj, area, out tips[i]);
         }
 
         bool changed = false;

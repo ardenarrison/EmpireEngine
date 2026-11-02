@@ -14,7 +14,7 @@ public enum ForceMode
 
 // Makes an object move under physics while the scene plays: gravity, forces, and collisions with other colliders.
 // The object needs a collider (on itself or on child objects) to collide. Without a Rigidbody, a collider is static.
-public sealed class Rigidbody : Component
+public class Rigidbody : Component
 {
     public float Mass { get; set; } = 1f;              // kilograms
     public bool UseGravity { get; set; } = true;
@@ -106,4 +106,43 @@ public sealed class SphereCollider : Collider
 public sealed class MeshCollider : Collider
 {
     public string Model { get; set; } = "";
+}
+
+// ---- 2D physics -------------------------------------------------------------------------------------------------------------
+
+// A Rigidbody for 2D games: it moves only across the X-Y plane (its Z never changes) and turns only around the Z axis. Everything
+// else works as for Rigidbody (it is one, so GetComponent<Rigidbody>() finds it too). Use it with the 2D colliders.
+public sealed class Rigidbody2D : Rigidbody
+{
+    // The velocity across the plane, and the spin around Z in radians per second.
+    public Vector2 Velocity2D
+    {
+        get => new(Velocity.X, Velocity.Y);
+        set => Velocity = new Vector3(value.X, value.Y, 0f);
+    }
+
+    public float AngularVelocity2D
+    {
+        get => AngularVelocity.Z;
+        set => AngularVelocity = new Vector3(0f, 0f, value);
+    }
+
+    public void AddForce(Vector2 force, ForceMode mode = ForceMode.Force) => AddForce(new Vector3(force.X, force.Y, 0f), mode);
+
+    // Turns the object around Z (positive is counterclockwise as the 2D camera sees it). Modes work as for AddForce.
+    public void AddTorque(float torque, ForceMode mode = ForceMode.Force) => AddTorque(new Vector3(0f, 0f, torque), mode);
+}
+
+// A rectangle of Size local units (X and Y), centered on Center, for 2D games. It reaches Depth units in Z (1 by default) so
+// things at slightly different Z, such as sprites layered for drawing, still meet.
+public sealed class BoxCollider2D : Collider
+{
+    public Vector2 Size { get; set; } = Vector2.One;
+    public float Depth { get; set; } = 1f;
+}
+
+// A circle of Radius local units around Center, for 2D games. Scales with the object's larger X or Y scale.
+public sealed class CircleCollider2D : Collider
+{
+    public float Radius { get; set; } = 0.5f;
 }
