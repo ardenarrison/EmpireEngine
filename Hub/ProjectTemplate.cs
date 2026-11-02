@@ -1,7 +1,8 @@
 namespace EmpireHub;
 
-// Makes a new project folder: Scenes/Main.empirescene with a light, a sky, a camera and a flat terrain for ground,
-// empty Models and Scripts folders and project.empire. No art is bundled: the ground is a terrain, which the engine makes.
+// Makes a new project folder: Scenes/Main.empirescene, empty Scripts and Models (3D) or Sprites (2D) folders, and project.empire.
+// A 3D scene has a light, a sky, a camera and a flat terrain for ground; a 2D scene has a plain backdrop and an orthographic
+// camera looking straight at the X-Y plane. No art is bundled: the 3D ground is a terrain, which the engine makes.
 public static class ProjectTemplate
 {
     // Returns null when the name and location are usable, otherwise what is wrong with them.
@@ -20,18 +21,48 @@ public static class ProjectTemplate
         return null;
     }
 
-    public static string Create(string name, string location, string? editorVersion)
+    public static string Create(string name, string location, string? editorVersion, bool is2D = false)
     {
         string folder = Path.GetFullPath(Path.Combine(location, name));
         Directory.CreateDirectory(Path.Combine(folder, "Scenes"));
         Directory.CreateDirectory(Path.Combine(folder, "Scripts"));
-        Directory.CreateDirectory(Path.Combine(folder, "Models"));
+        Directory.CreateDirectory(Path.Combine(folder, is2D ? "Sprites" : "Models"));
 
-        File.WriteAllText(Path.Combine(folder, "Scenes", "Main.empirescene"), StarterScene());
+        File.WriteAllText(Path.Combine(folder, "Scenes", "Main.empirescene"), is2D ? StarterScene2D() : StarterScene());
         File.WriteAllText(Path.Combine(folder, ".gitignore"), "Generated/\nimgui.ini\n.DS_Store\n");
-        new EmpireProject { Name = name, EditorVersion = editorVersion }.Write(folder);
+        new EmpireProject { Name = name, EditorVersion = editorVersion, Type = is2D ? "2D" : "3D" }.Write(folder);
         return folder;
     }
+
+    // A flat backdrop and a camera 10 units in front of the X-Y plane, looking straight at it, showing 10 units from top to bottom.
+    private static string StarterScene2D() => $$"""
+        {
+          "formatVersion": 1,
+          "name": "Main",
+          "objects": [
+            {
+              "id": "{{Guid.NewGuid()}}",
+              "name": "Environment",
+              "position": [0, 0, 0],
+              "rotation": [0, 0, 0, 1],
+              "scale": [1, 1, 1],
+              "components": [
+                { "type": "Environment", "skyMode": "Color", "skyColor": [0.22, 0.28, 0.36] }
+              ]
+            },
+            {
+              "id": "{{Guid.NewGuid()}}",
+              "name": "Main Camera",
+              "position": [0, 0, 10],
+              "rotation": [0, 0, 0, 1],
+              "scale": [1, 1, 1],
+              "components": [
+                { "type": "Camera", "near": 0.1, "far": 100, "orthographic": true, "orthographicSize": 5 }
+              ]
+            }
+          ]
+        }
+        """;
 
     private static string StarterScene() => $$"""
         {

@@ -158,6 +158,17 @@
 <pre data-label="Terminal"><code class="language-sh">empire --lightmode "My Game/Scenes/Main.empirescene" "My Game"</code></pre>
 <p>The Hub does this for you: it opens editors with the look you chose under <em>About &gt; Appearance</em> (nothing is passed when that is <em>Match the system</em>, so the editor follows the system too). The look is chosen when the editor starts. It covers the panels, the code view, the visual script view, the terminal and the asset tiles; the 3D scene itself, and the logo screen every program opens with, are not themed.</p>
 
+<h2 id="2d-projects">2D projects</h2>
+<p>When you make a project in the Hub, choose <strong>2D</strong> or <strong>3D</strong>. The choice is kept as <code>"type"</code> in the project's <code>project.empire</code>; a project without one is 3D. A 2D project starts with a plain backdrop, an orthographic camera and a <code>Sprites</code> folder, and the editor works on the flat X-Y plane:</p>
+<ul>
+  <li>The scene view looks straight at the X-Y plane and never turns. Drag with the left mouse button on empty space, or with the right button anywhere, to slide the view; hold the right button and use <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> to move it. Scroll or pinch to zoom. Double-clicking an object in the Hierarchy centers and zooms on it.</li>
+  <li>The move and scale handles have no Z handle.</li>
+  <li>Drag a <strong>PNG, JPEG, BMP or GIF</strong> from the asset panel into the scene to place it as a sprite (a GIF shows its first frame). The Hierarchy's right-click menu has <em>Sprite</em> too, and <em>Add Component</em> has <em>Sprite Renderer</em>. Dropping a picture works in 3D projects as well.</li>
+  <li>New cameras are orthographic. Scenes don't get a sun, since sprites aren't lit.</li>
+</ul>
+<p>A sprite's <strong>Pixels Per Unit</strong> sets its size: a 100 x 50 picture at 100 is 1 x 0.5 world units. Sprites show their own colors, tinted by <strong>Tint</strong>, with see-through pixels left see-through. Which sprite is in front comes from Z: nearer the camera (larger Z) is drawn on top. Scripts, audio and UI work as in 3D.</p>
+<p><strong>2D physics.</strong> In a 2D project <em>Add Component</em> offers <strong>Rigidbody 2D</strong>, <strong>Box Collider 2D</strong> and <strong>Circle Collider 2D</strong> in place of the 3D ones. A Rigidbody 2D moves only across the X-Y plane (its Z never changes) and turns only around Z; gravity pulls down Y. A new 2D collider is fitted to the object's sprite. Box colliders reach half a unit either side in Z (their <em>Depth</em>, 1), so sprites layered at slightly different Z still meet. Triggers, collision events, the collision blocks and raycasts all work with them. In scripts, <code>rigidbody2D</code> gives the body, with <code>Velocity2D</code>, <code>AngularVelocity2D</code>, <code>AddForce(Vector2)</code> and <code>AddTorque(float)</code>; it is also a <code>Rigidbody</code>, so <code>GetComponent&lt;Rigidbody&gt;()</code> finds it.</p>
+
 <h2 id="project-settings">Project settings</h2>
 <p><strong>File &gt; Project Settings…</strong> opens the settings that belong to this project. They are saved in <code>project-settings.json</code> in the project folder, so they travel with the project and with version control.</p>
 <div class="table-wrap"><table>

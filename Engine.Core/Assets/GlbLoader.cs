@@ -12,7 +12,8 @@ public sealed record MaterialData(float[] BaseColor, float Roughness, float Meta
     ImageData? EmissiveImage = null, ImageData? OcclusionImage = null,
     float NormalScale = 1f, float OcclusionStrength = 1f,
     float AlphaCutoff = 0f,    // pixels with less alpha than this are not drawn; 0 means the surface is opaque
-    bool AlphaBlend = false);  // see-through: blended over what is behind it by its alpha, drawn after solid surfaces
+    bool AlphaBlend = false,   // see-through: blended over what is behind it by its alpha, drawn after solid surfaces
+    bool Unlit = false);       // shown in its own colors, untouched by lights and shadows (KHR_materials_unlit; sprites)
 
 public sealed record MeshData(string Name, float[] Positions, float[] Normals, float[] TexCoords, uint[] Indices, MaterialData Material)
 {

@@ -16,6 +16,18 @@
 
 <p>Component names in <em>Add Component</em> are on the left of each heading; the C# class is in brackets. Settings are properties on the class with the same name (without spaces): <em>Use Gravity</em> is <code>UseGravity</code>.</p>
 
+<h2>Sprite Renderer <small>(SpriteRenderer)</small></h2>
+<p>Shows a picture as a flat rectangle facing +Z, centered on the object. See <a href="editor.html#2d-projects">2D projects</a>.</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>Setting</th><th>Type</th><th>Default</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td>Sprite</td><td><code>string</code></td><td>empty</td><td>A PNG, JPEG, BMP or GIF, relative to the project folder</td></tr>
+    <tr><td>Tint</td><td><code>Vector4</code></td><td>white</td><td>Multiplies the picture's colors and alpha</td></tr>
+    <tr><td>Pixels Per Unit</td><td><code>float</code></td><td>100</td><td>How many of the picture's pixels make one world unit</td></tr>
+    <tr><td>Flip X, Flip Y</td><td><code>bool</code></td><td>off</td><td>Mirror the picture</td></tr>
+  </tbody>
+</table></div>
+
 <h2>Mesh <small>(MeshRenderer)</small></h2>
 <p>Draws a model. <a href="assets.html">Models →</a></p>
 <table>
@@ -35,6 +47,8 @@
 <table>
   <thead><tr><th>Setting</th><th>Type</th><th>Default</th><th>Meaning</th></tr></thead>
   <tbody>
+    <tr><td>Orthographic</td><td><code>bool</code></td><td>off (on in 2D projects)</td><td>Same size at any distance, as in a 2D game</td></tr>
+    <tr><td>Orthographic Size</td><td><code>float</code></td><td>5</td><td>Half the height of what an orthographic camera sees, in world units</td></tr>
     <tr><td>Focal Length</td><td><code>float</code></td><td>35</td><td>Millimeters on a 36 mm sensor; 35 ≈ 54° horizontal</td></tr>
     <tr><td>Near</td><td><code>float</code></td><td>0.1</td><td>Closest distance drawn</td></tr>
     <tr><td>Far</td><td><code>float</code></td><td>500</td><td>Farthest distance drawn</td></tr>
@@ -132,6 +146,21 @@
     <tr><td>Model</td><td>Mesh</td><td>empty</td><td>Empty uses the object's Mesh</td></tr>
   </tbody>
 </table>
+
+<h2>Rigidbody 2D <small>(Rigidbody2D)</small></h2>
+<p>The same settings as Rigidbody, for 2D projects: the body moves only across the X-Y plane and turns only around Z. Scripts also get <code>Velocity2D</code> (<code>Vector2</code>), <code>AngularVelocity2D</code> (radians per second around Z), <code>AddForce(Vector2)</code> and <code>AddTorque(float)</code>.</p>
+
+<h2>Box Collider 2D and Circle Collider 2D <small>(BoxCollider2D, CircleCollider2D)</small></h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Setting</th><th>On</th><th>Default</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td>Center</td><td>both</td><td>(0, 0)</td><td>In the object's local space</td></tr>
+    <tr><td>Size</td><td>Box</td><td>(1, 1)</td><td>Width and height in local units</td></tr>
+    <tr><td>Depth</td><td>Box</td><td>1</td><td>How far it reaches in Z, so things at slightly different Z still meet (scenes only; not in the Inspector)</td></tr>
+    <tr><td>Radius</td><td>Circle</td><td>0.5</td><td>Scales with the larger of X and Y</td></tr>
+    <tr><td>Friction, Bounciness, Is Trigger</td><td>both</td><td>0.5, 0, off</td><td>As for the 3D colliders</td></tr>
+  </tbody>
+</table></div>
 
 <h2>Terrain <small>(Terrain)</small></h2>
 <p>Sculptable, paintable ground that is also a collider. One per object. <a href="terrain.html">Terrain →</a></p>

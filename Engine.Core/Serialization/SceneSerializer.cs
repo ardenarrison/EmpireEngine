@@ -117,6 +117,12 @@ public static class SceneSerializer
         public float? Far { get; set; }
         public string? AntiAliasing { get; set; }
         public int? MsaaSamples { get; set; }
+        public bool? Orthographic { get; set; }   // cameras; left out when perspective
+        public float? OrthographicSize { get; set; }
+        public string? Sprite { get; set; }       // SpriteRenderer
+        public float? PixelsPerUnit { get; set; }
+        public bool? FlipX { get; set; }
+        public bool? FlipY { get; set; }
         public float? Exposure { get; set; }      // camera effects; each left out at its default
         public float? Contrast { get; set; }
         public float? Vignette { get; set; }
@@ -144,7 +150,8 @@ public static class SceneSerializer
         public float? Radius { get; set; }
         public float? Friction { get; set; }
         public float? Bounciness { get; set; }
-        public bool? IsTrigger { get; set; }          // colliders; left out when false
+        public bool? IsTrigger { get; set; }
+        public float? Depth { get; set; }             // BoxCollider2D; left out at 1          // colliders; left out when false
         public Dictionary<string, string>? Fields { get; set; }
         public string? Clip { get; set; }
         public bool? Mute { get; set; }
@@ -422,6 +429,19 @@ public static class SceneSerializer
                         Contrast = cam.Contrast != 1f ? cam.Contrast : null,
                         Vignette = cam.Vignette != 0f ? cam.Vignette : null,
                         Sharpen = cam.Sharpen != 0f ? cam.Sharpen : null,
+                        Orthographic = cam.Orthographic ? true : null,
+                        OrthographicSize = cam.Orthographic ? cam.OrthographicSize : null,
+                    });
+                    break;
+                case SpriteRenderer sprite:
+                    rec.Components.Add(new ComponentRecord
+                    {
+                        Type = "SpriteRenderer",
+                        Sprite = sprite.Sprite,
+                        Tint = sprite.Tint == Vector4.One ? null : [sprite.Tint.X, sprite.Tint.Y, sprite.Tint.Z, sprite.Tint.W],
+                        PixelsPerUnit = sprite.PixelsPerUnit,
+                        FlipX = sprite.FlipX ? true : null,
+                        FlipY = sprite.FlipY ? true : null,
                     });
                     break;
                 case UiElement ui:
@@ -447,7 +467,7 @@ public static class SceneSerializer
                 case Rigidbody rb:
                     rec.Components.Add(new ComponentRecord
                     {
-                        Type = "Rigidbody",
+                        Type = rb is Rigidbody2D ? "Rigidbody2D" : "Rigidbody",
                         Mass = rb.Mass,
                         UseGravity = rb.UseGravity,
                         IsKinematic = rb.IsKinematic,
@@ -456,6 +476,29 @@ public static class SceneSerializer
                         AngularDrag = rb.AngularDrag,
                         Velocity = runtime ? [rb.Velocity.X, rb.Velocity.Y, rb.Velocity.Z] : null,
                         AngularVelocity = runtime ? [rb.AngularVelocity.X, rb.AngularVelocity.Y, rb.AngularVelocity.Z] : null,
+                    });
+                    break;
+                case BoxCollider2D box2:
+                    rec.Components.Add(new ComponentRecord
+                    {
+                        Type = "BoxCollider2D",
+                        Center = [box2.Center.X, box2.Center.Y, box2.Center.Z],
+                        Size = [box2.Size.X, box2.Size.Y],
+                        Depth = box2.Depth != 1f ? box2.Depth : null,
+                        Friction = box2.Friction,
+                        Bounciness = box2.Bounciness,
+                        IsTrigger = box2.IsTrigger ? true : null,
+                    });
+                    break;
+                case CircleCollider2D circle:
+                    rec.Components.Add(new ComponentRecord
+                    {
+                        Type = "CircleCollider2D",
+                        Center = [circle.Center.X, circle.Center.Y, circle.Center.Z],
+                        Radius = circle.Radius,
+                        Friction = circle.Friction,
+                        Bounciness = circle.Bounciness,
+                        IsTrigger = circle.IsTrigger ? true : null,
                     });
                     break;
                 case BoxCollider box:
@@ -661,6 +704,18 @@ public static class SceneSerializer
                         Contrast = c.Contrast ?? 1f,
                         Vignette = c.Vignette ?? 0f,
                         Sharpen = c.Sharpen ?? 0f,
+                        Orthographic = c.Orthographic ?? false,
+                        OrthographicSize = c.OrthographicSize ?? 5f,
+                    });
+                    break;
+                case "SpriteRenderer":
+                    o.Components.Add(new SpriteRenderer
+                    {
+                        Sprite = c.Sprite ?? "",
+                        Tint = c.Tint is { Length: 4 } st ? new Vector4(st[0], st[1], st[2], st[3]) : Vector4.One,
+                        PixelsPerUnit = SpriteRenderer.ClampPixelsPerUnit(c.PixelsPerUnit ?? 100f),
+                        FlipX = c.FlipX ?? false,
+                        FlipY = c.FlipY ?? false,
                     });
                     break;
                 case "Ui":
@@ -692,16 +747,39 @@ public static class SceneSerializer
                     o.Components.Add(new Spin { Speed = c.Speed ?? 1f });
                     break;
                 case "Rigidbody":
-                    o.Components.Add(new Rigidbody
+                case "Rigidbody2D":
+                {
+                    var body = c.Type == "Rigidbody2D" ? new Rigidbody2D() : new Rigidbody();
+                    body.Mass = c.Mass ?? 1f;
+                    body.UseGravity = c.UseGravity ?? true;
+                    body.IsKinematic = c.IsKinematic ?? false;
+                    body.FreezeRotation = c.FreezeRotation ?? false;
+                    body.Drag = c.Drag ?? 0.05f;
+                    body.AngularDrag = c.AngularDrag ?? 0.05f;
+                    body.Velocity = Vec3(c.Velocity, Vector3.Zero);
+                    body.AngularVelocity = Vec3(c.AngularVelocity, Vector3.Zero);
+                    o.Components.Add(body);
+                    break;
+                }
+                case "BoxCollider2D":
+                    o.Components.Add(new BoxCollider2D
                     {
-                        Mass = c.Mass ?? 1f,
-                        UseGravity = c.UseGravity ?? true,
-                        IsKinematic = c.IsKinematic ?? false,
-                        FreezeRotation = c.FreezeRotation ?? false,
-                        Drag = c.Drag ?? 0.05f,
-                        AngularDrag = c.AngularDrag ?? 0.05f,
-                        Velocity = Vec3(c.Velocity, Vector3.Zero),
-                        AngularVelocity = Vec3(c.AngularVelocity, Vector3.Zero),
+                        Center = Vec3(c.Center, Vector3.Zero),
+                        Size = c.Size is { Length: >= 2 } s2 ? new Vector2(s2[0], s2[1]) : Vector2.One,
+                        Depth = c.Depth ?? 1f,
+                        Friction = c.Friction ?? 0.5f,
+                        Bounciness = c.Bounciness ?? 0f,
+                        IsTrigger = c.IsTrigger ?? false,
+                    });
+                    break;
+                case "CircleCollider2D":
+                    o.Components.Add(new CircleCollider2D
+                    {
+                        Center = Vec3(c.Center, Vector3.Zero),
+                        Radius = c.Radius ?? 0.5f,
+                        Friction = c.Friction ?? 0.5f,
+                        Bounciness = c.Bounciness ?? 0f,
+                        IsTrigger = c.IsTrigger ?? false,
                     });
                     break;
                 case "BoxCollider":

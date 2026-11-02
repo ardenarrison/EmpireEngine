@@ -79,6 +79,7 @@ public sealed class BrutalPlayer
         Engine.Core.Physics.PhysicsWorld.ModelLoader = _assets.GetModel;   // for mesh colliders
         Animator.ModelLoader = _assets.GetModel;                           // and for animations
         var terrains = new TerrainDrawer();
+        var sprites = new SpriteDrawer(_assets.GetImage);
         var scriptMeshes = new ScriptMeshes();
         var (center, radius) = FitCamera(scene);
         var clock = Stopwatch.StartNew();
@@ -119,8 +120,7 @@ public sealed class BrutalPlayer
             if (gameCam is { } g)
             {
                 eye = g.Obj.WorldMatrix.Translation;
-                viewProj = g.Cam.View(g.Obj.WorldMatrix) *
-                           VulkanMath.Projection(g.Cam.VerticalFov(aspect), aspect, g.Cam.Near, g.Cam.Far);
+                viewProj = g.Cam.View(g.Obj.WorldMatrix) * VulkanMath.ProjectionFor(g.Cam, aspect);
             }
             else
             {
@@ -142,6 +142,7 @@ public sealed class BrutalPlayer
 
             var sun = FindSun(scene);
             terrains.Sync(renderer, scene);
+            sprites.Sync(renderer, scene);
             scriptMeshes.Sweep(renderer);
             renderer.SetShadows(scene.Settings.Shadows && sun.Shadows, sun.ShadowStrength, sun.ShadowDistance, scene.Settings.ShadowResolution);
             renderer.BeginFrame(viewProj, eye, sun.Direction, sun.Radiance);
@@ -159,6 +160,7 @@ public sealed class BrutalPlayer
                     renderer.DrawModel(mr.Model, obj.WorldMatrix, mr.Tint, mr.Pose);
                 }
             terrains.Draw(renderer, scene);
+            sprites.Draw(renderer, scene);
             Particles.Draw(scene, renderer, eye);
 
             // The game's UI, in screen points over the game view; the canvas scales it to the framebuffer's pixels.

@@ -96,6 +96,8 @@ public sealed class EditorApp
     private bool _pickingScript;
     private string _newScriptName = "";
     private readonly TerrainDrawer _terrains = new();
+    private bool _is2D;                 // the project is 2D (project.empire): a flat, orthographic view and sprites
+    private SpriteDrawer _sprites = null!;
     private readonly ScriptMeshes _scriptMeshes = new();   // meshes scripts make at runtime, like water
     private PackageManagerWindow _packages = null!;
     private GlfwWindow? _window;
@@ -134,7 +136,11 @@ public sealed class EditorApp
     {
         _scenePath = scenePath;
         _contentRoot = contentRoot;
+        _is2D = ProjectFile.Is2D(contentRoot);
+        _camera.Is2D = _is2D;
+        _gizmo.Flat = _is2D;
         _assets = new AssetCache(contentRoot);
+        _sprites = new SpriteDrawer(_assets.GetImage);
         Engine.Core.Physics.PhysicsWorld.ModelLoader = _assets.GetModel;   // mesh colliders read models through the cache
         Animator.ModelLoader = _assets.GetModel;                           // and so do animations
         AudioEngine.ClipLoader = _assets.GetAudio;                         // so do sounds
@@ -171,7 +177,7 @@ public sealed class EditorApp
         Editor.Code.CodeEditorView.ExtraReferences = () => Packages.Enabled(_contentRoot)
             .Select(id => Packages.DllPath(_contentRoot, id)).Where(File.Exists);
         _scene = SceneSerializer.Load(scenePath);
-        EnsureSun();
+        if (!_is2D) EnsureSun();   // sprites aren't lit, so a 2D scene doesn't need a sun
         EnsureCamera();
         _savedJson = SceneSerializer.ToJson(_scene);
         _history.Reset(_savedJson);
@@ -380,6 +386,7 @@ public sealed class EditorApp
             }
             else if (_mode == EditorMode.Edit)
             {
+                _camera.ViewHeightPixels = SceneArea(ctx).W;
                 _camera.Update(window, dt, uiWantsMouse, ImGui.GetIO().MouseWheel);
                 if (!uiWantsMouse) _camera.Pinch(_pinch);
                 _pinch = 0f;
@@ -426,13 +433,14 @@ public sealed class EditorApp
             {
                 // Play mode renders through the scene camera, the same way the compiled game does.
                 eye = g.Obj.WorldMatrix.Translation;
-                viewProj = g.Cam.View(g.Obj.WorldMatrix) *
-                           VulkanMath.Projection(g.Cam.VerticalFov(aspect), aspect, g.Cam.Near, g.Cam.Far);
+                viewProj = g.Cam.View(g.Obj.WorldMatrix) * VulkanMath.ProjectionFor(g.Cam, aspect);
             }
             else
             {
                 eye = _camera.Position;
-                viewProj = _camera.View * VulkanMath.Projection(MathF.PI / 3f, aspect, _camera.Near, _camera.Far);
+                viewProj = _camera.View * (_is2D
+                    ? VulkanMath.Orthographic(_camera.OrthoSize, aspect, _camera.Near, _camera.Far)
+                    : VulkanMath.Projection(MathF.PI / 3f, aspect, _camera.Near, _camera.Far));
             }
             var sceneArea = SceneArea(ctx);
             Input.SetView(new Vector2(sceneArea.Z, sceneArea.W), viewProj);   // for Input.GetMouseRay in scripts
@@ -476,6 +484,8 @@ public sealed class EditorApp
             {
                 if (AudioClip.IsAudio(drop.ModelPath))
                     DropSoundIntoScene(drop.ModelPath, drop.Cursor, ctx.SceneViewport, viewProj);
+                else if (SpriteRenderer.IsSpriteImage(drop.ModelPath))
+                    DropSpriteIntoScene(drop.ModelPath, drop.Cursor, ctx.SceneViewport, viewProj);
                 else
                     DropModelIntoScene(renderer, drop.ModelPath, drop.Cursor, ctx.SceneViewport, viewProj);
             }
@@ -490,6 +500,7 @@ public sealed class EditorApp
 
             var sun = FindSun();
             _terrains.Sync(renderer, _scene);
+            _sprites.Sync(renderer, _scene);
             _scriptMeshes.Sweep(renderer);
             renderer.SetShadows(_scene.Settings.Shadows && (sun?.Shadows ?? false), sun?.ShadowStrength ?? 0f, sun?.ShadowDistance ?? 40f, _scene.Settings.ShadowResolution);
             renderer.BeginFrame(viewProj, eye,
@@ -506,6 +517,7 @@ public sealed class EditorApp
             if (!FullView)
             {
                 _terrains.Draw(renderer, _scene);
+                _sprites.Draw(renderer, _scene);
                 Particles.Draw(_scene, renderer, eye);
             }
             var canvasSize = ImGui.GetIO().DisplaySize;
@@ -621,6 +633,7 @@ public sealed class EditorApp
             g.TextDisabled("Objects");
             if (g.MenuItem("Add Object")) AddObject();
             if (g.MenuItem("Add Camera")) AddCamera();
+            if (g.MenuItem("Sprite")) AddSpriteObject();
             g.Separator();
             g.TextDisabled("Lighting");
             if (g.MenuItem("Point Light")) AddLightObject("Point Light", new PointLight(), pitch: 0f);
@@ -748,6 +761,7 @@ public sealed class EditorApp
         string title = comp switch
         {
             MeshRenderer => "Mesh",
+            SpriteRenderer => "Sprite Renderer",
             ScriptComponent sc when _scriptFields.Find(sc.ScriptName) is { IsComponent: true } custom => custom.Name,
             ScriptComponent => "Script",
             Spin => "Spin",
@@ -756,7 +770,10 @@ public sealed class EditorApp
             PointLight => "Point Light",
             SpotLight => "Spot Light",
             SceneEnvironment => "Environment",
+            Rigidbody2D => "Rigidbody 2D",
             Rigidbody => "Rigidbody",
+            BoxCollider2D => "Box Collider 2D",
+            CircleCollider2D => "Circle Collider 2D",
             BoxCollider => "Box Collider",
             SphereCollider => "Sphere Collider",
             MeshCollider => "Mesh Collider",
@@ -779,6 +796,9 @@ public sealed class EditorApp
         {
             case MeshRenderer mr:
                 DrawMeshBody(obj, mr, editing);
+                break;
+            case SpriteRenderer sprite:
+                DrawSpriteBody(sprite, editing);
                 break;
             case ScriptComponent script:
                 DrawScriptBody(obj, script, editing, index);
@@ -806,6 +826,12 @@ public sealed class EditorApp
                 break;
             case BoxCollider box:
                 DrawBoxColliderBody(box, editing);
+                break;
+            case BoxCollider2D box2:
+                DrawBoxCollider2DBody(box2, editing);
+                break;
+            case CircleCollider2D circle:
+                DrawCircleColliderBody(circle, editing);
                 break;
             case SphereCollider sphere:
                 DrawSphereColliderBody(sphere, editing);
@@ -1927,6 +1953,8 @@ public sealed class EditorApp
         bool freeze = rb.FreezeRotation;
         if (g.Checkbox("Freeze Rotation", ref freeze) && editing)
             rb.FreezeRotation = freeze;
+        if (rb is Rigidbody2D)
+            g.TextWrapped("Moves only across the X-Y plane and turns only around Z. Use it with the 2D colliders.", Gui.DimColor);
         float drag = rb.Drag;
         if (g.DragFloat("Drag", ref drag, 0.01f, 0f, 100f) && editing)
             rb.Drag = MathF.Max(0f, drag);
@@ -1945,6 +1973,30 @@ public sealed class EditorApp
         if (g.DragFloat3("Size", ref size, 0.01f, 0.001f, 10000f) && editing)
             box.Size = Vector3.Max(new Vector3(size.X, size.Y, size.Z), new Vector3(0.001f));
         DrawColliderMaterial(box, editing);
+    }
+
+    private void DrawBoxCollider2DBody(BoxCollider2D box, bool editing)
+    {
+        var g = _gui;
+        var center = new float2(box.Center.X, box.Center.Y);
+        if (g.DragFloat2("Center", ref center, 0.01f) && editing)
+            box.Center = new Vector3(center.X, center.Y, box.Center.Z);
+        var size = new float2(box.Size.X, box.Size.Y);
+        if (g.DragFloat2("Size", ref size, 0.01f, 0.001f, 10000f) && editing)
+            box.Size = Vector2.Max(new Vector2(size.X, size.Y), new Vector2(0.001f));
+        DrawColliderMaterial(box, editing);
+    }
+
+    private void DrawCircleColliderBody(CircleCollider2D circle, bool editing)
+    {
+        var g = _gui;
+        var center = new float2(circle.Center.X, circle.Center.Y);
+        if (g.DragFloat2("Center", ref center, 0.01f) && editing)
+            circle.Center = new Vector3(center.X, center.Y, circle.Center.Z);
+        float radius = circle.Radius;
+        if (g.DragFloat("Radius", ref radius, 0.01f, 0.001f, 10000f) && editing)
+            circle.Radius = MathF.Max(0.001f, radius);
+        DrawColliderMaterial(circle, editing);
     }
 
     private void DrawSphereColliderBody(SphereCollider sphere, bool editing)
@@ -2025,9 +2077,14 @@ public sealed class EditorApp
     }
 
     // A new collider is fitted to the object's model when it has one, otherwise it is a unit shape.
-    private void AddCollider(SceneObject obj, bool sphere)
+    private void AddCollider(SceneObject obj, bool sphere, bool flat = false)
     {
         Vector3? min = null, max = null;
+        if (obj.Components.OfType<SpriteRenderer>().FirstOrDefault() is { } sprite && _sprites.Model(sprite) is { } spriteModel)
+        {
+            min = spriteModel.BoundsMin;
+            max = spriteModel.BoundsMax;
+        }
         if (obj.Components.OfType<MeshRenderer>().FirstOrDefault() is { Model.Length: > 0 } mr)
         {
             try
@@ -2047,7 +2104,11 @@ public sealed class EditorApp
 
         var center = min is { } lo && max is { } hi ? (lo + hi) / 2f : Vector3.Zero;
         var size = min is { } lo2 && max is { } hi2 ? Vector3.Max(hi2 - lo2, new Vector3(0.001f)) : Vector3.One;
-        if (sphere)
+        if (flat && sphere)
+            obj.Components.Add(new CircleCollider2D { Center = center with { Z = 0f }, Radius = MathF.Max(size.X, size.Y) / 2f });
+        else if (flat)
+            obj.Components.Add(new BoxCollider2D { Center = center with { Z = 0f }, Size = new Vector2(size.X, size.Y) });
+        else if (sphere)
             obj.Components.Add(new SphereCollider { Center = center, Radius = MathF.Max(size.X, MathF.Max(size.Y, size.Z)) / 2f });
         else
             obj.Components.Add(new BoxCollider { Center = center, Size = size });
@@ -2080,6 +2141,28 @@ public sealed class EditorApp
                         foreach (int bit in new[] { 1, 2, 4 })
                             if ((i & bit) == 0)
                                 DrawWorldLine(draw, world, viewProj, size, corners[i], corners[i | bit], color, thickness);
+                }
+                else if (collider is BoxCollider2D box2)
+                {
+                    // The rectangle, on the object's plane.
+                    var h = box2.Size / 2f;
+                    var c = box2.Center;
+                    var corners = new[] { c + new Vector3(-h.X, -h.Y, 0), c + new Vector3(h.X, -h.Y, 0), c + new Vector3(h.X, h.Y, 0), c + new Vector3(-h.X, h.Y, 0) };
+                    for (int i = 0; i < 4; i++)
+                        DrawWorldLine(draw, world, viewProj, size, corners[i], corners[(i + 1) % 4], color, thickness);
+                }
+                else if (collider is CircleCollider2D circle && Matrix4x4.Decompose(world, out var cScale, out var cRotation, out _))
+                {
+                    // Matches the physics: the radius scales with the larger of X and Y.
+                    float r = circle.Radius * MathF.Max(MathF.Abs(cScale.X), MathF.Abs(cScale.Y));
+                    var disc = Matrix4x4.CreateScale(r) * Matrix4x4.CreateFromQuaternion(cRotation) *
+                               Matrix4x4.CreateTranslation(Vector3.Transform(circle.Center, world));
+                    const int segments = 40;
+                    for (int i = 0; i < segments; i++)
+                    {
+                        float a0 = i * MathF.Tau / segments, a1 = (i + 1) * MathF.Tau / segments;
+                        DrawWorldLine(draw, disc, viewProj, size, new Vector3(MathF.Cos(a0), MathF.Sin(a0), 0), new Vector3(MathF.Cos(a1), MathF.Sin(a1), 0), color, thickness);
+                    }
                 }
                 else if (collider is MeshCollider mesh && MeshColliderModel(obj, mesh) is { } path)
                 {
@@ -2174,12 +2257,52 @@ public sealed class EditorApp
             g.TextDisabled("See-through: blended over what is behind it.");
     }
 
+    // The picture, its size and its flips.
+    private void DrawSpriteBody(SpriteRenderer sprite, bool editing)
+    {
+        var g = _gui;
+        var images = SpriteImages();
+        if (images.Count == 0)
+            g.TextWrapped("There are no pictures in the project yet. Put a PNG, JPEG, BMP or GIF in the project folder (Sprites/ is a good place).", Gui.DimColor);
+        else
+        {
+            var options = images.Prepend("(none)").ToList();
+            int current = Math.Max(0, images.FindIndex(i => string.Equals(i, sprite.Sprite, StringComparison.OrdinalIgnoreCase)) + 1);
+            if (g.Combo("Sprite", current, options, out int picked) && editing)
+                sprite.Sprite = picked == 0 ? "" : images[picked - 1];
+        }
+        if (sprite.Sprite.Length > 0 && _sprites.Model(sprite) is null)
+            g.TextWrapped($"{sprite.Sprite} can't be read as a picture.", Gui.ErrorColor);
+        var tint = sprite.Tint;
+        if (g.ColorEdit("Tint", ref tint) && editing) sprite.Tint = tint;
+        float ppu = sprite.PixelsPerUnit;
+        if (g.DragFloat("Pixels Per Unit", ref ppu, 1f, 0.01f, 100_000f) && editing) sprite.PixelsPerUnit = SpriteRenderer.ClampPixelsPerUnit(ppu);
+        bool flipX = sprite.FlipX, flipY = sprite.FlipY;
+        if (g.Checkbox("Flip X", ref flipX) && editing) sprite.FlipX = flipX;
+        if (g.Checkbox("Flip Y", ref flipY) && editing) sprite.FlipY = flipY;
+        g.TextWrapped("Pixels Per Unit is how many of the picture's pixels make one world unit. Sprites show their own colors " +
+                      "(lights don't change them); nearer the camera is drawn in front.", Gui.DimColor);
+    }
+
     private void DrawCameraBody(SceneObject obj, CameraComponent cam, bool editing)
     {
         var g = _gui;
-        float focal = cam.FocalLength;
-        if (g.DragFloat("Focal Length (mm)", ref focal, 0.5f, 1f, 300f) && editing)
-            cam.FocalLength = focal;
+        bool ortho = cam.Orthographic;
+        if (g.Checkbox("Orthographic", ref ortho) && editing)
+            cam.Orthographic = ortho;
+        if (cam.Orthographic)
+        {
+            float orthoSize = cam.OrthographicSize;
+            if (g.DragFloat("Size", ref orthoSize, 0.05f, 0.01f, 10_000f) && editing)
+                cam.OrthographicSize = orthoSize;
+            g.TextWrapped("Half the height of what the camera sees, in world units. Things look the same size at any distance, as in a 2D game.", Gui.DimColor);
+        }
+        else
+        {
+            float focal = cam.FocalLength;
+            if (g.DragFloat("Focal Length (mm)", ref focal, 0.5f, 1f, 300f) && editing)
+                cam.FocalLength = focal;
+        }
         float near = cam.Near;
         if (g.DragFloat("Near", ref near, 0.01f, 0.01f, 100f) && editing)
             cam.Near = near;
@@ -2401,19 +2524,32 @@ public sealed class EditorApp
         }
 
         Add("Mesh", () => AddMeshComponent(obj));
+        if (!obj.Components.OfType<SpriteRenderer>().Any())
+            Add("Sprite Renderer", () => obj.Components.Add(new SpriteRenderer { Sprite = SpriteImages().FirstOrDefault() ?? "" }));
         Add("Script", () => _pickingScript = true);
         Add("Spin", () => obj.Components.Add(new Spin()));
-        Add("Camera", () => obj.Components.Add(new CameraComponent()));
+        Add("Camera", () => obj.Components.Add(NewCamera()));
         Add("Directional Light", () => obj.Components.Add(new DirectionalLight()));
         Add("Point Light", () => obj.Components.Add(new PointLight()));
         Add("Spot Light", () => obj.Components.Add(new SpotLight()));
         if (!obj.Components.OfType<SceneEnvironment>().Any())
             Add("Environment", () => obj.Components.Add(new SceneEnvironment()));
-        if (!obj.Components.OfType<Rigidbody>().Any())
-            Add("Rigidbody", () => obj.Components.Add(new Rigidbody()));
-        Add("Box Collider", () => AddCollider(obj, sphere: false));
-        Add("Sphere Collider", () => AddCollider(obj, sphere: true));
-        Add("Mesh Collider", () => obj.Components.Add(new MeshCollider()));
+        // A 2D project gets the 2D physics components; a 3D one the 3D ones.
+        if (_is2D)
+        {
+            if (!obj.Components.OfType<Rigidbody>().Any())
+                Add("Rigidbody 2D", () => obj.Components.Add(new Rigidbody2D()));
+            Add("Box Collider 2D", () => AddCollider(obj, sphere: false, flat: true));
+            Add("Circle Collider 2D", () => AddCollider(obj, sphere: true, flat: true));
+        }
+        else
+        {
+            if (!obj.Components.OfType<Rigidbody>().Any())
+                Add("Rigidbody", () => obj.Components.Add(new Rigidbody()));
+            Add("Box Collider", () => AddCollider(obj, sphere: false));
+            Add("Sphere Collider", () => AddCollider(obj, sphere: true));
+            Add("Mesh Collider", () => obj.Components.Add(new MeshCollider()));
+        }
         Add("Particle System", () => obj.Components.Add(new ParticleSystem()));
         if (!obj.Components.OfType<Terrain>().Any())
             Add("Terrain", () => obj.Components.Add(NewTerrain()));
@@ -2529,7 +2665,8 @@ public sealed class EditorApp
 
             var world = obj.WorldMatrix;
             const float depth = 1f;   // frustum length in local units
-            float halfH = depth * MathF.Tan(cam.VerticalFov(aspect) / 2f);
+            // An orthographic camera shows the rectangle it sees, at its real size; a perspective one a small frustum.
+            float halfH = cam.Orthographic ? MathF.Max(cam.OrthographicSize, 0.01f) : depth * MathF.Tan(cam.VerticalFov(aspect) / 2f);
             float halfW = halfH * aspect;
             var apex = Vector3.Zero;   // the lens, at the object's origin
 
@@ -2543,7 +2680,7 @@ public sealed class EditorApp
             };
             for (int i = 0; i < 4; i++)
             {
-                DrawWorldLine(draw, world, viewProj, size, apex, corners[i], color, 1.25f);
+                if (!cam.Orthographic) DrawWorldLine(draw, world, viewProj, size, apex, corners[i], color, 1.25f);
                 DrawWorldLine(draw, world, viewProj, size, corners[i], corners[(i + 1) % 4], color, 1.25f);
             }
 
@@ -3149,7 +3286,7 @@ public sealed class EditorApp
 
     // Where something dropped at the cursor lands in the world: on the ground plane (y = 0) under the cursor, or else
     // 10 units ahead. Null when the cursor is not over the scene view.
-    private static Vector3? DropPoint(float2 cursor, float4 viewport, Matrix4x4 viewProj)
+    private Vector3? DropPoint(float2 cursor, float4 viewport, Matrix4x4 viewProj)
     {
         var display = ImGui.GetIO().DisplaySize;
         float left = viewport.X * display.X, top = viewport.Y * display.Y;
@@ -3169,6 +3306,9 @@ public sealed class EditorApp
         var rayEnd = new Vector3(farH.X, farH.Y, farH.Z) / farH.W;
         var dir = Vector3.Normalize(rayEnd - rayStart);
 
+        // A 2D project puts things on the X-Y plane (z = 0); a 3D one on the ground (y = 0), or 10 units out.
+        if (_is2D)
+            return MathF.Abs(dir.Z) > 1e-6f ? rayStart + dir * (-rayStart.Z / dir.Z) : new Vector3(rayStart.X, rayStart.Y, 0f);
         var spawn = rayStart + dir * 10f;
         if (MathF.Abs(dir.Y) > 1e-4f)
         {
@@ -3191,6 +3331,50 @@ public sealed class EditorApp
         _selectedId = obj.Id;
         Console.WriteLine($"Placed {relPath} in the scene as an Audio Source.");
     }
+
+    // Makes an object that shows a picture dragged from the asset panel onto the scene, at the drop point.
+    private void DropSpriteIntoScene(string relPath, float2 cursor, float4 viewport, Matrix4x4 viewProj)
+    {
+        if (DropPoint(cursor, viewport, viewProj) is not { } spawn)
+            return;
+        var obj = new SceneObject { Name = Path.GetFileNameWithoutExtension(relPath), Position = spawn };
+        obj.Components.Add(new SpriteRenderer { Sprite = relPath });
+        _scene.Add(obj);
+        _selectedId = obj.Id;
+        Console.WriteLine($"Placed {relPath} in the scene as a sprite.");
+    }
+
+    // An empty object with a Sprite Renderer, picked from the hierarchy's right-click menu.
+    private void AddSpriteObject()
+    {
+        var obj = new SceneObject { Name = "Sprite", Position = _is2D ? new Vector3(_camera.Position.X, _camera.Position.Y, 0f) : Vector3.Zero };
+        obj.Components.Add(new SpriteRenderer { Sprite = SpriteImages().FirstOrDefault() ?? "" });
+        _scene.Add(obj);
+        _selectedId = obj.Id;
+    }
+
+    // The pictures in the project a sprite can show, as paths relative to the project folder, found again every two seconds.
+    private List<string> SpriteImages()
+    {
+        if (Environment.TickCount64 - _spriteListTime < 2000 && _spriteList is { } cached) return cached;
+        var found = new List<string>();
+        try
+        {
+            foreach (var file in Directory.EnumerateFiles(_contentRoot, "*", SearchOption.AllDirectories))
+            {
+                string rel = Path.GetRelativePath(_contentRoot, file).Replace('\\', '/');
+                if (SpriteRenderer.IsSpriteImage(file) && !rel.StartsWith("Generated/", StringComparison.OrdinalIgnoreCase) &&
+                    !rel.Split('/').Any(part => part.StartsWith('.')))
+                    found.Add(rel);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        found.Sort(StringComparer.OrdinalIgnoreCase);
+        _spriteListTime = Environment.TickCount64;
+        return _spriteList = found;
+    }
+    private List<string>? _spriteList;
+    private long _spriteListTime;
 
     // An empty object with an Audio Source, picked from the hierarchy's right-click menu.
     private void AddAudioSourceObject()
@@ -3540,8 +3724,8 @@ public sealed class EditorApp
 
     private void AddCamera()
     {
-        var obj = new SceneObject { Name = $"Camera {_scene.All.Count() + 1}", Position = new Vector3(0, 2, 6) };
-        obj.Components.Add(new CameraComponent());
+        var obj = new SceneObject { Name = $"Camera {_scene.All.Count() + 1}", Position = _is2D ? new Vector3(0, 0, 10) : new Vector3(0, 2, 6) };
+        obj.Components.Add(NewCamera());
         _scene.Add(obj);
         _selectedId = obj.Id;
     }
@@ -3676,10 +3860,13 @@ public sealed class EditorApp
     private void EnsureCamera()
     {
         if (GameCamera() is not null) return;
-        var obj = new SceneObject { Name = "Main Camera", Position = new Vector3(0, 2, 6) };
-        obj.Components.Add(new CameraComponent());
+        var obj = new SceneObject { Name = "Main Camera", Position = _is2D ? new Vector3(0, 0, 10) : new Vector3(0, 2, 6) };
+        obj.Components.Add(NewCamera());
         _scene.Add(obj);
     }
+
+    // A new camera: orthographic and looking at the X-Y plane in a 2D project, the usual perspective camera in 3D.
+    private CameraComponent NewCamera() => _is2D ? new CameraComponent { Orthographic = true, Far = 100f } : new CameraComponent();
 
     // Scenes without a sun get one, so lighting always has a source.
     private void EnsureSun()
@@ -3725,6 +3912,21 @@ public sealed class EditorApp
             }
         }
 
+        if (obj.Components.OfType<SpriteRenderer>().FirstOrDefault() is { } sprite && _sprites.Model(sprite) is { } spriteModel)
+        {
+            center = Vector3.Transform((spriteModel.BoundsMin + spriteModel.BoundsMax) / 2f, world);
+            float scale = MathF.Max(new Vector3(world.M11, world.M12, world.M13).Length(), new Vector3(world.M21, world.M22, world.M23).Length());
+            radius = MathF.Max(0.05f, (spriteModel.BoundsMax - spriteModel.BoundsMin).Length() / 2f * scale);
+        }
+
+        if (_is2D)
+        {
+            // Straight on: centered on the object, zoomed so it fills about two thirds of the view.
+            _camera.Position = new Vector3(center.X, center.Y, _camera.Position.Z);
+            _camera.OrthoSize = Math.Clamp(radius * 1.5f, EditorCamera.MinOrthoSize, EditorCamera.MaxOrthoSize);
+            _camera.Focus = center;
+            return;
+        }
         float distance = MathF.Max(radius * 2.5f, _camera.Near * 4f);
         _camera.Position = center - _camera.Forward * distance;
         _camera.Focus = center;
@@ -3759,7 +3961,9 @@ public sealed class EditorApp
             {
                 if (!_sceneLooking && MathF.Abs(mouse.X - start.X) + MathF.Abs(mouse.Y - start.Y) > 5f)
                     _sceneLooking = true;
-                if (_sceneLooking)
+                if (_sceneLooking && _is2D)
+                    _camera.Pan(mouse.X - _sceneClickLast.X, mouse.Y - _sceneClickLast.Y);   // a 2D view slides instead of turning
+                else if (_sceneLooking)
                 {
                     _camera.Yaw += (mouse.X - _sceneClickLast.X) * 0.003f;
                     _camera.Pitch = Math.Clamp(_camera.Pitch - (mouse.Y - _sceneClickLast.Y) * 0.003f, -1.5f, 1.5f);
@@ -3830,6 +4034,11 @@ public sealed class EditorApp
                         distance = Vector3.Distance(origin, Vector3.Transform(localOrigin + Vector3.Normalize(localDir) * t, world));
                 }
 
+                foreach (var sprite in obj.Components.OfType<SpriteRenderer>())
+                    if (_sprites.Model(sprite) is { } spriteModel &&
+                        RayBox(localOrigin, localDir, spriteModel.BoundsMin, spriteModel.BoundsMax, out float st))
+                        distance = MathF.Min(distance, Vector3.Distance(origin, Vector3.Transform(localOrigin + localDir * st, world)));
+
                 if (obj.Components.OfType<MeshRenderer>().FirstOrDefault() is { Model.Length: > 0 } mr)
                 {
                     try
@@ -3848,6 +4057,7 @@ public sealed class EditorApp
 
             if (distance == float.MaxValue && !obj.Components.OfType<Terrain>().Any() &&
                 !obj.Components.OfType<MeshRenderer>().Any(m => m.Model.Length > 0) &&
+                !obj.Components.OfType<SpriteRenderer>().Any(sp => _sprites.Model(sp) is not null) &&
                 ProjectToScreen(world.Translation, viewProj, area) is { } screen &&
                 MathF.Abs(screen.X - mouse.X) < 14f && MathF.Abs(screen.Y - mouse.Y) < 14f)
                 distance = Vector3.Distance(eye, world.Translation);
@@ -3909,6 +4119,8 @@ public sealed class EditorApp
                 try { model = _assets.GetModel(mr.Model); }
                 catch (Exception) { /* drawn as a marker */ }
             }
+            if (model is null && obj.Components.OfType<SpriteRenderer>().FirstOrDefault() is { } sprite)
+                model = _sprites.Model(sprite);   // a sprite is outlined around its rectangle
             _outline.Draw(draw, obj, model, obj.Components.OfType<Terrain>().FirstOrDefault(), obj == _selected, viewProj,
                           size, eye, seconds);
         }
@@ -3917,6 +4129,18 @@ public sealed class EditorApp
     private void FitCamera()
     {
         var positions = _scene.All.Select(o => o.Position).ToList();
+        if (_is2D)
+        {
+            // Straight at the X-Y plane from in front, around the middle of the objects (the cameras aside, which sit out in Z).
+            var flat = _scene.All.Where(o => !o.Components.OfType<CameraComponent>().Any()).Select(o => o.Position).ToList();
+            var middle = flat.Count == 0 ? Vector3.Zero : flat.Aggregate(Vector3.Zero, (a, b) => a + b) / flat.Count;
+            float reach = flat.Count == 0 ? 0f : flat.Max(p => MathF.Max(MathF.Abs(p.X - middle.X) / VulkanContext.SceneAspect, MathF.Abs(p.Y - middle.Y)));
+            _camera.Position = new Vector3(middle.X, middle.Y, MathF.Min(100f, _camera.Far * 0.5f));
+            _camera.Yaw = _camera.Pitch = 0f;
+            _camera.OrthoSize = Math.Clamp(reach * 1.3f + 2f, 5f, EditorCamera.MaxOrthoSize);
+            _camera.Focus = new Vector3(middle.X, middle.Y, 0f);
+            return;
+        }
         if (positions.Count == 0)
         {
             _camera.Position = new Vector3(0, 2, 6);

@@ -248,6 +248,11 @@ public sealed class CameraComponent : Component
     public float Far { get; set; } = 500f;
     public AntiAliasingMode AntiAliasing { get; set; } = AntiAliasingMode.None;
 
+    // An orthographic camera shows things the same size however far away they are, as 2D games do. OrthographicSize is half
+    // the height of what it sees, in world units (5 shows 10 units from top to bottom); FocalLength is then not used.
+    public bool Orthographic { get; set; }
+    public float OrthographicSize { get; set; } = 5f;
+
     // Samples per pixel when AntiAliasing is Msaa: 2, 4 or 8. A GPU that can't do that many uses its highest.
     public int MsaaSamples { get; set; } = 4;
 

@@ -4,7 +4,7 @@ using Avalonia.Platform.Storage;
 
 namespace EmpireHub;
 
-// Asks for a name, a location and an editor version, then creates the project. Closes with the new folder's path,
+// Asks for a name, a location, 2D or 3D and an editor version, then creates the project. Closes with the new folder's path,
 // or null when cancelled.
 public partial class NewProjectWindow : Window
 {
@@ -62,7 +62,7 @@ public partial class NewProjectWindow : Window
         try
         {
             string version = (VersionBox.SelectedItem as EditorInstall)?.Version ?? "";
-            Close(ProjectTemplate.Create(NameBox.Text!, LocationBox.Text!, version.Length == 0 ? null : version));
+            Close(ProjectTemplate.Create(NameBox.Text!, LocationBox.Text!, version.Length == 0 ? null : version, is2D: Type2D.IsChecked == true));
         }
         catch (Exception ex)
         {
