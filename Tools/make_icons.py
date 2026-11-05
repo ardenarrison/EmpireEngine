@@ -12,6 +12,9 @@ Writes, next to EmpireEngineIcon.png:
     EmpireEngineIcon-mac.png   macOS Dock: the crown on a white rounded square laid out on Apple's icon grid (an 824 pixel
                          tile with a 100 pixel margin on a 1024 canvas, and a soft shadow under it), so it looks like
                          the other apps in the Dock.
+    iPad/Assets.xcassets/AppIcon.appiconset/Icon-1024.png
+                         iPad: the crown on a white square reaching every edge, with no transparency. iPadOS rounds the
+                         corners itself.
 Needs Pillow (pip install Pillow).
 """
 import io
@@ -23,6 +26,7 @@ from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
 ROOT = Path(__file__).resolve().parent.parent
 SOURCE = ROOT / "EmpireEngineIcon.png"
+IPAD_ICON = ROOT / "iPad" / "Assets.xcassets" / "AppIcon.appiconset" / "Icon-1024.png"
 
 CANVAS = 1024
 TILE = 824              # Apple's icon grid: the tile, centered, leaves 100 pixels on each side
@@ -69,6 +73,15 @@ def mac_icon(art):
     return icon
 
 
+def ipad_icon(art):
+    icon = Image.new("RGBA", (CANVAS, CANVAS), (255, 255, 255, 255))
+    crown = art.crop(art.getchannel("A").getbbox())
+    scale = CANVAS * ART_SHARE / max(crown.size)
+    crown = crown.resize((round(crown.width * scale), round(crown.height * scale)), Image.LANCZOS)
+    icon.alpha_composite(crown, ((CANVAS - crown.width) // 2, (CANVAS - crown.height) // 2))
+    return icon.convert("RGB")
+
+
 # The picture kinds an .icns file can hold as PNG: the four-letter type and the size in pixels (the 2x ones are for Retina screens).
 ICNS_TYPES = [("icp4", 16), ("icp5", 32), ("icp6", 64), ("ic07", 128), ("ic08", 256), ("ic09", 512), ("ic10", 1024),
               ("ic11", 32), ("ic12", 64), ("ic13", 256), ("ic14", 512)]
@@ -94,7 +107,8 @@ def main():
     crown = art.crop(art.getchannel("A").getbbox())
     crown.resize((512, round(crown.height * 512 / crown.width)), Image.LANCZOS).save(
         ROOT / "Engine.Brutal" / "Ui" / "Logos" / "EmpireEngineCrown.png", optimize=True)
-    print("Wrote EmpireEngineIcon.ico, EmpireEngineIcon.icns, EmpireEngineIcon-mac.png and Engine.Brutal/Ui/Logos/EmpireEngineCrown.png")
+    ipad_icon(art).save(IPAD_ICON, optimize=True)
+    print("Wrote EmpireEngineIcon.ico, EmpireEngineIcon.icns, EmpireEngineIcon-mac.png, Engine.Brutal/Ui/Logos/EmpireEngineCrown.png and the iPad icon")
 
 
 if __name__ == "__main__":

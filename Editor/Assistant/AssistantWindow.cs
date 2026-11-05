@@ -372,7 +372,7 @@ public sealed class AssistantWindow
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { _notice = "Couldn't save the assistant's settings: " + ex.Message; }
     }
 
-    private static void Copy(string text) => ImGui.SetClipboardText(text.ToU8());
+    private static void Copy(string text) => UiInput.Current.SetClipboardText(text);
 
     // Opens one of the fixed Anthropic pages in the browser.
     private static void OpenUrl(string url)

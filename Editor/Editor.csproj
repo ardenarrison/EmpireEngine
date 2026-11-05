@@ -21,6 +21,12 @@
   <ItemGroup>
     <!-- Canvas2D and Box live in Engine.Brutal, shared with the game's UI. -->
     <Using Include="Engine.Brutal.Ui" />
+    <Using Include="Engine.Brutal.Gfx" />
+    <Using Include="Editor.Ui" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The Hub's project files: File > Change Project lists and makes projects with the same code. -->
+    <Compile Include="../Hub/EmpireProject.cs;../Hub/HubJson.cs;../Hub/HubSettings.cs;../Hub/ProjectTemplate.cs" Link="HubFiles/%(Filename)%(Extension)" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\ScriptCompiler\ScriptCompiler.csproj" />

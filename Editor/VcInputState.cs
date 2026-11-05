@@ -25,7 +25,7 @@ public sealed class VcInputState
     public bool Escape { get; private set; }
     public bool Duplicate { get; private set; }   // Cmd+D on macOS, Ctrl+D elsewhere
 
-    public void Update(GlfwWindow window)
+    public void Update(IAppWindow window)
     {
         var cursor = window.CursorPos;
         Mouse = new float2((float)cursor.X, (float)cursor.Y);
@@ -36,16 +36,8 @@ public sealed class VcInputState
         Down = down;
         _wasDown = down;
 
-        bool shift = window.GetKey(GlfwKey.LeftShift) == GlfwKeyAction.Press;
-        var typed = new StringBuilder();
-        for (int i = 0; i < Typable.Length; i++)
-        {
-            bool now = window.GetKey(Typable[i].Key) == GlfwKeyAction.Press;
-            if (now && !_prev[i])
-                typed.Append(shift ? Typable[i].Shifted : Typable[i].Plain);
-            _prev[i] = now;
-        }
-        Typed = typed.ToString();
+        // An on-screen keyboard has no keys to poll: it only sends characters, so on iPad all typing arrives that way.
+        Typed = OperatingSystem.IsIOS() ? VcTyping.Filter(UiInput.Current.InputQueueCharacters) : PolledText(window);
 
         Backspace = Edge(window, GlfwKey.Backspace, ref _prevBackspace);
         Enter = Edge(window, GlfwKey.Enter, ref _prevEnter);
@@ -56,9 +48,23 @@ public sealed class VcInputState
         _prevDuplicate = duplicate;
     }
 
-    private static bool ShortcutHeld(GlfwWindow window)
+    private string PolledText(IAppWindow window)
     {
-        if (OperatingSystem.IsMacOS())
+        bool shift = window.GetKey(GlfwKey.LeftShift) == GlfwKeyAction.Press;
+        var typed = new StringBuilder();
+        for (int i = 0; i < Typable.Length; i++)
+        {
+            bool now = window.GetKey(Typable[i].Key) == GlfwKeyAction.Press;
+            if (now && !_prev[i])
+                typed.Append(shift ? Typable[i].Shifted : Typable[i].Plain);
+            _prev[i] = now;
+        }
+        return typed.ToString();
+    }
+
+    private static bool ShortcutHeld(IAppWindow window)
+    {
+        if (OperatingSystem.IsMacOS() || OperatingSystem.IsIOS())
             return window.GetKey(GlfwKey.LeftSuper) == GlfwKeyAction.Press ||
                    window.GetKey(GlfwKey.RightSuper) == GlfwKeyAction.Press;
 
@@ -66,7 +72,7 @@ public sealed class VcInputState
                window.GetKey(GlfwKey.RightControl) == GlfwKeyAction.Press;
     }
 
-    private static bool Edge(GlfwWindow window, GlfwKey key, ref bool previous)
+    private static bool Edge(IAppWindow window, GlfwKey key, ref bool previous)
     {
         bool now = window.GetKey(key) == GlfwKeyAction.Press;
         bool pressed = now && !previous;

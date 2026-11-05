@@ -56,6 +56,36 @@ public sealed class Terrain : Collider
     // False makes the terrain scenery only: nothing collides with it and raycasts pass through.
     public bool Collide { get; set; } = true;
 
+    // ---- textures ----------------------------------------------------------------------------------
+    // Pictures in the project, as paths relative to the project folder; empty for none. Each covers the whole terrain once
+    // (TextureTiling repeats it), with the top of the picture at the -Z edge, so a heightmap and the color and normal maps
+    // made with it line up.
+
+    // The picture the ground's heights were taken from (see ApplyHeightmap). Kept so the editor can apply it again after the
+    // picture changes; the heights themselves are saved with the scene, so a game doesn't need the picture.
+    public string Heightmap { get; set; } = "";
+
+    private string _colorTexture = "", _normalMap = "";
+    private float _tiling = 1f, _normalStrength = 1f;
+
+    // A picture drawn over the ground. Unpainted ground shows it as it is (the Base Color is not used); paint layers tint it
+    // with their color.
+    public string ColorTexture { get => _colorTexture; set { _colorTexture = value ?? ""; TouchColors(); } }
+
+    // An optional normal map (tangent space, as glTF uses), for detail finer than the grid of heights.
+    public string NormalMap { get => _normalMap; set => _normalMap = value ?? ""; }
+
+    // How much the normal map bends the light: 0 is flat, 1 as the map is.
+    public float NormalStrength { get => _normalStrength; set => _normalStrength = float.IsFinite(value) ? Math.Clamp(value, 0f, 4f) : 1f; }
+
+    // How many times the color texture and normal map repeat across the terrain: 1 stretches them over it once, more tiles
+    // them, as for a grass texture.
+    public float TextureTiling
+    {
+        get => _tiling;
+        set { _tiling = float.IsFinite(value) ? Math.Clamp(value, 0.01f, 1000f) : 1f; Touch(); }
+    }
+
     // Counts every change to the ground (and its size), so caches know when to rebuild. Not saved.
     public int Version { get; private set; }
 
@@ -387,6 +417,35 @@ public sealed class Terrain : Collider
         Touch();
     }
 
+    // Sets every grid point's height from a heightmap: width * height values, 0 (lowest) to 1 (the terrain's Height),
+    // row by row with the first row at the -Z edge. The map is stretched over the terrain whatever its size, blending
+    // between its pixels.
+    public void ApplyHeightmap(float[] values, int width, int height)
+    {
+        if (width < 1 || height < 1 || values.Length < width * height) return;
+        for (int z = 0; z < _resolution; z++)
+            for (int x = 0; x < _resolution; x++)
+            {
+                float fx = (float)x / (_resolution - 1) * (width - 1), fy = (float)z / (_resolution - 1) * (height - 1);
+                int x0 = Math.Min((int)fx, Math.Max(width - 2, 0)), y0 = Math.Min((int)fy, Math.Max(height - 2, 0));
+                int x1 = Math.Min(x0 + 1, width - 1), y1 = Math.Min(y0 + 1, height - 1);
+                float tx = fx - x0, ty = fy - y0;
+                float top = values[y0 * width + x0] + (values[y0 * width + x1] - values[y0 * width + x0]) * tx;
+                float bottom = values[y1 * width + x0] + (values[y1 * width + x1] - values[y1 * width + x0]) * tx;
+                float v = top + (bottom - top) * ty;
+                _heights[z * _resolution + x] = (ushort)Math.Clamp((int)MathF.Round(Math.Clamp(v, 0f, 1f) * 65535f), 0, 65535);
+            }
+        Touch();
+    }
+
+    // The same, from a picture file (see HeightmapImage for the formats); remembers it as Heightmap when relativePath is given.
+    public void ApplyHeightmap(string path, string? relativePath = null)
+    {
+        var (values, width, height) = HeightmapImage.Load(path);
+        ApplyHeightmap(values, width, height);
+        if (relativePath is not null) Heightmap = relativePath;
+    }
+
     // Changes the number of grid points per side, keeping the shape of the ground.
     public void Resize(int resolution)
     {
@@ -563,18 +622,20 @@ public sealed class Terrain : Collider
     private GlbModel? _renderModel;
     private ModelPose? _pose;
     private float[] _positions = [], _normals = [], _uvs = [], _colors = [];
-    private int _builtStructure = int.MinValue, _builtVersion = -1, _builtColorVersion = -1;
+    private string? _builtStructure;
+    private int _builtVersion = -1, _builtColorVersion = -1;
 
-    // Changes when the drawn mesh has to be made again from scratch (resolution), not when only the ground or its
+    // Changes when the drawn mesh has to be made again from scratch (resolution, textures), not when only the ground or its
     // colors changed.
-    public int StructureKey => _resolution;
+    public string StructureKey => FormattableString.Invariant($"{_resolution}|{_colorTexture}|{_normalMap}|{_normalStrength}");
 
     // The model to upload for this terrain, and the pose with its current vertices. Positions, normals and colors are
     // refreshed whenever the ground or its colors have changed since the last call. Build the model again (a new
-    // instance) when StructureKey changes.
-    public (GlbModel Model, ModelPose Pose) Prepare()
+    // instance) when StructureKey changes. loadImage reads the color texture and normal map (by their project paths); null
+    // for none, as when a picture can't be read, and without it the terrain is drawn untextured.
+    public (GlbModel Model, ModelPose Pose) Prepare(Func<string, ImageData?>? loadImage = null)
     {
-        int structure = StructureKey;
+        string structure = StructureKey;
         if (_renderModel is null || structure != _builtStructure)
         {
             int n = _resolution * _resolution;
@@ -591,14 +652,11 @@ public sealed class Terrain : Collider
                     indices[k++] = a; indices[k++] = b; indices[k++] = c;
                     indices[k++] = c; indices[k++] = b; indices[k++] = d;
                 }
-            for (int z = 0; z < _resolution; z++)
-                for (int x = 0; x < _resolution; x++)
-                {
-                    _uvs[(z * _resolution + x) * 2] = (float)x / (_resolution - 1);
-                    _uvs[(z * _resolution + x) * 2 + 1] = (float)z / (_resolution - 1);
-                }
             RefreshVertices();
-            var material = new MaterialData([1, 1, 1, 1], 0.95f, 0f, 1.5f, 0.25f, [1, 1, 1], [0, 0, 0]);
+            var colorImage = _colorTexture.Length > 0 ? loadImage?.Invoke(_colorTexture) : null;
+            var normalImage = _normalMap.Length > 0 ? loadImage?.Invoke(_normalMap) : null;
+            var material = new MaterialData([1, 1, 1, 1], 0.95f, 0f, 1.5f, 0.25f, [1, 1, 1], [0, 0, 0],
+                BaseColorImage: colorImage, NormalImage: normalImage, NormalScale: _normalStrength);
             var mesh = new MeshData("Terrain", _positions, _normals, _uvs, indices, material) { Colors = _colors };
             _renderModel = new GlbModel
             {
@@ -650,17 +708,22 @@ public sealed class Terrain : Collider
                 float hz = (GetHeight01(x, z + 1) - GetHeight01(x, z - 1)) * Height / ((Math.Min(z + 1, _resolution - 1) - Math.Max(z - 1, 0)) * cz);
                 var normal = Vector3.Normalize(new Vector3(-hx, 1f, -hz));
                 _normals[i * 3] = normal.X; _normals[i * 3 + 1] = normal.Y; _normals[i * 3 + 2] = normal.Z;
+
+                _uvs[i * 2] = (float)x / (_resolution - 1) * _tiling;
+                _uvs[i * 2 + 1] = (float)z / (_resolution - 1) * _tiling;
             }
         RefreshColors();
     }
 
-    // Recomputes every vertex color: the base color, with the painted layers over it.
+    // Recomputes every vertex color: the base color (white under a color texture, so it shows as it is), with the painted
+    // layers over it.
     private void RefreshColors()
     {
         int layerCount = _layers.Count;
+        var unpainted = _colorTexture.Length > 0 ? Vector3.One : _baseColor;
         for (int i = 0; i < _resolution * _resolution; i++)
         {
-            var color = _baseColor;
+            var color = unpainted;
 
             if (layerCount > 0)
             {

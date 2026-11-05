@@ -15,5 +15,18 @@ var contentRoot = args.Length > 1
     ? Path.GetFullPath(args[1])
     : Path.GetDirectoryName(Path.GetDirectoryName(scenePath))!;
 
-new EditorApp(scenePath, contentRoot).Run();
+var editor = new EditorApp(scenePath, contentRoot);
+editor.Run();
+
+// File > Change Project: a fresh editor on the new project, which also ends everything that belonged to this one (the terminal's
+// shell, say). The Hub remembers it as the last one opened.
+if (editor.NextProject is { } next && EmpireHub.EmpireProject.FindStartScene(next) is { } nextScene)
+{
+    ProjectList.Remember(next);
+    var restart = new System.Diagnostics.ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = false };
+    restart.ArgumentList.Add(Theme.Light ? "--lightmode" : "--darkmode");
+    restart.ArgumentList.Add(nextScene);
+    restart.ArgumentList.Add(next);
+    System.Diagnostics.Process.Start(restart);
+}
 return 0;

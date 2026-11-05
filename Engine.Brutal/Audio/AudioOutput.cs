@@ -44,7 +44,7 @@ public sealed unsafe class AudioOutput : IDisposable
             }
             IsRunning = true;
         }
-        catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException)
+        catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException or TypeInitializationException)
         {
             Console.WriteLine($"Audio is off: the sound library could not be loaded ({ex.Message}).");
             Free();

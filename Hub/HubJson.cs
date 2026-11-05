@@ -7,5 +7,4 @@ namespace EmpireHub;
     PropertyNameCaseInsensitive = true)]
 [JsonSerializable(typeof(HubSettings))]
 [JsonSerializable(typeof(EmpireProject))]
-[JsonSerializable(typeof(CreditsFile))]
 internal sealed partial class HubJson : JsonSerializerContext;

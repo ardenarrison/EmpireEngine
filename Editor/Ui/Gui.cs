@@ -143,7 +143,7 @@ public sealed class Gui
 
     // ---- frame --------------------------------------------------------------------------------
 
-    public void Begin(GlfwWindow window, Canvas2D canvas, float2 size, double now)
+    public void Begin(IAppWindow window, Canvas2D canvas, float2 size, double now)
     {
         C = canvas;
         Size = size;
@@ -161,12 +161,12 @@ public sealed class Gui
         _prevDown = down;
         _prevRight = right;
 
-        var io = ImGui.GetIO();
+        var io = UiInput.Current;
         Shift = io.KeyShift;
-        EnterPressed = ImGui.IsKeyPressed(ImGuiKey.Enter, false) || ImGui.IsKeyPressed(ImGuiKey.KeypadEnter, false);
+        EnterPressed = UiInput.Current.IsKeyPressed(ImGuiKey.Enter, false) || UiInput.Current.IsKeyPressed(ImGuiKey.KeypadEnter, false);
         Command = io.KeyCtrl || io.KeySuper;
         _wheel = io.MouseWheel;
-        _doubleClicked = ImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left);
+        _doubleClicked = UiInput.Current.IsMouseDoubleClicked(ImGuiMouseButton.Left);
         var typed = new StringBuilder();
         var queue = io.InputQueueCharacters;
         for (int i = 0; i < queue.Count; i++)
@@ -929,12 +929,11 @@ public sealed class Gui
         }
         if (Command && Pressed(ImGuiKey.V))
         {
-            var clip = ImGui.GetClipboardText();
-            string pasted = clip.IsNull() ? "" : Encoding.UTF8.GetString(clip.AsSpan()).Replace("\r", "").Replace("\n", " ");
+            string pasted = UiInput.Current.GetClipboardText().Replace("\r", "").Replace("\n", " ");
             _editText += _focusNumeric ? new string(pasted.Where(c => char.IsDigit(c) || c is '-' or '.' or 'e' or 'E').ToArray()) : pasted;
         }
         if (Command && Pressed(ImGuiKey.C))
-            ImGui.SetClipboardText(_editText.ToU8());
+            UiInput.Current.SetClipboardText(_editText);
         if (Command && Pressed(ImGuiKey.A)) _editText = "";   // select-all-and-replace, the common case
     }
 
@@ -950,7 +949,7 @@ public sealed class Gui
             C.Rect(box.X + 6f + C.MeasureText(shown), box.Y + 4f, 1.5f, box.H - 8f, TextColor);
     }
 
-    private static bool Pressed(ImGuiKey key) => ImGui.IsKeyPressed(key, true);
+    private static bool Pressed(ImGuiKey key) => UiInput.Current.IsKeyPressed(key, true);
 
     // A slider that snaps to a few named stops (such as 2x, 4x, 8x). Drag or click to choose one. Stops from dimFrom
     // on are drawn dim, for choices that are allowed but not available here. Returns true when the stop changes.

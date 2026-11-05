@@ -12,7 +12,7 @@
 
 <p class="eyebrow">Systems</p>
 <h1>Terrain</h1>
-<p class="lead">Ground made from a grid of heights, for hills, valleys and plains. Sculpt it with brushes, paint it with colors, or generate hills, and it works as a collider straight away.</p>
+<p class="lead">Ground made from a grid of heights, for hills, valleys and plains. Sculpt it with brushes, paint it with colors, generate hills or load a heightmap, and it works as a collider straight away.</p>
 
 <h2>Adding terrain</h2>
 <p>Right-click in the Hierarchy and choose <strong>Terrain</strong>. You get a 60 × 60 terrain at the scene's origin with gentle generated hills and three paint layers ready to use: Dirt, Sand and Stone. You can also add a <em>Terrain</em> component to any object (one per object).</p>
@@ -30,6 +30,20 @@
     <tr><td>Friction, Bounciness</td><td>0.5, 0</td><td>As for any <a href="physics.html#surface-settings">collider</a></td></tr>
   </tbody>
 </table></div>
+
+<h2>Heightmap and textures</h2>
+<p>The Inspector's <strong>Textures</strong> section takes pictures from the project folder (PNG, JPEG, BMP or GIF; <code>Textures/</code> is a good place for them). Each one covers the whole terrain, with the top of the picture at the terrain's −Z edge, so a heightmap and the color and normal maps made with it line up.</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>Setting</th><th>Default</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td>Heightmap</td><td>none</td><td>Picking one sets the ground's heights from it: black is the lowest ground and white is <strong>Height</strong>. The picture is stretched over the terrain whatever its size. <em>Apply Heightmap Again</em> reads it again after you change the picture. You can sculpt the result, and <kbd>Cmd/Ctrl</kbd>+<kbd>Z</kbd> undoes it.</td></tr>
+    <tr><td>Color Texture</td><td>none</td><td>A picture drawn over the ground. Unpainted ground shows it as it is (Base Color is not used); paint layers tint it with their color.</td></tr>
+    <tr><td>Normal Map</td><td>none</td><td>Optional. A tangent-space normal map, as glTF uses, for detail finer than the grid of heights.</td></tr>
+    <tr><td>Tiling</td><td>1</td><td>How many times the color texture and normal map repeat across the terrain. 1 stretches them over it once, the way a satellite picture or a map baked with the heightmap needs; more repeats them, as for a grass texture.</td></tr>
+    <tr><td>Normal Strength</td><td>1</td><td>How much the normal map bends the light: 0 is flat</td></tr>
+  </tbody>
+</table></div>
+<p>Use a <strong>16-bit PNG</strong> for heightmaps when you can: it is read at full precision. An 8-bit picture has only 256 steps of height, so gentle slopes made from one show them as terraces (<em>Smooth All</em> evens them out). The heights are saved in the scene, so a built game does not read the heightmap again; the color texture and normal map stay in the project and are used by the game.</p>
 
 <h2>Sculpting</h2>
 <p>Press <strong>Sculpt Terrain</strong> in the Inspector. While it's on, hold the left mouse button over the terrain to use the brush; a ring shows its size. Right-drag and <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> still fly the camera. Press the button again to stop.</p>
@@ -91,6 +105,8 @@
     <tr><td><code>Flatten(level)</code>, <code>SmoothAll(passes)</code></td><td>Makes it all one height, or evens it out</td></tr>
     <tr><td><code>GetHeight01(x, z)</code>, <code>SetHeight01(x, z, value)</code></td><td>Read or set one grid point, 0 to 1 of Height</td></tr>
     <tr><td><code>AddLayer</code>, <code>SetLayer</code>, <code>RemoveLayer</code>, <code>FillLayer</code>, <code>ClearPaint</code>, <code>Layers</code></td><td>Manage paint layers</td></tr>
+    <tr><td><code>ApplyHeightmap(path)</code>, <code>ApplyHeightmap(values, width, height)</code></td><td>Sets the heights from a picture file, or from width × height values from 0 to 1, row by row from the −Z edge</td></tr>
+    <tr><td><code>ColorTexture</code>, <code>NormalMap</code>, <code>TextureTiling</code>, <code>NormalStrength</code></td><td>The textures, by path relative to the project folder, and their settings</td></tr>
     <tr><td><code>Resize(resolution)</code></td><td>Changes the number of grid points, keeping the shape</td></tr>
   </tbody>
 </table></div>

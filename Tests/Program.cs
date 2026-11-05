@@ -955,7 +955,7 @@ Directory.CreateDirectory(Path.Combine(projectDir, "Scenes"));
 
     // Mesh data for drawing
     var (meshModel, pose) = terrain.Prepare();
-    int key = terrain.StructureKey;
+    string key = terrain.StructureKey;
     Check(meshModel.Meshes.Count == 1 && meshModel.Meshes[0].Positions.Length == 65 * 65 * 3 && meshModel.Meshes[0].Indices.Length == 64 * 64 * 6, "the drawn mesh has a vertex per grid point and two triangles per square");
     Check(pose.Positions[0]![1] >= 0f && pose.Normals[0]![1] > 0f && pose.TexCoords![0]!.All(u => u is >= 0f and <= 1f), "vertices have positions, upward normals and palette coordinates");
     terrain.Sculpt(TerrainBrush.Raise, 0f, 0f, 6f, 2f);
@@ -1016,6 +1016,108 @@ Directory.CreateDirectory(Path.Combine(projectDir, "Scenes"));
     Check(paint.LayerAt(15f, 15f) == -1, "Clear Paint removes all paint");
     for (int i = 0; i < 12; i++) paint.AddLayer($"L{i}", Vector3.One);
     Check(paint.Layers.Count == Terrain.MaxLayers, "the number of layers is limited");
+
+    // Heightmaps and textures
+    var mapped = new Terrain { Width = 40f, Length = 20f, Height = 10f, Resolution = 33 };
+    mapped.ApplyHeightmap([0f, 1f, 0f, 1f], 2, 2);   // dark on the left (-X), bright on the right (+X)
+    Check(MathF.Abs(mapped.HeightAt(-20f, 0f)) < 1e-3f && MathF.Abs(mapped.HeightAt(20f, 0f) - 10f) < 1e-3f && MathF.Abs(mapped.HeightAt(0f, 5f) - 5f) < 0.05f,
+          "a heightmap sets the ground from black (lowest) to white (Height), blending between its pixels");
+    mapped.ApplyHeightmap([1f, 1f, 0f, 0f], 2, 2);   // the top row is the -Z edge
+    Check(mapped.HeightAt(0f, -10f) > 9.99f && mapped.HeightAt(0f, 10f) < 0.01f, "a heightmap's top row is the terrain's -Z edge");
+
+    // A 16-bit PNG keeps steps finer than an 8-bit picture can hold; every row uses a different PNG filter.
+    var deep = new ushort[5 * 5];
+    for (int i = 0; i < deep.Length; i++) deep[i] = (ushort)(i * 997 + 3);
+    var (deepValues, deepW, deepH) = HeightmapImage.Decode(TestImages.Png(5, 5, 16, (x, y) => deep[y * 5 + x]), "deep.png");
+    Check(deepW == 5 && deepH == 5 && deepValues.Select((v, i) => MathF.Abs(v * 65535f - deep[i])).Max() < 0.5f, "a 16-bit PNG heightmap is read at full precision, through every row filter");
+    var (shallowValues, shallowW, _) = HeightmapImage.Decode(TestImages.Png(3, 1, 8, (x, _) => (ushort)(x * 100)), "shallow.png");
+    Check(shallowW == 3 && MathF.Abs(shallowValues[2] - 200f / 255f) < 1e-4f, "an 8-bit PNG heightmap is read too");
+    string heightmapFile = Path.Combine(Path.GetTempPath(), $"empire-heightmap-{Guid.NewGuid():N}.png");
+    File.WriteAllBytes(heightmapFile, TestImages.Png(2, 2, 16, (x, _) => (ushort)(x * 65535)));
+    mapped.ApplyHeightmap(heightmapFile, "Textures/hills.png");
+    File.Delete(heightmapFile);
+    Check(mapped.Heightmap == "Textures/hills.png" && mapped.HeightAt(20f, 0f) > 9.99f, "a heightmap can be applied from a file and is remembered");
+
+    var textured = new Terrain { Width = 10f, Length = 10f, Resolution = 33, BaseColor = new Vector3(0.2f, 0.5f, 0.1f) };
+    var colorPicture = new ImageData { Name = "grass.png", Width = 1, Height = 1, Pixels = [255, 255, 255, 255] };
+    var normalPicture = new ImageData { Name = "grass_n.png", Width = 1, Height = 1, Pixels = [128, 128, 255, 255] };
+    ImageData? LoadTexture(string path) => path == "grass.png" ? colorPicture : path == "grass_n.png" ? normalPicture : null;
+    var (plainModel, _) = textured.Prepare(LoadTexture);
+    Check(plainModel.Meshes[0].Material.BaseColorImage is null && plainModel.Meshes[0].Material.NormalImage is null, "a terrain without textures is drawn untextured");
+    textured.ColorTexture = "grass.png";
+    textured.NormalMap = "grass_n.png";
+    textured.NormalStrength = 0.5f;
+    var (texturedModel, texturedPose) = textured.Prepare(LoadTexture);
+    var texturedMaterial = texturedModel.Meshes[0].Material;
+    Check(!ReferenceEquals(plainModel, texturedModel) && ReferenceEquals(texturedMaterial.BaseColorImage, colorPicture) &&
+          ReferenceEquals(texturedMaterial.NormalImage, normalPicture) && texturedMaterial.NormalScale == 0.5f,
+          "choosing a color texture and normal map remakes the mesh with them");
+    Check(texturedPose.Colors![0]!.All(c => c == 1f), "unpainted ground under a color texture shows the texture as it is");
+    textured.TextureTiling = 4f;
+    var (tiledModel, tiledPose) = textured.Prepare(LoadTexture);
+    Check(ReferenceEquals(texturedModel, tiledModel) && MathF.Abs(tiledPose.TexCoords![0]!.Max() - 4f) < 1e-4f, "tiling repeats the textures without remaking the mesh");
+    textured.NormalMap = "missing.png";
+    Check(textured.Prepare(LoadTexture).Model.Meshes[0].Material.NormalImage is null, "a texture that can't be read is left off");
+
+    var texturedScene = new Scene();
+    var texturedHolder = new SceneObject { Name = "Textured" };
+    textured.Heightmap = "Textures/hills.png";
+    texturedHolder.Components.Add(textured);
+    texturedScene.Add(texturedHolder);
+    string texturedJson = SceneSerializer.ToJson(texturedScene);
+    var texturedBack = SceneSerializer.FromJson(texturedJson).Find(texturedHolder.Id)!.Components.OfType<Terrain>().Single();
+    Check(texturedBack.Heightmap == "Textures/hills.png" && texturedBack.ColorTexture == "grass.png" && texturedBack.NormalMap == "missing.png" &&
+          texturedBack.NormalStrength == 0.5f && texturedBack.TextureTiling == 4f, "a terrain's heightmap, textures and their settings survive saving");
+    Check(!SceneSerializer.ToJson(sceneT).Contains("colorTexture", StringComparison.OrdinalIgnoreCase), "a terrain without textures saves no texture fields");
+
+    // File > Change Project
+    string projectsFolder = Path.Combine(Path.GetTempPath(), $"empire-projects-{Guid.NewGuid():N}");
+    Directory.CreateDirectory(projectsFolder);
+    ProjectTemplate.Create("Zebra", projectsFolder, "0.2.8");
+    string flatProject = ProjectTemplate.Create("apple", projectsFolder, "0.2.8", is2D: true);
+    Directory.CreateDirectory(Path.Combine(projectsFolder, "Not A Project"));
+    var listed = ProjectList.InFolder(projectsFolder);
+    Check(listed.Select(p => p.Name).SequenceEqual(["apple", "Zebra"]), "the project list shows the projects in a folder by name, and nothing else");
+    Check(listed[0].Type == "2D" && listed[1].Type == "3D" && listed[0].Folder == flatProject, "each project in the list knows its folder and whether it is 2D or 3D");
+    Check(EmpireProject.FindStartScene(listed[1].Folder) is { } zebraScene && File.Exists(zebraScene), "a project made for the list has a scene to open");
+    Check(ProjectList.InFolder(Path.Combine(projectsFolder, "missing")).Count == 0, "a folder that isn't there has no projects");
+    Directory.Delete(projectsFolder, recursive: true);
+
+    // Typing into a visual code field from an on-screen keyboard
+    Check(VcTyping.Filter("Speed_2.5 x-y".Select(c => (uint)c).ToList()) == "Speed_2.5 x-y", "a visual code field takes letters, digits, spaces and - _ .");
+    Check(VcTyping.Filter("a\n\t!@b\u00e9".Select(c => (uint)c).ToList()) == "ab", "and leaves out everything else, as it does from a keyboard");
+
+    // Built-in shapes
+    foreach (string shape in new[] { Primitives.Cube, Primitives.Sphere, Primitives.Capsule, Primitives.Cone })
+    {
+        var shapeMesh = Primitives.Get(shape).Meshes.Single();
+        int vertices = shapeMesh.Positions.Length / 3;
+        Vector3 At(float[] values, uint i) => new(values[i * 3], values[i * 3 + 1], values[i * 3 + 2]);
+        bool faceOut = true;
+        for (int i = 0; i < shapeMesh.Indices.Length; i += 3)
+        {
+            var (a, b, c) = (shapeMesh.Indices[i], shapeMesh.Indices[i + 1], shapeMesh.Indices[i + 2]);
+            var facing = Vector3.Cross(At(shapeMesh.Positions, b) - At(shapeMesh.Positions, a), At(shapeMesh.Positions, c) - At(shapeMesh.Positions, a));
+            if (facing.LengthSquared() > 1e-10f && Vector3.Dot(facing, At(shapeMesh.Normals, a) + At(shapeMesh.Normals, b) + At(shapeMesh.Normals, c)) <= 0f) faceOut = false;
+        }
+        Check(shapeMesh.Indices.Length > 0 && shapeMesh.Indices.All(i => i < vertices) && shapeMesh.TexCoords.Length == vertices * 2, $"{Primitives.Label(shape)} is a whole mesh");
+        Check(faceOut, $"every triangle of {Primitives.Label(shape)} faces outward");
+    }
+    var cubeModel = Primitives.Get(Primitives.Cube);
+    var capsuleModel = Primitives.Get(Primitives.Capsule);
+    Check(cubeModel.BoundsMin == new Vector3(-0.5f) && cubeModel.BoundsMax == new Vector3(0.5f), "the cube is one unit across, centered on its object");
+    Check(MathF.Abs(capsuleModel.BoundsMax.Y - 1f) < 1e-4f && MathF.Abs(capsuleModel.BoundsMax.X - 0.5f) < 1e-3f, "the capsule is two tall and one across");
+    Check(Primitives.Get(Primitives.Empire).Meshes.Count > 0 && Primitives.Get(Primitives.Empire).Name == "Empire", "the Empire shape loads from the crown inside the engine");
+    var builtInCache = new AssetCache(Path.Combine(Path.GetTempPath(), "no-such-project"));
+    Check(builtInCache.GetModel(Primitives.Sphere).Meshes.Count == 1 && builtInCache.ReloadChanged().Count == 0, "built-in shapes load without any file in the project");
+    bool unknownThrows = false;
+    try { Primitives.Get("builtin:Teapot"); } catch (InvalidDataException) { unknownThrows = true; }
+    Check(unknownThrows && Primitives.Label(Primitives.Cone) == "Cone" && Primitives.Label("Models/Tree.glb") == "Tree.glb", "shape names show plainly, and a model that doesn't exist is reported");
+    var shapeScene = new Scene();
+    var shapeObject = new SceneObject { Name = "Crate" };
+    shapeObject.Components.Add(new MeshRenderer { Model = Primitives.Cube });
+    shapeScene.Add(shapeObject);
+    Check(SceneSerializer.FromJson(SceneSerializer.ToJson(shapeScene)).Find(shapeObject.Id)!.Components.OfType<MeshRenderer>().Single().Model == Primitives.Cube, "a shape survives saving");
 
     // Physics: a ball dropped on the ground rests on it, and raycasts hit it
     var physics = new Scene();
@@ -3232,4 +3334,61 @@ public class TriggerProbe : Behaviour
     public static List<string> Log = new();
     public override void OnTriggerEnter(SceneObject other) => Log.Add($"{sceneObject.Name} enter {other.Name}");
     public override void OnTriggerExit(SceneObject other) => Log.Add($"{sceneObject.Name} exit {other.Name}");
+}
+
+// A small PNG for the heightmap tests: one gray channel of 8 or 16 bits, each row stored with a different PNG filter.
+static class TestImages
+{
+    public static byte[] Png(int width, int height, int depth, Func<int, int, ushort> value)
+    {
+        int bpp = depth / 8, stride = width * bpp;
+        var rows = new byte[height][];
+        for (int y = 0; y < height; y++)
+        {
+            rows[y] = new byte[stride];
+            for (int x = 0; x < width; x++)
+            {
+                ushort v = value(x, y);
+                if (depth == 16) { rows[y][x * 2] = (byte)(v >> 8); rows[y][x * 2 + 1] = (byte)v; }
+                else rows[y][x] = (byte)v;
+            }
+        }
+        var filtered = new MemoryStream();
+        for (int y = 0; y < height; y++)
+        {
+            int filter = y % 5;
+            filtered.WriteByte((byte)filter);
+            for (int i = 0; i < stride; i++)
+            {
+                int a = i >= bpp ? rows[y][i - bpp] : 0, b = y > 0 ? rows[y - 1][i] : 0, c = y > 0 && i >= bpp ? rows[y - 1][i - bpp] : 0;
+                int p = a + b - c, pa = Math.Abs(p - a), pb = Math.Abs(p - b), pc = Math.Abs(p - c);
+                int predictor = filter switch { 1 => a, 2 => b, 3 => (a + b) / 2, 4 => pa <= pb && pa <= pc ? a : pb <= pc ? b : c, _ => 0 };
+                filtered.WriteByte((byte)(rows[y][i] - predictor));
+            }
+        }
+        var packed = new MemoryStream();
+        using (var z = new ZLibStream(packed, CompressionLevel.Optimal, leaveOpen: true)) z.Write(filtered.ToArray());
+
+        var png = new MemoryStream();
+        png.Write([137, 80, 78, 71, 13, 10, 26, 10]);
+        void Chunk(string type, byte[] data)
+        {
+            var body = Encoding.ASCII.GetBytes(type).Concat(data).ToArray();
+            png.Write([(byte)(data.Length >> 24), (byte)(data.Length >> 16), (byte)(data.Length >> 8), (byte)data.Length]);
+            png.Write(body);
+            uint crc = 0xFFFFFFFF;
+            foreach (byte bt in body)
+            {
+                crc ^= bt;
+                for (int k = 0; k < 8; k++) crc = (crc & 1) != 0 ? (crc >> 1) ^ 0xEDB88320 : crc >> 1;
+            }
+            crc ^= 0xFFFFFFFF;
+            png.Write([(byte)(crc >> 24), (byte)(crc >> 16), (byte)(crc >> 8), (byte)crc]);
+        }
+        Chunk("IHDR", [(byte)(width >> 24), (byte)(width >> 16), (byte)(width >> 8), (byte)width,
+                       (byte)(height >> 24), (byte)(height >> 16), (byte)(height >> 8), (byte)height, (byte)depth, 0, 0, 0, 0]);
+        Chunk("IDAT", packed.ToArray());
+        Chunk("IEND", []);
+        return png.ToArray();
+    }
 }

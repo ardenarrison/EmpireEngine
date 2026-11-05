@@ -170,7 +170,10 @@
     <tr><td>Width, Length</td><td><code>float</code></td><td>60, 60</td><td>Local units along X and Z</td></tr>
     <tr><td>Height</td><td><code>float</code></td><td>12</td><td>Highest point above the object</td></tr>
     <tr><td>Resolution</td><td><code>int</code></td><td>129</td><td>33, 65, 129, 257 or 513</td></tr>
-    <tr><td>Base Color</td><td><code>Vector3</code></td><td>(0.3, 0.5, 0.2)</td><td>Unpainted ground</td></tr>
+    <tr><td>Base Color</td><td><code>Vector3</code></td><td>(0.3, 0.5, 0.2)</td><td>Unpainted ground, when there is no color texture</td></tr>
+    <tr><td>Heightmap</td><td><code>string</code></td><td>""</td><td>The picture the heights were taken from</td></tr>
+    <tr><td>Color Texture, Normal Map</td><td><code>string</code></td><td>""</td><td>Pictures in the project; the normal map is optional</td></tr>
+    <tr><td>Tiling, Normal Strength</td><td><code>float</code></td><td>1, 1</td><td>Repeats of the textures across the terrain; how strongly the normal map bends the light</td></tr>
     <tr><td>Collide</td><td><code>bool</code></td><td>true</td><td></td></tr>
     <tr><td>Friction, Bounciness</td><td><code>float</code></td><td>0.5, 0</td><td>As for colliders</td></tr>
   </tbody>

@@ -130,6 +130,7 @@ public sealed class CodeEditorView
     // The "new script" name field in the header.
     private string _newName = "";
     private bool _nameFocused;
+    private bool _editorFocused;   // the last click was in the code, for opening an on-screen keyboard only when it's wanted
 
     // The right-click menu on a script in the list, and the rename field that replaces its row.
     private readonly List<(Box Box, string Path)> _fileRows = new();
@@ -139,6 +140,9 @@ public sealed class CodeEditorView
     private string? _renamePath;
     private string _renameText = "";
 
+    // What the button back to the scene says: "3D view", or "2D view" in a 2D project.
+    public string SceneViewName { get; init; } = "3D view";
+
     public CodeEditorView(string scriptsFolder) => _folder = scriptsFolder;
 
     // Raised after a script was renamed, with the old and new class names, so scenes can follow.
@@ -147,9 +151,12 @@ public sealed class CodeEditorView
     public bool HasUnsavedChanges => _docs.Values.Any(d => d.Dirty);
 
     // The script open in the view, as its name and text (null when none is open). The assistant offers it as an attachment.
+    // True while the user is typing here, so a window with an on-screen keyboard can open it.
+    public bool WantsKeyboard => _nameFocused || _editorFocused || _renamePath is not null;
+
     public (string Name, string Text)? CurrentScript => _doc is null ? null : (_doc.Name, _doc.Text);
 
-    // Returns true once after the "3D view" button was pressed.
+    // Returns true once after the button back to the scene was pressed.
     public bool TakeExit()
     {
         bool exit = _exitRequested;
@@ -193,7 +200,7 @@ public sealed class CodeEditorView
 
     // ---- input ---------------------------------------------------------------------------
 
-    public void Update(GlfwWindow window, bool uiWantsMouse, double now)
+    public void Update(IAppWindow window, bool uiWantsMouse, double now)
     {
         _now = now;
         _mouse.Update(window);
@@ -209,7 +216,7 @@ public sealed class CodeEditorView
 
     private void HandleMouse(bool uiWantsMouse)
     {
-        var io = ImGui.GetIO();
+        var io = UiInput.Current;
         var p = _mouse.Mouse;
 
         // Wheel scrolling goes to whichever panel is under the pointer.
@@ -225,7 +232,7 @@ public sealed class CodeEditorView
             }
         }
 
-        if (!uiWantsMouse && ImGui.IsMouseClicked(ImGuiMouseButton.Right))
+        if (!uiWantsMouse && UiInput.Current.IsMouseClicked(ImGuiMouseButton.Right))
         {
             _menuFile = null;
             _menuConfirmDelete = false;
@@ -267,6 +274,7 @@ public sealed class CodeEditorView
             }
             _renamePath = null;
             _nameFocused = false;
+            _editorFocused = _doc is not null && InEditor(p);
             foreach (var (box, click) in _clickables)
                 if (box.Contains(p))
                 {
@@ -277,7 +285,7 @@ public sealed class CodeEditorView
             if (_doc is not null && InEditor(p))
             {
                 var pos = PositionAt(p);
-                if (ImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left))
+                if (UiInput.Current.IsMouseDoubleClicked(ImGuiMouseButton.Left))
                     _doc.SelectWordAt(pos);
                 else
                 {
@@ -301,10 +309,10 @@ public sealed class CodeEditorView
 
     private void HandleKeyboard()
     {
-        var io = ImGui.GetIO();
+        var io = UiInput.Current;
         bool cmd = io.KeyCtrl || io.KeySuper;
         bool shift = io.KeyShift;
-        bool mac = OperatingSystem.IsMacOS();
+        bool mac = OperatingSystem.IsMacOS() || OperatingSystem.IsIOS();
         bool word = mac ? io.KeyAlt : io.KeyCtrl;
 
         // Characters typed this frame. Shortcuts with Cmd/Ctrl never type.
@@ -384,7 +392,7 @@ public sealed class CodeEditorView
         if ((doc.Caret, doc.Anchor) != before) CaretMoved(reveal: true);
     }
 
-    private static bool Pressed(ImGuiKey key) => ImGui.IsKeyPressed(key, true);
+    private static bool Pressed(ImGuiKey key) => UiInput.Current.IsKeyPressed(key, true);
 
     private void CaretMoved(bool reveal)
     {
@@ -395,14 +403,10 @@ public sealed class CodeEditorView
     private void Copy()
     {
         if (_doc is { HasSelection: true } doc)
-            ImGui.SetClipboardText(doc.SelectedText().ToU8());
+            UiInput.Current.SetClipboardText(doc.SelectedText());
     }
 
-    private static string ClipboardText()
-    {
-        var text = ImGui.GetClipboardText();
-        return text.IsNull() ? "" : Encoding.UTF8.GetString(text.AsSpan());
-    }
+    private static string ClipboardText() => UiInput.Current.GetClipboardText();
 
     private void HandleNameField(string typed)
     {
@@ -693,7 +697,7 @@ public sealed class CodeEditorView
         x += 72f;
 
         var field = new Box(x, by, 190f, bh);
-        c.Rect(field.X, field.Y, field.W, field.H, _nameFocused ? Hex(0x4A4A4A) : FieldColor);
+        c.Rect(field.X, field.Y, field.W, field.H, _nameFocused ? Theme.Pick(0x4A4A4A, 0xE8F0FE) : FieldColor);
         string shown = _newName.Length == 0 && !_nameFocused ? "New script name" : _newName + (_nameFocused && Blink() ? "|" : "");
         c.Text(Fit(c, shown, field.W - 12f), field.X + 6f, Mid(field.Y, field.H, c), _newName.Length == 0 && !_nameFocused ? DimColor : TextColor);
         _clickables.Add((field, () => _nameFocused = true));
@@ -707,7 +711,7 @@ public sealed class CodeEditorView
             c.Text(Fit(c, title, size.X - x - 140f), x, Mid(by, bh, c), _doc.Dirty ? WarningColor : TextColor);
         }
 
-        if (Button(c, "3D view", new Box(size.X - 108f, by, 98f, bh))) _exitRequested = true;
+        if (Button(c, SceneViewName, new Box(size.X - 108f, by, 98f, bh))) _exitRequested = true;
     }
 
     private void DrawFileList(Canvas2D c, float2 size)

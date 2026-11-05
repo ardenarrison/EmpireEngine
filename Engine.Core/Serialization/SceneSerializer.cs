@@ -79,6 +79,11 @@ public static class SceneSerializer
         public bool Collide { get; set; } = true;
         public float Friction { get; set; } = 0.5f;
         public float Bounciness { get; set; }
+        public string? Heightmap { get; set; }        // pictures, relative to the project folder; left out when none
+        public string? ColorTexture { get; set; }
+        public string? NormalMap { get; set; }
+        public float? NormalStrength { get; set; }    // left out at 1
+        public float? TextureTiling { get; set; }     // left out at 1
     }
 
     private sealed class ComponentRecord
@@ -522,6 +527,11 @@ public static class SceneSerializer
                             Resolution = terrain.Resolution, Heights = terrain.HeightsData,
                             BaseColor = [terrain.BaseColor.X, terrain.BaseColor.Y, terrain.BaseColor.Z],
                             Collide = terrain.Collide, Friction = terrain.Friction, Bounciness = terrain.Bounciness,
+                            Heightmap = terrain.Heightmap.Length > 0 ? terrain.Heightmap : null,
+                            ColorTexture = terrain.ColorTexture.Length > 0 ? terrain.ColorTexture : null,
+                            NormalMap = terrain.NormalMap.Length > 0 ? terrain.NormalMap : null,
+                            NormalStrength = terrain.NormalStrength != 1f ? terrain.NormalStrength : null,
+                            TextureTiling = terrain.TextureTiling != 1f ? terrain.TextureTiling : null,
                             Layers = terrain.Layers.Select((layer, i) => new TerrainLayerRecord
                             {
                                 Name = layer.Name,
@@ -801,6 +811,8 @@ public static class SceneSerializer
                         Width = data.Width, Length = data.Length, Height = data.Height,
                         BaseColor = Vec3(data.BaseColor ?? data.MidColor, defaults.BaseColor),
                         Collide = data.Collide, Friction = data.Friction, Bounciness = data.Bounciness,
+                        Heightmap = data.Heightmap ?? "", ColorTexture = data.ColorTexture ?? "", NormalMap = data.NormalMap ?? "",
+                        NormalStrength = data.NormalStrength ?? 1f, TextureTiling = data.TextureTiling ?? 1f,
                     };
                     terrain.LoadHeights(data.Resolution, data.Heights);
                     foreach (var layer in data.Layers ?? new())

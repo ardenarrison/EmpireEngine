@@ -78,19 +78,20 @@ public sealed class BrutalPlayer
 
         Engine.Core.Physics.PhysicsWorld.ModelLoader = _assets.GetModel;   // for mesh colliders
         Animator.ModelLoader = _assets.GetModel;                           // and for animations
-        var terrains = new TerrainDrawer();
+        var terrains = new TerrainDrawer(_assets.GetImage);
         var sprites = new SpriteDrawer(_assets.GetImage);
         var scriptMeshes = new ScriptMeshes();
         var (center, radius) = FitCamera(scene);
         var clock = Stopwatch.StartNew();
         double lastTime = 0;
-        KeyboardInput.Bind(window);
+        var appWindow = new GlfwAppWindow(window);
+        KeyboardInput.Bind(appWindow);
         TextInput.Bind(window);
         float scroll = 0f;
         window.OnScroll += (_, offset) => scroll += (float)offset.Y;
         // The mouse is measured from the corner of the 16:9 game view, as in the editor, so clicks land on the UI and
         // mouse rays line up with the picture when the window is letterboxed.
-        MouseInput.Bind(window, () => GameArea(ctx, window), () =>
+        MouseInput.Bind(appWindow, () => GameArea(ctx, window), () =>
         {
             float amount = scroll;
             scroll = 0f;

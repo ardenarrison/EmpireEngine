@@ -33,10 +33,13 @@ public static class SplashScreen
 
     // Shows the splash and returns when it is over, or when the window is closed (check window.ShouldClose afterwards).
     // small is a canvas with a small font (the game's UI one) for the captions.
-    public static void Run(VulkanContext ctx, ShaderLibrary shaders, GlfwWindow window, Canvas2D small)
+    public static void Run(VulkanContext ctx, ShaderLibrary shaders, GlfwWindow window, Canvas2D small) =>
+        Run(ctx, shaders, new GlfwAppWindow(window), small);
+
+    public static void Run(VulkanContext ctx, ShaderLibrary shaders, IAppWindow window, Canvas2D small)
     {
         float unit = Math.Clamp(Math.Min(window.Size.X / 1280f, window.Size.Y / 720f), 0.5f, 3f);
-        using var big = new Canvas2D(ctx, shaders, Canvas2D.DefaultFont(), TitleSize * unit, window.ContentScale.X);
+        using var big = new Canvas2D(ctx, shaders, Canvas2D.DefaultFont(), TitleSize * unit, window.ContentScale);
         int crown = AddImage(big, "EmpireEngineCrown.png");
         int brutal = AddImage(big, "BrutalLogo.png");
         const float crownAspect = 512f / 410f, brutalAspect = 2048f / 448f;
@@ -45,7 +48,7 @@ public static class SplashScreen
         double last = 0, shown = 0;
         while (!window.ShouldClose && shown < TotalSeconds)
         {
-            Glfw.PollEvents();
+            window.PollEvents();
             double now = frame.Elapsed.TotalSeconds;
             double delta = Math.Min(now - last, 0.1);
             last = now;
