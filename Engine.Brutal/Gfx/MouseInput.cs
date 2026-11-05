@@ -12,7 +12,7 @@ public static class MouseInput
 {
     private static int _appliedMode = -1;
 
-    public static void Bind(GlfwWindow window, Func<float4> viewArea, Func<float> scroll)
+    public static void Bind(IAppWindow window, Func<float4> viewArea, Func<float> scroll)
     {
         _appliedMode = -1;
         Input.MouseProvider = () =>
@@ -30,7 +30,7 @@ public static class MouseInput
     }
 
     // Shows the cursor and lets it go, for when a game stops (the editor keeps running).
-    public static void Release(GlfwWindow window)
+    public static void Release(IAppWindow window)
     {
         Input.cursorLocked = false;
         Input.cursorVisible = true;
@@ -38,7 +38,7 @@ public static class MouseInput
     }
 
     // Puts the window's cursor in the mode the scripts asked for, when it changed.
-    private static void ApplyCursor(GlfwWindow window)
+    private static void ApplyCursor(IAppWindow window)
     {
         int mode = Input.cursorLocked ? Glfw.Constants.GLFW_CURSOR_DISABLED
             : Input.cursorVisible ? Glfw.Constants.GLFW_CURSOR_NORMAL

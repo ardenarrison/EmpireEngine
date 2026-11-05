@@ -146,6 +146,9 @@ public sealed class VisualScriptView
     private string? _dragHead;
     private HashSet<string> _dragSet = new();
 
+    // What the button back to the scene says: "3D view", or "2D view" in a 2D project.
+    public string SceneViewName { get; init; } = "3D view";
+
     public VisualScriptView(string scriptsFolder)
     {
         _scriptsFolder = scriptsFolder;
@@ -156,7 +159,7 @@ public sealed class VisualScriptView
 
     private bool _exitRequested;
 
-    // Returns true once after the "3D view" button was pressed.
+    // Returns true once after the button back to the scene was pressed.
     public bool TakeExit()
     {
         bool exit = _exitRequested;
@@ -164,12 +167,12 @@ public sealed class VisualScriptView
         return exit;
     }
 
-    public void Update(GlfwWindow window, bool uiWantsMouse)
+    public void Update(IAppWindow window, bool uiWantsMouse)
     {
         _input.Update(window);
         _uiWants = uiWantsMouse;
         _keysConsumed = false;
-        _wheel = Brutal.ImGuiApi.ImGui.GetIO().MouseWheel;
+        _wheel = UiInput.Current.MouseWheel;
         _lastMouse = _input.Mouse;
         if (!uiWantsMouse && _wheel != 0f && _menu is null && InWorkspace(_input.Mouse))
             ZoomAt(_input.Mouse, MathF.Pow(1.1f, Math.Clamp(_wheel, -3f, 3f)));
@@ -221,7 +224,7 @@ public sealed class VisualScriptView
         _slots.Add(new Slot(nameBox, "", "name", InputKind.Any));
         TextField(c, FieldKey("", "name"), nameBox, ref _name);
 
-        if (Button(c, "3D view", new Box(size.X - 118f, by, 106f, bh)))
+        if (Button(c, SceneViewName, new Box(size.X - 118f, by, 106f, bh)))
             _exitRequested = true;
 
         float fx = 448f;

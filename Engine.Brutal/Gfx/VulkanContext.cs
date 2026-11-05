@@ -35,7 +35,7 @@ public sealed unsafe class VulkanContext : IDisposable
     private readonly DeviceEx _device;
     private readonly Queue _queue;
     private readonly int _queueFamily;
-    private readonly GlfwWindow _window;
+    private readonly IAppWindow _host;
     private readonly delegate* unmanaged<VkQueue, VkPresentInfoKHR*, int> _presentFn;
 
     private VkSwapchainKHR _swapchain;
@@ -76,19 +76,19 @@ public sealed unsafe class VulkanContext : IDisposable
     private int _imageIndex;
 
     public VulkanContext(GlfwWindow window, int fallbackWidth, int fallbackHeight)
+        : this(new GlfwAppWindow(window), fallbackWidth, fallbackHeight) { }
+
+    public VulkanContext(IAppWindow host, int fallbackWidth, int fallbackHeight)
     {
-        _window = window;
-        var extensions = new HashSet<string>();
-        byte** glfwExts = Glfw.GetRequiredInstanceExtensions(out uint extCount);
-        for (int i = 0; i < extCount; i++)
-            extensions.Add(Marshal.PtrToStringUTF8((nint)glfwExts[i])!);
-        extensions.Add("VK_KHR_portability_enumeration");
+        _host = host;
+        var extensions = new HashSet<string>(host.InstanceExtensions);
+        if (host.HasVulkanLoader) extensions.Add("VK_KHR_portability_enumeration");
         extensions.Add("VK_KHR_get_physical_device_properties2");
 
         _instance = Vulkan.CreateInstance(new Instance.CreateInfo
         {
             AppInfo = new VkApplicationInfo { ApiVersion = (1 << 22) | (3 << 12) },
-            Flags = VkInstanceCreateFlags.EnumeratePortabilityBitKHR,
+            Flags = host.HasVulkanLoader ? VkInstanceCreateFlags.EnumeratePortabilityBitKHR : default,
             EnabledExtensions = extensions,
             // Set EMPIRE_VULKAN_VALIDATION=1 to turn on the Khronos validation layer (it needs the Vulkan SDK or a
             // package that provides it). It reports misuse of the Vulkan API on the console, which is the way to
@@ -98,8 +98,7 @@ public sealed unsafe class VulkanContext : IDisposable
                 : new HashSet<string>(),
         });
 
-        Glfw.CreateWindowSurface(_instance.Handle.VkHandle, window, out ulong surfaceRaw);
-        _surface = new VkSurfaceKHR((nint)surfaceRaw);
+        _surface = new VkSurfaceKHR((nint)host.CreateSurface(_instance));
 
         _physical = _instance.PhysicalDevices[0];
         _queueFamily = _physical.GetFirstQueueFamilyWithFlag((VkQueueFlags)1);
@@ -177,6 +176,9 @@ public sealed unsafe class VulkanContext : IDisposable
     public void SetPostProcessing(PostAntiAliasing mode, PostEffects effects)
     {
         if (AfterScenePass is null) { mode = PostAntiAliasing.None; effects = PostEffects.Off; }
+        // An iPad has neither: SMAA locks up its GPU, badly enough to restart it, and FXAA is left out with it. Checked here so that
+        // a scene saved with one of them is safe to open too.
+        if (OperatingSystem.IsIOS()) mode = PostAntiAliasing.None;
         _post = mode;
         _effects = effects;
         bool needTarget = mode != PostAntiAliasing.None || effects.Any;
@@ -287,7 +289,7 @@ public sealed unsafe class VulkanContext : IDisposable
         }
     }
 
-    public bool IsMinimized => _window.FramebufferSize.X == 0 || _window.FramebufferSize.Y == 0;
+    public bool IsMinimized => _host.FramebufferSize.X == 0 || _host.FramebufferSize.Y == 0;
     public CommandBuffer CurrentCommandBuffer => _cmds[_frame];
     public int FrameIndex => _frame;   // 0 .. FramesInFlight - 1
 
@@ -607,7 +609,7 @@ public sealed unsafe class VulkanContext : IDisposable
             _device.DestroyImageView(view, null);
         _device.DestroySwapchainKHR(_swapchain, null);
 
-        CreateSwapchain(_window.FramebufferSize.X, _window.FramebufferSize.Y);
+        CreateSwapchain(_host.FramebufferSize.X, _host.FramebufferSize.Y);
         CreateDepthBuffer();
         if (_postTarget)
             CreatePostTarget();
@@ -627,7 +629,7 @@ public sealed unsafe class VulkanContext : IDisposable
     public void BeginFrame(bool deferScenePass = false)
     {
         // The window changed size (resize or fullscreen), so the swapchain has to match it again.
-        var size = _window.FramebufferSize;
+        var size = _host.FramebufferSize;
         if (size.X != _extent.Width || size.Y != _extent.Height)
             Recreate();
 

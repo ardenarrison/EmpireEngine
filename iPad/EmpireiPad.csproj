@@ -1,0 +1,61 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Not part of EmpireEngine.slnx: it needs Xcode and the .NET iOS workload. Build it with iPad/build.sh. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-ios</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <SupportedOSPlatformVersion>17.0</SupportedOSPlatformVersion>
+    <RootNamespace>EmpireiPad</RootNamespace>
+    <AssemblyName>EmpireiPad</AssemblyName>
+    <ApplicationId>com.empireengine.ipad</ApplicationId>
+    <AppIcon>AppIcon</AppIcon>
+    <ApplicationTitle>Empire Engine</ApplicationTitle>
+    <ApplicationDisplayVersion>$(EmpireVersion)</ApplicationDisplayVersion>
+    <ApplicationVersion>1</ApplicationVersion>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">iossimulator-arm64</RuntimeIdentifier>
+    <ValidateXcodeVersion>false</ValidateXcodeVersion>
+    <!-- Everything stays compiled ahead of time except what can't be: scripts compiled in the editor run in the interpreter.
+         Without this, loading one stops the app, because an iPad can't compile code as it runs. -->
+    <MtouchInterpreter>-all</MtouchInterpreter>
+    <MtouchDebug>false</MtouchDebug>   <!-- or every launch waits about 40 seconds for a debugger -->
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <BrutalPatched>$(MSBuildThisFileDirectory)obj/BrutalPatched/</BrutalPatched>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="*.cs" />
+    <!-- The real editor. Only Program.cs is the desktop's own. -->
+    <Compile Include="..\Editor\**\*.cs" Exclude="..\Editor\Program.cs;..\Editor\obj\**;..\Editor\bin\**" LinkBase="Editor" />
+    <Compile Include="../Hub/EmpireProject.cs;../Hub/HubJson.cs;../Hub/HubSettings.cs;../Hub/ProjectTemplate.cs" Link="HubFiles/%(Filename)%(Extension)" />
+    <Using Include="Engine.Brutal.Ui" />
+    <Using Include="Engine.Brutal.Gfx" />
+    <Using Include="Editor.Ui" />
+    <ProjectReference Include="..\Engine.Brutal\Engine.Brutal.csproj" />
+    <ProjectReference Include="..\Engine.Core\Engine.Core.csproj" />
+    <ProjectReference Include="..\ScriptCompiler\ScriptCompiler.csproj" />
+    <!-- For their key names and types: nothing on iPad calls into the native side of these. -->
+    <PackageReference Include="Ahwoo.BRUTAL.ImGui" Version="2026.10.2" />
+    <PackageReference Include="Ahwoo.BRUTAL.ImGui.Backends" Version="2026.10.2" />
+    <NativeReference Include="Native\out\MoltenVK.xcframework" Kind="Framework" SmartLink="False" />
+    <NativeReference Include="Native\out\shaderc.xcframework" Kind="Framework" SmartLink="False" />
+    <BundleResource Include="Sample\**\*" LogicalName="Sample\%(RecursiveDir)%(Filename)%(Extension)" />
+    <!-- The BRUTAL License requires NOTICE.txt with every copy, and the other licenses go with it, as on the desktop. -->
+    <BundleResource Include="..\Licenses\NOTICE.txt" LogicalName="NOTICE.txt" />
+    <BundleResource Include="..\Licenses\*.txt;..\Licenses\credits.json" Exclude="..\Licenses\NOTICE.txt" LogicalName="Licenses\%(Filename)%(Extension)" />
+    <BundleResource Include="$(NuGetPackageRoot)ahwoo.brutal.shaderc\2026.10.2\LICENSES\*.txt" LogicalName="Licenses\ThirdParty\%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <!-- The BRUTAL assemblies with OS checks come from BrutalPatch (see iPad/build.sh) instead of their packages. -->
+  <ItemGroup>
+    <PackageReference Include="Ahwoo.BRUTAL.Core" Version="2026.10.1" ExcludeAssets="compile;runtime" />
+    <PackageReference Include="Ahwoo.BRUTAL.Vulkan" Version="2026.10.2" ExcludeAssets="compile;runtime" />
+    <PackageReference Include="Ahwoo.BRUTAL.Vulkan.Abstractions" Version="2026.10.2" ExcludeAssets="compile;runtime" />
+    <PackageReference Include="Ahwoo.BRUTAL.ShaderC" Version="2026.10.2" ExcludeAssets="compile;runtime" />
+    <Reference Include="Brutal.Core"><HintPath>$(BrutalPatched)Brutal.Core.dll</HintPath></Reference>
+    <Reference Include="Brutal.Vulkan"><HintPath>$(BrutalPatched)Brutal.Vulkan.dll</HintPath></Reference>
+    <Reference Include="Brutal.Vulkan.Abstractions"><HintPath>$(BrutalPatched)Brutal.Vulkan.Abstractions.dll</HintPath></Reference>
+    <Reference Include="Brutal.ShaderC"><HintPath>$(BrutalPatched)Brutal.ShaderC.dll</HintPath></Reference>
+  </ItemGroup>
+</Project>

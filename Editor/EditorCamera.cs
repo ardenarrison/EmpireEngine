@@ -71,9 +71,24 @@ public sealed class EditorCamera
         Position += Forward * (distance * Math.Clamp(amount, -0.9f, 0.9f));
     }
 
+    // Two fingers dragged over the scene on a touch screen: circles the camera around the point it looks at, or pans a 2D view.
+    public void Swipe(float dxPixels, float dyPixels)
+    {
+        if (dxPixels == 0f && dyPixels == 0f) return;
+        if (Is2D)
+        {
+            Pan(dxPixels, dyPixels);
+            return;
+        }
+        float distance = MathF.Max(0.5f, Vector3.Distance(Position, Focus));
+        Yaw += dxPixels * 0.005f;
+        Pitch = Math.Clamp(Pitch - dyPixels * 0.005f, -1.5f, 1.5f);
+        Position = Focus - Forward * distance;
+    }
+
     // uiWantsMouse is true when the cursor is over an editor panel, so the UI keeps the mouse (and its scrolling).
     // scroll is this frame's vertical scroll amount: about 1 per wheel notch, in small fractions on a trackpad.
-    public void Update(GlfwWindow window, float dt, bool uiWantsMouse, float scroll = 0f)
+    public void Update(IAppWindow window, float dt, bool uiWantsMouse, float scroll = 0f)
     {
         if (Is2D)
         {
@@ -115,7 +130,7 @@ public sealed class EditorCamera
             Position += Vector3.Normalize(move) * speed;
     }
 
-    private void Update2D(GlfwWindow window, float dt, bool uiWantsMouse, float scroll)
+    private void Update2D(IAppWindow window, float dt, bool uiWantsMouse, float scroll)
     {
         Yaw = 0f;
         Pitch = 0f;
@@ -147,6 +162,6 @@ public sealed class EditorCamera
             Position += Vector3.Normalize(move) * speed;
     }
 
-    public static bool IsDown(GlfwWindow window, GlfwKey key) =>
+    public static bool IsDown(IAppWindow window, GlfwKey key) =>
         window.GetKey(key) == GlfwKeyAction.Press;
 }

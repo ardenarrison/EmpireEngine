@@ -27,3 +27,7 @@ imgui.ini
 
 # Local sample/test project, not part of the repository
 /MyScene/
+
+# iPad native libraries, made by iPad/Native/build-natives.sh
+/iPad/Native/out/
+/iPad/Native/.work/

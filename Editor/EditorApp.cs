@@ -80,6 +80,10 @@ public sealed class EditorApp
     private bool _unsaved;
     private bool _exitRequested;        // the main loop stops after this frame
     private bool _confirmingExit;       // the unsaved-changes prompt is open
+    private bool _prevRightInScene;     // the right button last frame, for right clicks in the scene
+    private float2? _sceneRightStart;   // where a right click began over the scene
+    private string? _nextProject;       // File > Change Project: where to go once the editor has closed this project
+    private readonly ProjectsWindow _projects;
     private readonly FolderBrowser _folderBrowser = new();
     private readonly CreditsWindow _credits = new();
     private readonly Editor.Assistant.AssistantWindow _assistant = new();
@@ -95,12 +99,12 @@ public sealed class EditorApp
     private readonly FullscreenToggle _fullscreen = new();
     private bool _pickingScript;
     private string _newScriptName = "";
-    private readonly TerrainDrawer _terrains = new();
+    private TerrainDrawer _terrains = null!;
     private bool _is2D;                 // the project is 2D (project.empire): a flat, orthographic view and sprites
     private SpriteDrawer _sprites = null!;
     private readonly ScriptMeshes _scriptMeshes = new();   // meshes scripts make at runtime, like water
     private PackageManagerWindow _packages = null!;
-    private GlfwWindow? _window;
+    private IAppWindow? _window;
 
     // The scene file whose settings the Inspector shows (relative to the project folder), when one was clicked in the
     // Assets panel. For a scene other than the open one, its settings are read from the file and written back to it.
@@ -141,6 +145,7 @@ public sealed class EditorApp
         _gizmo.Flat = _is2D;
         _assets = new AssetCache(contentRoot);
         _sprites = new SpriteDrawer(_assets.GetImage);
+        _terrains = new TerrainDrawer(_assets.GetImage);
         Engine.Core.Physics.PhysicsWorld.ModelLoader = _assets.GetModel;   // mesh colliders read models through the cache
         Animator.ModelLoader = _assets.GetModel;                           // and so do animations
         AudioEngine.ClipLoader = _assets.GetAudio;                         // so do sounds
@@ -149,12 +154,14 @@ public sealed class EditorApp
         SaveGame.Directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "EmpireEditor", Path.GetFileName(Path.GetFullPath(contentRoot).TrimEnd('\\', '/')), "Saves");
         _assetPanel = new AssetPanel(contentRoot);
+        string sceneViewName = _is2D ? "2D view" : "3D view";
         _vc = new VisualScriptView(Path.Combine(contentRoot, "Scripts"))
         {
+            SceneViewName = sceneViewName,
             ObjectNames = () => _scene.InHierarchyOrder.Select(o => o.Name).Distinct().ToList(),
             TagNames = () => _scene.InHierarchyOrder.Select(o => o.Tag).Where(t => t.Length > 0).Distinct().OrderBy(t => t, StringComparer.Ordinal).ToList(),
         };
-        _code = new CodeEditorView(Path.Combine(contentRoot, "Scripts"));
+        _code = new CodeEditorView(Path.Combine(contentRoot, "Scripts")) { SceneViewName = sceneViewName };
         _scriptFields = new ScriptFieldCache(contentRoot);
         // Objects with a renamed script follow it to the new name.
         _code.ScriptRenamed += (oldName, newName) =>
@@ -166,6 +173,7 @@ public sealed class EditorApp
         _terminal = new Editor.Terminal.TerminalWindow(contentRoot);
         AppDomain.CurrentDomain.ProcessExit += (_, _) => _terminal.Shutdown();   // stops the shell, and anything running in it, with the editor
         _packages = new PackageManagerWindow(contentRoot);
+        _projects = new ProjectsWindow(contentRoot, ChangeProject);
         var projectSettings = ProjectSettings.Load(contentRoot);
         SceneObject.PositionPrecision = projectSettings.PositionType;   // before any scene loads
         _camera.Far = projectSettings.EditorFarClipPlane;
@@ -197,13 +205,9 @@ public sealed class EditorApp
                 Size = new int2(1280, 720),
             });
             AppIcon.Apply(window);
-            window.OnTrackpadZoom += (_, scale) =>
-            {
-                if (_mode == EditorMode.Edit) _pinch += (float)(scale - 1.0);
-            };
             try
             {
-                RenderLoop(window);
+                Run(new GlfwAppWindow(window), ctx => new EditorUi(window, ctx));
             }
             finally
             {
@@ -216,7 +220,28 @@ public sealed class EditorApp
         }
     }
 
-    private void RenderLoop(GlfwWindow window)
+    // Runs the editor in a window that already exists, with its input (see IUiInput).
+    public void Run(IAppWindow window, Func<VulkanContext, IUiInput> makeInput)
+    {
+        void Pinched(double scale)
+        {
+            if (_mode == EditorMode.Edit) _pinch += (float)(scale - 1.0);
+        }
+        window.PinchZoom += Pinched;
+        try
+        {
+            RenderLoop(window, makeInput);
+        }
+        finally
+        {
+            window.PinchZoom -= Pinched;   // on iPad the window outlives this project
+        }
+    }
+
+    // The project to open next, after Run returns because File > Change Project picked one. Null when the editor simply closed.
+    public string? NextProject => _exitRequested ? _nextProject : null;
+
+    private void RenderLoop(IAppWindow window, Func<VulkanContext, IUiInput> makeInput)
     {
         _window = window;
         using var ctx = new VulkanContext(window, 1280, 720);
@@ -226,9 +251,10 @@ public sealed class EditorApp
         {
             if (_mode == EditorMode.Play) VulkanScripts.Render(_scene, cmd);
         };
-        using var ui = new EditorUi(window, ctx);
+        using var ui = makeInput(ctx);
+        UiInput.Current = ui;
         using var audio = new AudioOutput();   // the sound device; the editor runs silent if there is none
-        float pixelScale = window.ContentScale.X;   // 2 on Retina, so the text atlases start at the right density
+        float pixelScale = window.ContentScale;   // 2 on Retina, so the text atlases start at the right density
         _maxSamples = ctx.MaxSampleCount;
         // The VC and code views share the editor's monospaced font.
         byte[] codeFont = Canvas2D.DefaultFont();
@@ -254,7 +280,7 @@ public sealed class EditorApp
         KeyboardInput.Bind(window);
         // Scripts see the mouse in the scene view, measured from its corner, and the wheel through ImGui (which owns
         // the window's scroll callback).
-        MouseInput.Bind(window, () => SceneArea(ctx), () => ImGui.GetIO().MouseWheel);
+        MouseInput.Bind(window, () => SceneArea(ctx), () => UiInput.Current.MouseWheel);
         // Typed text for the game's text fields (and Input.inputString) comes through the editor's own input too.
         Input.TextProvider = () => _gui.Typed;
         bool prevSave = false;
@@ -265,7 +291,7 @@ public sealed class EditorApp
 
         while (!window.ShouldClose && !_exitRequested)
         {
-            Glfw.PollEvents();
+            window.PollEvents();
 
             // The window's close button goes through the unsaved-changes check like File > Exit.
             if (window.ShouldClose && !_exitRequested)
@@ -274,7 +300,7 @@ public sealed class EditorApp
                 RequestExit();
             }
 
-            _fullscreen.Update(window);
+            if (window.Glfw is { } desktop) _fullscreen.Update(desktop);
             if (ctx.IsMinimized)
             {
                 Thread.Sleep(16);
@@ -302,26 +328,28 @@ public sealed class EditorApp
             }
 
             ui.BeginFrame();
-            _gui.Begin(window, uiCanvas, ImGui.GetIO().DisplaySize, now);
+            _gui.Begin(window, uiCanvas, UiInput.Current.DisplaySize, now);
             // Editor panels, or the game's UI while playing.
             bool uiWantsMouse = _gui.WantsMouse || (_mode == EditorMode.Play && GameUi.PointerOverUi);
+            ui.PointerOverScene = !uiWantsMouse && _mode == EditorMode.Edit && !_vcMode && !_codeMode;
+            window.WantsTextInput = _gui.IsTyping || _vc.IsTyping || (_mode == EditorMode.Edit && _codeMode && _code.WantsKeyboard);
 
             // Escape stops play mode when playing, cancels the exit prompt, closes the open dialog, and otherwise
             // closes the editor. Read from ImGui's input queue, so even a very quick tap between frames counts.
-            if (ImGui.IsKeyPressed(ImGuiKey.Escape, false))
+            if (UiInput.Current.IsKeyPressed(ImGuiKey.Escape, false))
             {
                 if (_mode == EditorMode.Play) TogglePlay();
-                else if (_confirmingExit) _confirmingExit = false;
+                else if (_confirmingExit) CancelExit();
                 else if (_gui.IsTyping) { }   // the field being typed in uses Escape to stop typing
                 else if (CloseTopDialog()) { }
                 else if (_vcMode) { if (!_vc.IsTyping) _vcMode = false; }
                 else if (_codeMode) { }   // the code view uses Escape itself; leave with its 3D view button
-                else RequestExit();
+                else if (!OperatingSystem.IsIOS()) RequestExit();   // an iPad app is closed by the system, not from inside
             }
 
             // Ctrl+` shows and hides the terminal (it works while the terminal has the keyboard, too), except in the visual code
             // editor, which never shows it.
-            if (ImGui.IsKeyPressed(ImGuiKey.GraveAccent, false) && ImGui.GetIO().KeyCtrl && !InVisualCode)
+            if (UiInput.Current.IsKeyPressed(ImGuiKey.GraveAccent, false) && UiInput.Current.KeyCtrl && !InVisualCode)
                 _terminal.Toggle();
 
             bool playDown = window.GetKey(GlfwKey.P) == GlfwKeyAction.Press;
@@ -370,7 +398,7 @@ public sealed class EditorApp
 
             // The asset panel runs along the bottom while editing, so the scene is fitted above it.
             ctx.BottomReservedFraction = _mode == EditorMode.Edit && !FullView
-                ? AssetPanel.Height / Math.Max(1f, ImGui.GetIO().DisplaySize.Y)
+                ? AssetPanel.Height / Math.Max(1f, UiInput.Current.DisplaySize.Y)
                 : 0f;
 
             if (_mode == EditorMode.Edit && _vcMode)
@@ -387,9 +415,10 @@ public sealed class EditorApp
             else if (_mode == EditorMode.Edit)
             {
                 _camera.ViewHeightPixels = SceneArea(ctx).W;
-                _camera.Update(window, dt, uiWantsMouse, ImGui.GetIO().MouseWheel);
+                _camera.Update(window, dt, uiWantsMouse, UiInput.Current.MouseWheel);
                 if (!uiWantsMouse) _camera.Pinch(_pinch);
                 _pinch = 0f;
+                _camera.Swipe(ui.SceneSwipe.X, ui.SceneSwipe.Y);
                 Particles.Update(_scene, dt);   // live preview while editing
                 Animators.UpdatePreview(_scene, dt);
             }
@@ -520,8 +549,8 @@ public sealed class EditorApp
                 _sprites.Draw(renderer, _scene);
                 Particles.Draw(_scene, renderer, eye);
             }
-            var canvasSize = ImGui.GetIO().DisplaySize;
-            var canvasScale = ImGui.GetIO().DisplayFramebufferScale;
+            var canvasSize = UiInput.Current.DisplaySize;
+            var canvasScale = UiInput.Current.DisplayFramebufferScale;
             bool showVc = _mode == EditorMode.Edit && _vcMode;
             bool showCode = _mode == EditorMode.Edit && _codeMode;
             if (showVc)
@@ -552,7 +581,7 @@ public sealed class EditorApp
 
     // ---- panels ----------------------------------------------------------------------
 
-    private void DrawPanels(BrutalRenderer renderer, GlfwWindow window)
+    private void DrawPanels(BrutalRenderer renderer, IAppWindow window)
     {
         DrawHierarchy(window);
         DrawToolButtons();
@@ -594,9 +623,10 @@ public sealed class EditorApp
         DrawExitPrompt();
     }
 
-    private void DrawHierarchy(GlfwWindow window)
+    private void DrawHierarchy(IAppWindow window)
     {
         var g = _gui;
+        bool rightClickedRow = false;
         _hierRows.Clear();
         bool editing = _mode == EditorMode.Edit;
 
@@ -624,16 +654,29 @@ public sealed class EditorApp
             TrackHierarchyRow(obj, editing);
             if (editing && g.LastItemDoubleClicked)
                 FocusCameraOn(obj);
+            if (editing && g.RightPressed && g.LastItemHovered)
+            {
+                rightClickedRow = true;
+                if (!IsSelected(obj)) ClickHierarchyRow(obj, shift: false, toggle: false);
+            }
+            if (editing && g.BeginContextMenu($"object:{obj.Id:N}", forLastItem: true))
+            {
+                if (g.MenuItem("Duplicate")) DuplicateSelected();
+                g.EndPopup();
+            }
         }
 
         FinishHierarchyDrag(editing);
 
-        if (editing && g.BeginContextMenu("hierarchy"))
+        // A right click on a row gets that row's menu above, not this one for the panel.
+        if (editing && !rightClickedRow && g.BeginContextMenu("hierarchy"))
         {
             g.TextDisabled("Objects");
             if (g.MenuItem("Add Object")) AddObject();
             if (g.MenuItem("Add Camera")) AddCamera();
             if (g.MenuItem("Sprite")) AddSpriteObject();
+            if (!_is2D && g.MenuItem("Shapes...")) g.OpenPopup("shapes", g.Mouse, 160f);
+            if (g.MenuItem("Audio Source")) AddAudioSourceObject();
             g.Separator();
             g.TextDisabled("Lighting");
             if (g.MenuItem("Point Light")) AddLightObject("Point Light", new PointLight(), pitch: 0f);
@@ -649,15 +692,27 @@ public sealed class EditorApp
             foreach (var preset in ParticlePresets.All)
                 if (g.MenuItem(preset.Name)) AddParticleSystemObject(preset);
             g.Separator();
-            g.TextDisabled("Audio");
-            if (g.MenuItem("Audio Source")) AddAudioSourceObject();
-            g.Separator();
             g.TextDisabled("UI");
             if (g.MenuItem("Button")) AddUi(UiKind.Button);
             if (g.MenuItem("Text Field")) AddUi(UiKind.TextField);
             if (g.MenuItem("Checkbox")) AddUi(UiKind.Checkbox);
             if (g.MenuItem("Dropdown")) AddUi(UiKind.Dropdown);
             if (g.MenuItem("Bar")) AddUi(UiKind.Bar);
+            g.EndPopup();
+        }
+
+        // Opened by a right click on an object in the scene (see UpdateSceneClick).
+        if (editing && g.BeginPopup("scene-object"))
+        {
+            if (g.MenuItem("Duplicate")) DuplicateSelected();
+            g.EndPopup();
+        }
+
+        // Its own small menu, because the one above is already as tall as a small window.
+        if (editing && g.BeginPopup("shapes"))
+        {
+            foreach (string shape in Primitives.All)
+                if (g.MenuItem(Primitives.Label(shape))) AddShape(shape);
             g.EndPopup();
         }
 
@@ -1003,9 +1058,17 @@ public sealed class EditorApp
         g.TextDisabled("More points give finer detail and cost more to draw.");
 
         g.Separator();
-        var baseColor = terrain.BaseColor;
-        if (g.ColorEdit3("Base Color", ref baseColor) && editing) terrain.BaseColor = baseColor;
-        g.TextDisabled("The color of ground with no paint on it.");
+        DrawTerrainTextures(terrain, editing);
+
+        g.Separator();
+        if (terrain.ColorTexture.Length > 0)
+            g.TextDisabled("Unpainted ground shows the color texture; paint layers tint it.");
+        else
+        {
+            var baseColor = terrain.BaseColor;
+            if (g.ColorEdit3("Base Color", ref baseColor) && editing) terrain.BaseColor = baseColor;
+            g.TextDisabled("The color of ground with no paint on it.");
+        }
 
         DrawTerrainLayers(terrain, editing);
         g.Separator();
@@ -1070,6 +1133,73 @@ public sealed class EditorApp
         g.TextDisabled("Generate replaces the whole ground; Undo (Ctrl+Z) brings it back.");
     }
 
+    // The heightmap, color texture and normal map: pictures in the project. Picking a heightmap sets the heights from it.
+    private void DrawTerrainTextures(Terrain terrain, bool editing)
+    {
+        var g = _gui;
+        g.TextDisabled("Textures");
+        var images = SpriteImages();
+        if (images.Count == 0)
+        {
+            g.TextWrapped("Put a PNG, JPEG, BMP or GIF in the project folder (Textures/ is a good place) to use it as a heightmap, color texture or normal map.", Gui.DimColor);
+            return;
+        }
+
+        if (PickImage("Heightmap", terrain.Heightmap, images, editing) is { } heightmap)
+        {
+            if (heightmap.Length == 0) { terrain.Heightmap = ""; _heightmapError = null; }
+            else ApplyHeightmap(terrain, heightmap);
+        }
+        if (terrain.Heightmap.Length > 0 && editing && g.Button("Apply Heightmap Again##heightmap"))
+            ApplyHeightmap(terrain, terrain.Heightmap);
+        if (_heightmapError is { } error)
+            g.TextWrapped(error, Gui.ErrorColor);
+        g.TextDisabled("Black is the lowest ground and white is Height. 16-bit PNGs give the smoothest slopes; sculpting still works after.");
+
+        if (PickImage("Color Texture", terrain.ColorTexture, images, editing) is { } color) terrain.ColorTexture = color;
+        if (terrain.ColorTexture.Length > 0 && _terrains.Failed(terrain.ColorTexture))
+            g.TextWrapped($"{terrain.ColorTexture} can't be read as a picture.", Gui.ErrorColor);
+        if (PickImage("Normal Map", terrain.NormalMap, images, editing) is { } normal) terrain.NormalMap = normal;
+        if (terrain.NormalMap.Length > 0 && _terrains.Failed(terrain.NormalMap))
+            g.TextWrapped($"{terrain.NormalMap} can't be read as a picture.", Gui.ErrorColor);
+
+        if (terrain.ColorTexture.Length > 0 || terrain.NormalMap.Length > 0)
+        {
+            Float("Tiling", terrain.TextureTiling, v => terrain.TextureTiling = v, editing, 0.05f);
+            g.TextDisabled("1 stretches the textures over the whole terrain; more repeats them.");
+        }
+        if (terrain.NormalMap.Length > 0)
+            Float("Normal Strength", terrain.NormalStrength, v => terrain.NormalStrength = v, editing, 0.01f);
+    }
+    private string? _heightmapError;
+
+    // A picture from the project, or "(none)". Returns the new choice ("" for none) when it changed, otherwise null.
+    private string? PickImage(string label, string current, List<string> images, bool editing)
+    {
+        var options = images.Prepend("(none)").ToList();
+        int index = Math.Max(0, images.FindIndex(i => string.Equals(i, current, StringComparison.OrdinalIgnoreCase)) + 1);
+        if (current.Length > 0 && index == 0)
+        {
+            options.Add(SafeLabel.Of(current, 60) + " (missing)");
+            index = options.Count - 1;
+        }
+        if (!_gui.Combo(label, index, options, out int picked) || !editing || picked == index) return null;
+        return picked == 0 ? "" : picked <= images.Count ? images[picked - 1] : null;
+    }
+
+    private void ApplyHeightmap(Terrain terrain, string relativePath)
+    {
+        try
+        {
+            terrain.ApplyHeightmap(Path.Combine(_contentRoot, relativePath), relativePath);
+            _heightmapError = null;
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
+        {
+            _heightmapError = $"Could not read {relativePath} as a heightmap: {ex.Message}";
+        }
+    }
+
     // The paint layers: each a named color. Pick one to paint with, rename it, change its color, or remove it.
     private void DrawTerrainLayers(Terrain terrain, bool editing)
     {
@@ -1126,7 +1256,7 @@ public sealed class EditorApp
 
     // The brush: aims at the terrain under the mouse, shows its size as a ring, and paints while the left button is held.
     // Returns true while sculpting is in charge of the mouse, so the transform gizmo stays out of the way.
-    private bool UpdateTerrainSculpt(GlfwWindow window, Canvas2D draw, Matrix4x4 viewProj, float4 area, bool uiWantsMouse, float dt)
+    private bool UpdateTerrainSculpt(IAppWindow window, Canvas2D draw, Matrix4x4 viewProj, float4 area, bool uiWantsMouse, float dt)
     {
         if (_sculpting && _selected?.Id != _sculptTarget) _sculpting = false;
         if (!_sculpting || _selected is null || _selected.Components.OfType<Terrain>().FirstOrDefault() is not { } terrain)
@@ -1214,7 +1344,7 @@ public sealed class EditorApp
 
                 string label = entry.Clip.Length == 0
                     ? "None (drag an animation here)"
-                    : SafeLabel.Of($"{entry.Clip}  ({Path.GetFileName(entry.Model)})", 70);
+                    : SafeLabel.Of($"{entry.Clip}  ({Primitives.Label(entry.Model)})", 70);
                 g.Button($"{label}##clip", width: -60f);
                 var field = g.LastItem;
                 g.SameLine();
@@ -1865,7 +1995,7 @@ public sealed class EditorApp
     private void DrawParticleShapeGizmos(Canvas2D draw, Matrix4x4 viewProj, float4 viewport)
     {
         if (_selected?.Components.OfType<ParticleSystem>().FirstOrDefault() is not { Shape.Enabled: true } ps) return;
-        float2 display = ImGui.GetIO().DisplaySize;
+        float2 display = UiInput.Current.DisplaySize;
         var size = new float4(viewport.X * display.X, viewport.Y * display.Y, viewport.Z * display.X, viewport.W * display.Y);
         var world = Matrix4x4.CreateTranslation(ps.Shape.Position) * _selected.WorldMatrix;
         var color = new float4(1f, 0.6f, 0.15f, 0.9f);
@@ -2017,7 +2147,7 @@ public sealed class EditorApp
         string? model = MeshColliderModel(obj, mesh);
         g.TextWrapped(model is null
             ? "No model: add a Mesh component"
-            : "Shape: " + SafeLabel.Of(Path.GetFileName(model), 60) + (mesh.Model.Length == 0 ? " (from Mesh)" : ""), Gui.DimColor);
+            : "Shape: " + SafeLabel.Of(Primitives.Label(model), 60) + (mesh.Model.Length == 0 ? " (from Mesh)" : ""), Gui.DimColor);
 
         // Pick a different model for the collision shape, e.g. a simplified version of the visible one.
         if (g.Button("Choose collision model") && editing)
@@ -2117,7 +2247,7 @@ public sealed class EditorApp
     // Collider outlines in the edit view: green, brighter on the selected object.
     private void DrawColliderGizmos(Canvas2D draw, Matrix4x4 viewProj, float4 viewport)
     {
-        float2 display = ImGui.GetIO().DisplaySize;
+        float2 display = UiInput.Current.DisplaySize;
         float4 size = new float4(viewport.X * display.X, viewport.Y * display.Y,
                                  viewport.Z * display.X, viewport.W * display.Y);
 
@@ -2237,7 +2367,7 @@ public sealed class EditorApp
     private void DrawMeshBody(SceneObject obj, MeshRenderer mr, bool editing)
     {
         var g = _gui;
-        string label = mr.Model.Length == 0 ? "Choose model" : SafeLabel.Of(Path.GetFileName(mr.Model), 60);
+        string label = mr.Model.Length == 0 ? "Choose model" : SafeLabel.Of(Primitives.Label(mr.Model), 60);
         if (g.Button($"{label}##model", width: -1f) && editing)
         {
             _browserTarget = obj.Id;
@@ -2312,7 +2442,10 @@ public sealed class EditorApp
 
         // Anti-aliasing smooths jagged edges. MSAA draws several samples per pixel and averages them; FXAA and SMAA smooth the
         // finished picture instead (SMAA is cleaner, FXAA a little cheaper).
-        if (g.Combo("Anti-Aliasing", (int)cam.AntiAliasing, AntiAliasingNames, out int pickedMode) && editing)
+        // An iPad offers None and MSAA: see SetPostProcessing. A camera saved with FXAA or SMAA shows as None there.
+        bool postUnavailable = OperatingSystem.IsIOS() && (cam.AntiAliasing is AntiAliasingMode.Fxaa or AntiAliasingMode.Smaa);
+        string[] antiAliasing = OperatingSystem.IsIOS() ? AntiAliasingNames[..2] : AntiAliasingNames;
+        if (g.Combo("Anti-Aliasing", postUnavailable ? 0 : (int)cam.AntiAliasing, antiAliasing, out int pickedMode) && editing)
             cam.AntiAliasing = (AntiAliasingMode)pickedMode;
         if (cam.AntiAliasing == AntiAliasingMode.Msaa)
         {
@@ -2327,7 +2460,9 @@ public sealed class EditorApp
                 g.TextWrapped($"This GPU supports up to {_maxSamples}x, so {_maxSamples}x is used.", Gui.DimColor);
         }
 
-        if (cam.AntiAliasing == AntiAliasingMode.Fxaa)
+        if (postUnavailable)
+            g.TextWrapped($"This camera uses {AntiAliasingNames[(int)cam.AntiAliasing]}, which isn't available on iPad, so anti-aliasing is off here.", Gui.DimColor);
+        else if (cam.AntiAliasing == AntiAliasingMode.Fxaa)
             g.TextWrapped("FXAA blurs the edges it finds in the finished picture. Cheap, and it also smooths edges inside textures.", Gui.DimColor);
         else if (cam.AntiAliasing == AntiAliasingMode.Smaa)
             g.TextWrapped("SMAA finds the edges in the finished picture and blends across them. Cleaner than FXAA, slightly slower.", Gui.DimColor);
@@ -2646,7 +2781,7 @@ public sealed class EditorApp
     // so the outlines line up with the picture even when the window isn't 16:9.
     private void DrawCameraGizmos(Canvas2D draw, Matrix4x4 viewProj, float4 viewport)
     {
-        float2 display = ImGui.GetIO().DisplaySize;
+        float2 display = UiInput.Current.DisplaySize;
         float4 size = new float4(viewport.X * display.X, viewport.Y * display.Y,
                                  viewport.Z * display.X, viewport.W * display.Y);
         var play = GameCamera();
@@ -2715,7 +2850,7 @@ public sealed class EditorApp
     // the cone for a spot light, an arrow for a directional light). Colored like the light, yellow when selected.
     private void DrawLightGizmos(Canvas2D draw, Matrix4x4 viewProj, float4 viewport)
     {
-        float2 display = ImGui.GetIO().DisplaySize;
+        float2 display = UiInput.Current.DisplaySize;
         float4 size = new float4(viewport.X * display.X, viewport.Y * display.Y, viewport.Z * display.X, viewport.W * display.Y);
         var identity = Matrix4x4.Identity;
         const int segments = 40;
@@ -3072,7 +3207,7 @@ public sealed class EditorApp
                 if (_buildResult is { Success: false } failed)
                 {
                     if (g.Button("Copy Errors"))
-                        ImGui.SetClipboardText(ProjectBuilder.ErrorReport(failed));
+                        UiInput.Current.SetClipboardText(ProjectBuilder.ErrorReport(failed));
                     g.SameLine();
                 }
                 if (g.Button("Close"))
@@ -3096,30 +3231,37 @@ public sealed class EditorApp
         g.BeginMenuBar();
         if (g.BeginMenu("File"))
         {
-            string shortcut = OperatingSystem.IsMacOS() ? "Cmd+S" : "Ctrl+S";
+            string shortcut = OperatingSystem.IsMacOS() || OperatingSystem.IsIOS() ? "Cmd+S" : "Ctrl+S";
             if (g.MenuItem("Save Scene", shortcut, enabled: _mode == EditorMode.Edit))
                 SaveScene();
-            if (g.MenuItem("Build Project...", enabled: _mode == EditorMode.Edit && _buildStage == BuildStage.Off))
+            if (OperatingSystem.IsIOS() && g.MenuItem("Save Project", enabled: _mode == EditorMode.Edit))
+                SaveProject();
+            // An iPad can't start other programs, which building needs, or compile packages yet.
+            if (!OperatingSystem.IsIOS() && g.MenuItem("Build Project...", enabled: _mode == EditorMode.Edit && _buildStage == BuildStage.Off))
                 StartBuild();
-            if (g.MenuItem("Package Manager...", enabled: _mode == EditorMode.Edit))
+            if (!OperatingSystem.IsIOS() && g.MenuItem("Package Manager...", enabled: _mode == EditorMode.Edit))
                 _packages.Open();
+            if (g.MenuItem("Change Project...", enabled: _mode == EditorMode.Edit))
+                _projects.Open();
             if (g.MenuItem("Project Settings...", enabled: _mode == EditorMode.Edit))
                 _projectSettings.Open();
-            g.Separator();
-            if (g.MenuItem("Save and Exit", enabled: _mode == EditorMode.Edit))
+            if (!OperatingSystem.IsIOS())
             {
-                SaveScene();
-                _code.SaveAll();
-                _exitRequested = true;
+                g.Separator();
+                if (g.MenuItem("Save and Exit", enabled: _mode == EditorMode.Edit))
+                {
+                    SaveProject();
+                    _exitRequested = true;
+                }
+                if (g.MenuItem("Exit"))
+                    RequestExit();
             }
-            if (g.MenuItem("Exit"))
-                RequestExit();
             g.EndMenu();
         }
         if (g.BeginMenu("Window"))
         {
             // The terminal covers the asset browser, so this switches between the two and is named after the one it shows.
-            if (g.MenuItem(_terminal.IsOpen ? "Asset Browser" : "Terminal", "Ctrl+`", enabled: !InVisualCode))
+            if (!OperatingSystem.IsIOS() && g.MenuItem(_terminal.IsOpen ? "Asset Browser" : "Terminal", "Ctrl+`", enabled: !InVisualCode))
                 _terminal.Toggle();
             if (g.MenuItem(_settings.ShowFpsCounter ? "Hide FPS Counter" : "Show FPS Counter"))
             {
@@ -3130,11 +3272,21 @@ public sealed class EditorApp
                     Console.WriteLine("Couldn't save the project's settings: " + ex.Message);
                 }
             }
+            if (_window?.KeyboardPreference is { } keyboard)
+            {
+                g.Separator();
+                if (g.MenuItem(keyboard == KeyboardPreference.Automatic ? "* Keyboard: Automatic" : "Keyboard: Automatic"))
+                    _window.KeyboardPreference = KeyboardPreference.Automatic;
+                if (g.MenuItem(keyboard == KeyboardPreference.OnScreen ? "* Keyboard: On Screen" : "Keyboard: On Screen"))
+                    _window.KeyboardPreference = KeyboardPreference.OnScreen;
+                if (g.MenuItem(keyboard == KeyboardPreference.Connected ? "* Keyboard: Connected" : "Keyboard: Connected"))
+                    _window.KeyboardPreference = KeyboardPreference.Connected;
+            }
             g.EndMenu();
         }
         if (g.BeginMenu("Help"))
         {
-            if (g.MenuItem("AI Assistant...", enabled: _mode == EditorMode.Edit))
+            if (!OperatingSystem.IsIOS() && g.MenuItem("AI Assistant...", enabled: _mode == EditorMode.Edit))
                 _assistant.Open();
             if (g.MenuItem("Credits"))
                 _credits.Open();
@@ -3152,6 +3304,8 @@ public sealed class EditorApp
             _terminal.Draw(g, Environment.TickCount64 / 1000.0);
         if (_mode == EditorMode.Edit)
             _projectSettings.Draw(g);
+        if (_mode == EditorMode.Edit)
+            _projects.Draw(g);
         if (_mode == EditorMode.Edit)
             _packages.Draw(g, _scene, _scriptFields.Classes, _scriptFields.Errors, _scriptFields.IsCompiling);
     }
@@ -3200,6 +3354,20 @@ public sealed class EditorApp
             _confirmingExit = true;
     }
 
+    // Closes this project, by way of the unsaved-changes prompt, and tells whoever ran the editor to open that one.
+    private void ChangeProject(string folder)
+    {
+        _projects.Close();
+        _nextProject = folder;
+        RequestExit();
+    }
+
+    private void CancelExit()
+    {
+        _confirmingExit = false;
+        _nextProject = null;
+    }
+
     private void DrawExitPrompt()
     {
         if (!_confirmingExit) return;
@@ -3211,20 +3379,21 @@ public sealed class EditorApp
         string unsaved = SceneSerializer.ToJson(_scene) != _savedJson
             ? (_code.HasUnsavedChanges ? $"{_scene.Name} and your scripts" : _scene.Name)
             : "your scripts";
-        g.TextWrapped($"Save changes to {unsaved} before exiting?");
+        bool changing = _nextProject is not null;
+        g.TextWrapped($"Save changes to {unsaved} before {(changing ? "changing project" : "exiting")}?");
         g.Spacing();
-        if (g.Button("Save and Exit", highlighted: true))
+        if (g.Button(changing ? "Save and Change" : "Save and Exit", highlighted: true))
         {
             SaveScene();
             _code.SaveAll();
             _exitRequested = true;
         }
         g.SameLine();
-        if (g.Button("Exit Without Saving"))
+        if (g.Button(changing ? "Change Without Saving" : "Exit Without Saving"))
             _exitRequested = true;
         g.SameLine();
         if (g.Button("Cancel"))
-            _confirmingExit = false;
+            CancelExit();
 
         g.EndWindow();
     }
@@ -3236,6 +3405,7 @@ public sealed class EditorApp
         if (_assistant.IsOpen) { _assistant.Close(); return true; }
         if (_packages.IsOpen) { _packages.Close(); return true; }
         if (_projectSettings.IsOpen) { _projectSettings.Close(); return true; }
+        if (_projects.IsOpen) { _projects.Close(); return true; }
         if (_assetPanel.CloseDialog()) return true;
         if (_browser.IsOpen) { _browser.Close(); return true; }
         if (_pickingScript) { _pickingScript = false; return true; }
@@ -3259,9 +3429,16 @@ public sealed class EditorApp
         Console.WriteLine($"Saved {_scenePath}");
     }
 
-    private static bool IsSaveShortcutHeld(GlfwWindow window)
+    // The scene and every script open in the code view.
+    private void SaveProject()
     {
-        if (OperatingSystem.IsMacOS())
+        SaveScene();
+        _code.SaveAll();
+    }
+
+    private static bool IsSaveShortcutHeld(IAppWindow window)
+    {
+        if (OperatingSystem.IsMacOS() || OperatingSystem.IsIOS())
             return window.GetKey(GlfwKey.LeftSuper) == GlfwKeyAction.Press ||
                    window.GetKey(GlfwKey.RightSuper) == GlfwKeyAction.Press;
 
@@ -3288,7 +3465,7 @@ public sealed class EditorApp
     // 10 units ahead. Null when the cursor is not over the scene view.
     private Vector3? DropPoint(float2 cursor, float4 viewport, Matrix4x4 viewProj)
     {
-        var display = ImGui.GetIO().DisplaySize;
+        var display = UiInput.Current.DisplaySize;
         float left = viewport.X * display.X, top = viewport.Y * display.Y;
         float width = viewport.Z * display.X, height = viewport.W * display.Y;
         if (cursor.X < left || cursor.X > left + width || cursor.Y < top || cursor.Y > top + height)
@@ -3377,6 +3554,15 @@ public sealed class EditorApp
     private long _spriteListTime;
 
     // An empty object with an Audio Source, picked from the hierarchy's right-click menu.
+    // A built-in shape, a little in front of the scene camera.
+    private void AddShape(string shape)
+    {
+        var obj = new SceneObject { Name = Primitives.Label(shape), Position = _camera.Position + _camera.Forward * 6f };
+        obj.Components.Add(new MeshRenderer { Model = shape });
+        _scene.Add(obj);
+        _selectedId = obj.Id;
+    }
+
     private void AddAudioSourceObject()
     {
         var obj = new SceneObject { Name = "Audio Source" };
@@ -3418,7 +3604,7 @@ public sealed class EditorApp
     private float4 SceneArea(VulkanContext ctx)
     {
         var vp = ctx.SceneViewport;
-        var display = ImGui.GetIO().DisplaySize;
+        var display = UiInput.Current.DisplaySize;
         return new float4(vp.X * display.X, vp.Y * display.Y, vp.Z * display.X, vp.W * display.Y);
     }
 
@@ -3935,7 +4121,7 @@ public sealed class EditorApp
     // The left mouse button in the scene view: a click selects the object under the mouse, and holding it down and moving
     // the mouse (past a few pixels) turns the camera to look around, the way a right-drag does. The camera moves only on
     // the drag, so a click never turns it.
-    private void UpdateSceneClick(GlfwWindow window, Matrix4x4 viewProj, Vector3 eye, float4 area, bool uiWantsMouse, bool canStart)
+    private void UpdateSceneClick(IAppWindow window, Matrix4x4 viewProj, Vector3 eye, float4 area, bool uiWantsMouse, bool canStart)
     {
         bool left = window.GetMouseButton(GlfwMouseButton.Left) == GlfwButtonAction.Press;
         bool pressed = left && !_prevLeftInScene;
@@ -3945,6 +4131,7 @@ public sealed class EditorApp
         var cursor = window.CursorPos;
         var mouse = new float2((float)cursor.X, (float)cursor.Y);
         bool inside = mouse.X >= area.X && mouse.Y >= area.Y && mouse.X <= area.X + area.Z && mouse.Y <= area.Y + area.W;
+        UpdateSceneRightClick(window, viewProj, eye, area, mouse, inside && !uiWantsMouse);
 
         if (pressed)
         {
@@ -3981,11 +4168,28 @@ public sealed class EditorApp
         }
     }
 
+    // A right click on an object in the scene (holding a finger on one, on iPad) selects it and opens its menu. A right drag turns
+    // the camera instead, so the menu only opens if the mouse stayed where it was pressed.
+    private void UpdateSceneRightClick(IAppWindow window, Matrix4x4 viewProj, Vector3 eye, float4 area, float2 mouse, bool overScene)
+    {
+        bool right = window.GetMouseButton(GlfwMouseButton.Right) == GlfwButtonAction.Press;
+        if (right && !_prevRightInScene)
+            _sceneRightStart = overScene ? mouse : null;
+        else if (!right && _prevRightInScene && _sceneRightStart is { } start && overScene && _mode == EditorMode.Edit &&
+                 MathF.Abs(mouse.X - start.X) + MathF.Abs(mouse.Y - start.Y) <= 5f &&
+                 PickObject(mouse, viewProj, eye, area) is { } picked)
+        {
+            if (!IsSelected(picked)) ClickHierarchyRow(picked, shift: false, toggle: false);
+            _gui.OpenPopup("scene-object", mouse, 160f);
+        }
+        _prevRightInScene = right;
+    }
+
     // A left click in the scene view selects the object under the mouse, as a click on its row in the Hierarchy would
     // (hold Ctrl or Cmd to add to the selection). Clicking nothing clears the selection. Objects with a model are hit
     // where their model's bounding box is; a terrain where its ground is; others (cameras, lights, empty objects) by their
     // marker, within a few pixels of where they are drawn. The nearest hit wins.
-    private void SelectInScene(GlfwWindow window, Matrix4x4 viewProj, Vector3 eye, float4 area)
+    private void SelectInScene(IAppWindow window, Matrix4x4 viewProj, Vector3 eye, float4 area)
     {
         var cursor = window.CursorPos;
         var mouse = new float2((float)cursor.X, (float)cursor.Y);
@@ -4107,7 +4311,7 @@ public sealed class EditorApp
     private void DrawSelectionOutline(Canvas2D draw, Matrix4x4 viewProj, Vector3 eye, float4 viewport)
     {
         if (_selected is null) return;
-        float2 display = ImGui.GetIO().DisplaySize;
+        float2 display = UiInput.Current.DisplaySize;
         var size = new float4(viewport.X * display.X, viewport.Y * display.Y, viewport.Z * display.X, viewport.W * display.Y);
         float seconds = (float)(Environment.TickCount64 % 100000) / 1000f;
 

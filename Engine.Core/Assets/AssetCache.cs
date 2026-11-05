@@ -76,6 +76,7 @@ public sealed class AssetCache(string contentRoot)
 
     private (GlbModel, DateTime) Load(string relativePath)
     {
+        if (Primitives.IsBuiltIn(relativePath)) return (Primitives.Get(relativePath), default);
         var full = Path.Combine(ContentRoot, relativePath);
         var writeTime = File.GetLastWriteTimeUtc(full);
         return (ModelLoader.Load(full), writeTime);

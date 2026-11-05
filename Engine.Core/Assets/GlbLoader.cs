@@ -58,11 +58,12 @@ public static class GlbLoader
     private const uint ChunkJson = 0x4E4F534A; // "JSON"
     private const uint ChunkBin = 0x004E4942;  // "BIN\0"
 
-    public static GlbModel Load(string path)
-    {
-        byte[] file = File.ReadAllBytes(path);
-        string dir = Path.GetDirectoryName(Path.GetFullPath(path))!;
+    public static GlbModel Load(string path) =>
+        Load(File.ReadAllBytes(path), Path.GetDirectoryName(Path.GetFullPath(path))!, Path.GetFileNameWithoutExtension(path));
 
+    // The same from a file already in memory. dir is where its external files would be; name becomes the model's name.
+    public static GlbModel Load(byte[] file, string dir, string name)
+    {
         byte[] jsonBytes;
         byte[] bin = Array.Empty<byte>();
         bool isBinary = file.Length >= 12 && BitConverter.ToUInt32(file, 0) == Magic;
@@ -182,7 +183,7 @@ public static class GlbLoader
 
         return new GlbModel
         {
-            Name = Path.GetFileNameWithoutExtension(path),
+            Name = name,
             Meshes = meshes,
             BoundsMin = min,
             BoundsMax = max,

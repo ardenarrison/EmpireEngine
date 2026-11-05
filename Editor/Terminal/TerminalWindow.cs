@@ -338,7 +338,7 @@ public sealed class TerminalWindow(string workingDirectory)
     private void CopySelection()
     {
         if (Selection() is not { } s) return;
-        ImGui.SetClipboardText(_screen.GetText(s.From.Row, s.From.Col, s.To.Row, s.To.Col).ToU8());
+        UiInput.Current.SetClipboardText(_screen.GetText(s.From.Row, s.From.Col, s.To.Row, s.To.Col));
     }
 
     // ---- the keyboard -------------------------------------------------------------------------------------------------------
@@ -346,7 +346,7 @@ public sealed class TerminalWindow(string workingDirectory)
     private void HandleKeys(Gui g)
     {
         if (!_focused || _session is null) return;
-        var io = ImGui.GetIO();
+        var io = UiInput.Current;
 
         if (_session.HasExited)
         {
@@ -415,7 +415,7 @@ public sealed class TerminalWindow(string workingDirectory)
         _session.Write(send.ToString());
     }
 
-    private static bool Pressed(ImGuiKey key) => ImGui.IsKeyPressed(key, true);
+    private static bool Pressed(ImGuiKey key) => UiInput.Current.IsKeyPressed(key, true);
 
     // Arrow keys: ESC [ A normally, ESC O A in application mode, and with modifiers ESC [ 1 ; n A (n is 2 for Shift, 3 Alt, 5 Ctrl).
     private static string Arrow(char letter, bool application, bool ctrl, bool shift, bool alt)
@@ -430,9 +430,7 @@ public sealed class TerminalWindow(string workingDirectory)
     private void Paste()
     {
         if (_session is not { HasExited: false }) return;
-        var clip = ImGui.GetClipboardText();
-        if (clip.IsNull()) return;
-        string text = System.Text.Encoding.UTF8.GetString(clip.AsSpan()).Replace("\r\n", "\r").Replace('\n', '\r');
+        string text = UiInput.Current.GetClipboardText().Replace("\r\n", "\r").Replace('\n', '\r');
         text = new string(text.Where(ch => ch == '\r' || ch == '\t' || ch >= 32 && ch != 127).ToArray());
         if (text.Length == 0) return;
         _scrollBack = 0;

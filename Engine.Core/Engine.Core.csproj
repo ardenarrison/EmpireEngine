@@ -8,4 +8,8 @@
     <PackageReference Include="NLayer" Version="3.0.0" />
     <PackageReference Include="StbImageSharp" Version="2.30.15" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- The Empire shape (Primitives), inside the DLL so the editor and built games carry it with nothing to copy. -->
+    <EmbeddedResource Include="..\Empire_Crown.glb" LogicalName="Engine.Core.Assets.Empire_Crown.glb" />
+  </ItemGroup>
 </Project>

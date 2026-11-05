@@ -7,7 +7,7 @@ namespace Engine.Brutal.Gfx;
 // keys: Keys.D0 to D9 are GLFW's Number0 to Number9.
 public static class KeyboardInput
 {
-    public static void Bind(GlfwWindow window)
+    public static void Bind(IAppWindow window)
     {
         var keys = new Dictionary<Keys, GlfwKey>();
         foreach (var key in Enum.GetValues<Keys>())

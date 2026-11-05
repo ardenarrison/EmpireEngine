@@ -50,7 +50,7 @@ public sealed class TransformGizmo
     // obj is the primary selection, which carries the handles; others are the rest of the selection.
     // area is the scene rectangle in window pixels (x, y, width, height). Handles are drawn on canvas's current layer.
     // Returns true when an object changed.
-    public bool Update(GlfwWindow window, Canvas2D canvas, SceneObject? obj, IReadOnlyCollection<SceneObject> others,
+    public bool Update(IAppWindow window, Canvas2D canvas, SceneObject? obj, IReadOnlyCollection<SceneObject> others,
         Matrix4x4 viewProj, Vector3 eye, float4 area, bool uiWantsMouse)
     {
         var cursor = window.CursorPos;

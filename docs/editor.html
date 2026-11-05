@@ -80,13 +80,13 @@
 <h3>Adding objects</h3>
 <p>Right-click in the Hierarchy for a menu of ready-made objects:</p>
 <ul>
-  <li><strong>Objects</strong>: Add Object (empty), Add Camera</li>
+  <li><strong>Objects</strong>: Add Object (empty), Add Camera, Sprite, Shapes, Audio Source</li>
   <li><strong>Lighting</strong>: Point Light, Spot Light, Directional Light, Environment (sky and ambient)</li>
   <li><strong>World</strong>: Terrain</li>
   <li><strong>Effects</strong>: Particle System, plus the particle presets Fire, Explosion, Embers and Smoke</li>
-  <li><strong>Audio</strong>: Audio Source</li>
   <li><strong>UI</strong>: Button, Text Field, Checkbox, Dropdown, Bar</li>
 </ul>
+<p><strong>Shapes</strong> opens a second menu of shapes that come with the engine: Cube, Sphere, Capsule, Cone and Empire, the Empire Engine crown. Each is placed in front of the scene camera as an object with a Mesh Renderer. They need no file in the project and work in built games, and in 3D projects only. Change a shape's color with the Mesh Renderer's Tint, and add a collider yourself if it should be solid.</p>
 <p>You can also <strong>drag a model</strong> from the Assets panel and drop it on the scene: it lands on the ground under the cursor (or 10 units ahead when there's no ground there). <strong>Dragging a sound</strong> onto the scene makes an object that plays it.</p>
 
 <h3>Selecting</h3>
@@ -96,6 +96,7 @@
   <li><kbd>Cmd</kbd>-click (macOS) or <kbd>Ctrl</kbd>-click adds or removes one row.</li>
   <li>Left-click an object in the 3D view to select it, with <kbd>Cmd</kbd>/<kbd>Ctrl</kbd> to add it to the selection. An object with a model is hit where its model's bounding box is, a terrain where its ground is, and a camera, light or empty object by its marker. Clicking nothing clears the selection. It doesn't act while you drag a handle, sculpt a terrain or work in UI or Play mode.</li>
 </ul>
+<p>Right-click an object, in the Hierarchy or the 3D view, for its menu: <strong>Duplicate</strong> does the same as <kbd>Cmd/Ctrl</kbd>+<kbd>D</kbd>. In the 3D view the menu opens only if you didn't drag, since a right drag turns the camera.</p>
 <p>Selected objects glow with a gold outline in the 3D view: an object with a model is outlined along its edges (open edges and the ones where its surface turns away from the camera), a terrain by its box, and a camera, light or empty object by a ring. The outline is drawn over the scene, so it stays visible behind other objects.</p>
 <p>The row you clicked last is the <em>primary</em> selection: the Inspector shows it and the handles sit on it. Moving or scaling changes every selected object by the same amount.</p>
 
@@ -141,7 +142,7 @@
   <li>Type a name in the header to make a new script.</li>
   <li>Files changed outside the editor (in another IDE, say) are picked up within a second.</li>
   <li>Generated scripts (the <code>.cs</code> files written from visual scripts) can be read and copied but not changed.</li>
-  <li>Press <em>3D view</em> to go back. <kbd>Esc</kbd> stays inside the code view.</li>
+  <li>Press <em>3D view</em> (<em>2D view</em> in a 2D project) to go back. <kbd>Esc</kbd> stays inside the code view.</li>
 </ul>
 
 <h2>The visual script view</h2>
@@ -184,6 +185,7 @@
 
 <h2>Other windows</h2>
 <ul>
+  <li><strong>File &gt; Change Project…</strong> lists your projects, the same ones the Hub shows, and has a <em>New Project…</em> button that makes one the way the Hub does. Picking one asks to save anything unsaved, then the editor reopens on that project.</li>
   <li><strong>File &gt; Build Project…</strong> builds a standalone game. See <a href="building.html">Building and publishing</a>.</li>
   <li><strong>File &gt; Package Manager…</strong> turns packages on and off. See <a href="packages.html">Packages</a>.</li>
   <li><strong>File &gt; Project Settings…</strong> holds settings that belong to the project. See <a href="#project-settings">Project settings</a> below.</li>

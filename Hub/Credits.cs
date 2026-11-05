@@ -1,4 +1,11 @@
+using System.Text.Json.Serialization;
+
 namespace EmpireHub;
+
+// Its own context, so the editor can use HubJson for projects without this file and the installs it needs.
+[JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, PropertyNameCaseInsensitive = true)]
+[JsonSerializable(typeof(CreditsFile))]
+internal sealed partial class CreditsJson : JsonSerializerContext;
 
 // Licenses/credits.json, shared with the editor's Help > Credits window.
 public sealed class CreditsFile
@@ -30,7 +37,7 @@ public sealed class CreditItem
     {
         string folder = Path.Combine(AppContext.BaseDirectory, "Licenses");
         var credits = System.Text.Json.JsonSerializer.Deserialize(
-            System.IO.File.ReadAllText(Path.Combine(folder, "credits.json")), HubJson.Default.CreditsFile) ?? new CreditsFile();
+            System.IO.File.ReadAllText(Path.Combine(folder, "credits.json")), CreditsJson.Default.CreditsFile) ?? new CreditsFile();
 
         var items = new List<CreditItem>();
         foreach (var e in credits.Entries.Where(e => e.UsedIn.Contains("hub")))

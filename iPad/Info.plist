@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>UIDeviceFamily</key>
+  <array><integer>2</integer></array>
+  <key>UIRequiresFullScreen</key>
+  <true/>
+  <key>UISupportedInterfaceOrientations~ipad</key>
+  <array>
+    <string>UIInterfaceOrientationLandscapeLeft</string>
+    <string>UIInterfaceOrientationLandscapeRight</string>
+  </array>
+  <key>UIApplicationSupportsIndirectInputEvents</key>
+  <true/>
+  <key>UILaunchScreen</key>
+  <dict/>
+  <key>UIFileSharingEnabled</key>
+  <true/>
+  <key>LSSupportsOpeningDocumentsInPlace</key>
+  <true/>
+  <key>UIApplicationSceneManifest</key>
+  <dict>
+    <key>UIApplicationSupportsMultipleScenes</key>
+    <false/>
+    <key>UISceneConfigurations</key>
+    <dict>
+      <key>UIWindowSceneSessionRoleApplication</key>
+      <array>
+        <dict>
+          <key>UISceneConfigurationName</key>
+          <string>Default</string>
+          <key>UISceneDelegateClassName</key>
+          <string>SceneDelegate</string>
+        </dict>
+      </array>
+    </dict>
+  </dict>
+</dict>
+</plist>
