@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Modeling · Empire Engine Docs</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<article>
+
+<p class="eyebrow">Systems</p>
+<h1>Modeling</h1>
+<p class="lead">Shape models without leaving the editor. Pick an object, move and add to its mesh with tools and shortcuts that work like Blender's, and save: the model updates in the scene by itself.</p>
+
+<h2>Opening it</h2>
+<p>Press <strong>Model</strong> in the toolbar. <em>Scene View</em> at the bottom of the panel, or <kbd>Esc</kbd>, goes back. It's there in 3D projects, not in 2D ones.</p>
+
+<h2>Select and Edit</h2>
+<p>The two buttons at the top of the panel are its two modes. <kbd>Tab</kbd> switches between them.</p>
+<ul>
+  <li><strong>Select</strong> shows the whole scene. Pick an object with a model from the list or by clicking it, then press <strong>Edit</strong>. Right-click the view to add a shape to the scene as a new object.</li>
+  <li><strong>Edit</strong> shows that object on its own, with its mesh drawn over it. Press <strong>Select</strong> to go back; if there are unsaved changes you're asked what to do with them.</li>
+</ul>
+
+<h2>Moving around</h2>
+<ul>
+  <li><strong>Right-drag</strong> turns the view around the selection, or around the model if nothing is selected. The scroll wheel zooms.</li>
+  <li><kbd>Numpad 1</kbd>, <kbd>3</kbd> and <kbd>7</kbd> look from the front, right and top. <kbd>Numpad .</kbd> frames the selection. These are also on the right-click menu.</li>
+</ul>
+
+<h2>Selecting</h2>
+<p><strong>Vertex</strong>, <strong>Edge</strong> and <strong>Face</strong> (<kbd>1</kbd>, <kbd>2</kbd>, <kbd>3</kbd>) choose what a click picks. If several things are under the mouse, the one nearest the camera wins.</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>Do</th><th>To</th></tr></thead>
+  <tbody>
+    <tr><td>Click</td><td>Select one thing. Clicking empty space clears the selection.</td></tr>
+    <tr><td><kbd>Shift</kbd>+click, or <em>Add Selection</em></td><td>Add to the selection, or take something out of it</td></tr>
+    <tr><td>Drag from empty space</td><td>Box select. Hold <kbd>Shift</kbd> to add.</td></tr>
+    <tr><td><kbd>Alt</kbd>+click an edge</td><td>Select the whole line of edges running through it</td></tr>
+    <tr><td><kbd>A</kbd>, <kbd>Alt</kbd>+<kbd>A</kbd></td><td>Select all, select none</td></tr>
+    <tr><td><kbd>Cmd/Ctrl</kbd>+<kbd>I</kbd></td><td>Invert the selection</td></tr>
+    <tr><td><kbd>L</kbd></td><td>Select the loose piece under the mouse: everything joined to it, such as a shape you added. <kbd>Shift</kbd>+<kbd>L</kbd> takes it back out.</td></tr>
+    <tr><td><kbd>Cmd/Ctrl</kbd>+<kbd>L</kbd></td><td>Select everything joined to the selection</td></tr>
+    <tr><td><em>More</em>, <em>Less</em></td><td>Grow or shrink the selection by one edge</td></tr>
+    <tr><td><kbd>Alt</kbd>+<kbd>Z</kbd>, <em>X-Ray</em></td><td>Show and pick what's on the far side too. Off, only faces turned toward you count.</td></tr>
+  </tbody>
+</table></div>
+
+<h2>Moving, turning and scaling</h2>
+<p>The handles move or scale the selection: <strong>Move</strong> and <strong>Scale</strong> in the panel choose which, and <kbd>Ctrl</kbd> snaps. Or press a key and move the mouse, with nothing to hold down:</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>Key</th><th>Does</th></tr></thead>
+  <tbody>
+    <tr><td><kbd>G</kbd></td><td>Grab: move</td></tr>
+    <tr><td><kbd>R</kbd></td><td>Rotate</td></tr>
+    <tr><td><kbd>S</kbd></td><td>Scale</td></tr>
+    <tr><td><kbd>X</kbd>, <kbd>Y</kbd>, <kbd>Z</kbd> while moving</td><td>Lock to that axis. Press it again to unlock.</td></tr>
+    <tr><td>A number while moving</td><td>An exact amount: a distance, degrees or a scale. <kbd>R</kbd> <kbd>Z</kbd> <kbd>4</kbd> <kbd>5</kbd> <kbd>Enter</kbd> turns 45 degrees around Z.</td></tr>
+    <tr><td>Click or <kbd>Enter</kbd></td><td>Finish</td></tr>
+    <tr><td>Right-click or <kbd>Esc</kbd></td><td>Cancel</td></tr>
+  </tbody>
+</table></div>
+<p><strong>Proportional</strong> editing (<kbd>O</kbd>) makes what's near the selection follow it, less the further away it is, for soft changes. <em>Radius</em> sets how far it reaches, and the scroll wheel changes it during a move. <strong>Position</strong> in the panel is where the selection is in the world, for exact values.</p>
+
+<h2>Adding shapes</h2>
+<p>In Edit mode, right-click the view and choose <strong>Add...</strong>: Plane, Cube, Circle, Sphere, Cylinder, Cone, Torus, Grid, Capsule or Crown. The shape becomes part of the model, at the selection or the middle of the model, and is left selected so you can move it.</p>
+
+<h2>Mesh tools</h2>
+<p>These are in the panel, and the common ones on the right-click menu too.</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>Tool</th><th>Key</th><th>Does</th></tr></thead>
+  <tbody>
+    <tr><td>Extrude</td><td><kbd>E</kbd></td><td>Pulls the selected faces or edges out, along their normal. Move the mouse and click.</td></tr>
+    <tr><td>Inset</td><td><kbd>I</kbd></td><td>Makes a smaller face inside each selected face. <em>Inset Amount</em> sets how much.</td></tr>
+    <tr><td>Loop Cut</td><td><kbd>Cmd/Ctrl</kbd>+<kbd>R</kbd></td><td>Cuts a line of edges around the strip of four-sided faces that crosses the edge under the mouse (or, from the panel, the selected edge)</td></tr>
+    <tr><td>Subdivide</td><td></td><td>Splits the selected faces into smaller ones</td></tr>
+    <tr><td>Fill</td><td><kbd>F</kbd></td><td>Makes a face from the selected vertices</td></tr>
+    <tr><td>Merge</td><td><kbd>M</kbd></td><td>Brings the selected vertices together at their center</td></tr>
+    <tr><td>Join Doubles</td><td></td><td>Joins vertices in the same place, within the selection, or everywhere if at most one is selected</td></tr>
+    <tr><td>Duplicate</td><td><kbd>Shift</kbd>+<kbd>D</kbd></td><td>Copies the selected faces, then moves the copy</td></tr>
+    <tr><td>Delete</td><td><kbd>X</kbd></td><td>Deletes vertices, edges or faces. Faces that use them go too.</td></tr>
+    <tr><td>Mirror X, Y, Z</td><td></td><td>Reflects the selection across its center</td></tr>
+    <tr><td>Shade Smooth, Shade Flat</td><td></td><td>Makes the selected faces look rounded, or faceted</td></tr>
+    <tr><td>Flip Normals</td><td></td><td>Turns the selected faces inside out</td></tr>
+    <tr><td>Fix Normals</td><td><kbd>Shift</kbd>+<kbd>N</kbd></td><td>Turns every face outward</td></tr>
+    <tr><td>Smooth</td><td></td><td>Evens out the selected vertices</td></tr>
+    <tr><td>Randomize</td><td></td><td>Moves the selected vertices by a small random amount</td></tr>
+    <tr><td>To Sphere</td><td></td><td>Rounds the selection into a ball</td></tr>
+    <tr><td>Flatten</td><td></td><td>Puts the selection on one plane</td></tr>
+  </tbody>
+</table></div>
+<p>Models are made of triangles in their files. When one is opened, pairs of triangles that form a flat four-sided face become quads, as they were in the program that made them, which is what edge loops and loop cuts follow. What you select is a corner of the mesh: files often store a corner several times, a cube has 24 vertices for its 8 corners, so every copy moves together and the surface doesn't tear. Lighting around a change is worked out again as you go.</p>
+<p><kbd>Cmd/Ctrl</kbd>+<kbd>Z</kbd> undoes and <kbd>Cmd/Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> redoes, for the last 64 changes.</p>
+
+<h2>Modifiers</h2>
+<p>A modifier changes how the model comes out without touching the mesh you're editing, so you can keep moving vertices and watch the result update. Press <strong>Add Modifier...</strong> in the panel. They run from the top of the list down, and order matters: <em>Up</em> and <em>Down</em> change it. The checkbox turns one off, <em>X</em> removes it, and <em>Apply</em> makes its result the mesh.</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>Modifier</th><th>Settings</th><th>Does</th></tr></thead>
+  <tbody>
+    <tr><td>Subdivision Surface</td><td>Levels</td><td>Rounds the mesh by splitting every face. It comes out smooth-shaded.</td></tr>
+    <tr><td>Array</td><td>Count, Offset</td><td>Repeats the mesh. Offset is the step between copies as a share of its size, so 1 on X puts them side by side.</td></tr>
+    <tr><td>Boolean</td><td>Operation, Object</td><td><em>Difference</em> cuts another object out of this one, <em>Union</em> joins them, and <em>Intersect</em> keeps only where they overlap. Both should be closed solids. The other object stays where it is in the scene, and its faces take this model's first material.</td></tr>
+    <tr><td>Decimate</td><td>Ratio</td><td>Reduces the number of faces, keeping that share of triangles while staying as close to the shape as it can. The result is all triangles.</td></tr>
+    <tr><td>Mirror</td><td>X, Y, Z</td><td>Adds a reflection across the model's own center. Vertices on the mirror join up with their reflection, so model one half and get a joined whole.</td></tr>
+    <tr><td>Solidify</td><td>Thickness, Offset</td><td>Gives a surface thickness. Offset −1 grows it inward, 1 outward and 0 both ways.</td></tr>
+    <tr><td>Skin</td><td>Radius, Sides</td><td>Wraps every edge in a tube, with a ball at every vertex, turning the mesh into a frame. Tubes and balls overlap at the joints rather than joining up.</td></tr>
+    <tr><td>Screw</td><td>Axis, Angle, Steps, Height</td><td>Sweeps the mesh's open edges around an axis through the model's center, like a lathe. With a Height it climbs into a spiral. Model a profile off to one side of the axis.</td></tr>
+  </tbody>
+</table></div>
+<p><strong>Saving applies modifiers</strong>, because a model file has nowhere to keep them. Until you leave Edit you can still undo that. Changing a modifier's settings isn't an undo step, though applying one is.</p>
+
+<h2>Saving</h2>
+<p>Press <strong>Save Model</strong>, or <kbd>Cmd/Ctrl</kbd>+<kbd>S</kbd>. The scene editor sees the changed file and updates the model by itself, on <em>every</em> object that uses it.</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>The model is</th><th>Saving</th></tr></thead>
+  <tbody>
+    <tr><td>A <code>.glb</code> file, with vertices only moved</td><td>Changes that file. Only the vertices change: its materials, textures and animations stay as they were.</td></tr>
+    <tr><td>A <code>.glb</code> file, with geometry added or removed</td><td>Writes that file anew, with its meshes, materials and textures. Anything else in it, such as data from another program, isn't kept.</td></tr>
+    <tr><td>A built-in shape, or a <code>.gltf</code>, <code>.obj</code> or <code>.fbx</code> file</td><td>Makes a new <code>.glb</code> and this object uses it: built-in shapes go in <code>Models/</code>, others next to the original, which isn't changed. Other objects keep the old model. Save the scene afterwards so the object remembers its new model.</td></tr>
+  </tbody>
+</table></div>
+<p>Saving replaces the file, and there's no undo after you leave Edit, so keep a copy if you may want the old shape back. Exporting a model again from another program replaces your edits. If another program changes a <code>.glb</code> while you're editing it, saving stops rather than overwriting that change.</p>
+
+<h2>Limits</h2>
+<ul>
+  <li>Bevel, knife and sculpting aren't here yet.</li>
+  <li>Modifiers aren't kept in the model: opening it again shows the applied result.</li>
+  <li>A boolean handles up to 30,000 triangles between the two meshes. Slow modifiers update a few times a second during a drag.</li>
+  <li>Models with a skeleton can't be edited yet. Neither can one mesh placed several times in a file, or a <code>.gltf</code> or <code>.fbx</code> with animations, which a new file would lose.</li>
+  <li>A <code>.glb</code> with animations can have its vertices moved, but not added or removed, for the same reason.</li>
+  <li>A <code>.glb</code> with compressed vertices can't be saved. You're told when you press Edit.</li>
+  <li>New faces use the model's first material. Texture coordinates on them are simple, so a textured model may need them fixed in another program.</li>
+  <li>Past 60,000 vertices they aren't all drawn, though they can still be picked.</li>
+  <li>With X-Ray off, only faces turned toward you count. A face hidden behind another part of the model can still be picked.</li>
+</ul>
+
+</article>
+</body>
+</html>

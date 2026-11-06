@@ -38,6 +38,7 @@ const NAV = [
       ["audio.html", "Audio"],
       ["animation.html", "Animation"],
       ["terrain.html", "Terrain"],
+      ["modeling.html", "Modeling"],
       ["particles.html", "Particle systems"],
       ["game-ui.html", "Game UI"],
     ],
@@ -112,7 +113,7 @@ function buildTopbar() {
   });
 
   const brand = el("a", { class: "brand", href: "index.html" }, [
-    el("span", { class: "brand-mark", text: "E" }),
+    el("img", { class: "brand-mark", src: "assets/empire-icon.png", alt: "" }),
     el("span", { text: "EMPIRE" }),
     el("small", { text: "Engine docs · v0.2.9" }),
   ]);

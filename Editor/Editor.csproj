@@ -23,10 +23,13 @@
     <Using Include="Engine.Brutal.Ui" />
     <Using Include="Engine.Brutal.Gfx" />
     <Using Include="Editor.Ui" />
+    <Using Include="Editor.Modeling" />
   </ItemGroup>
   <ItemGroup>
     <!-- The Hub's project files: File > Change Project lists and makes projects with the same code. -->
     <Compile Include="../Hub/EmpireProject.cs;../Hub/HubJson.cs;../Hub/HubSettings.cs;../Hub/ProjectTemplate.cs" Link="HubFiles/%(Filename)%(Extension)" />
+    <!-- The Hub's release downloads: Build Project gets the player for another platform with the same code. -->
+    <Compile Include="../Hub/Releases/*.cs" Link="HubReleases/%(Filename)%(Extension)" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\ScriptCompiler\ScriptCompiler.csproj" />

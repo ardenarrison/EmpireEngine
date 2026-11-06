@@ -147,7 +147,7 @@ public sealed class VcTranspiler
                 "text" => ("string", emit.Literal(InputKind.Text, v.Default, null, v.Name)),
                 _ => ("float", emit.Literal(InputKind.Number, v.Default, null, v.Name)),
             };
-            fields.Add($"private {type} {Emit.VarField(v.Name)} = {literal};");
+            fields.Add($"public {type} {Emit.VarField(v.Name)} = {literal};");
         }
 
         var lines = new List<string>

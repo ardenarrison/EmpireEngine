@@ -5,15 +5,16 @@ using System.Text.Json;
 using Engine.Core.Serialization;
 using Engine.Core.Scripting;
 using Engine.Scripting.Build;
+using EmpireHub;
 
 namespace Editor;
 
 // Log holds the full output of every command the build ran, so errors can be copied in full.
 public sealed record BuildResult(bool Success, string Message, string? OutputFolder, string Log = "");
 
-// Builds a standalone game into <parent>/<buildName>/:
-//   <buildName>(.exe) and its runtime libraries: published from Player/ for this machine when the source is here, or
-//                     copied from the built Player/ folder that a released editor carries next to it
+// Builds a standalone game for a platform into <parent>/<buildName>/, or <parent>/<buildName>-<Platform>/ for another platform:
+//   <buildName>(.exe) and its runtime libraries: published from Player/ for the platform when the source is here, or copied from
+//                     the built Player/ folder that a released editor carries next to it (for another platform, PlayerDownloads)
 //   GameData/Core/...   a copy of the project's content; Models/... keeps its folder structure
 //   GameData/game.json  which scene the game starts with
 public static class ProjectBuilder
@@ -33,11 +34,13 @@ public static class ProjectBuilder
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
     };
 
-    public static BuildResult Build(string scenePath, string contentRoot, string parentFolder, string buildName)
+    // status is told what is happening during a long step, from the thread the build runs on or another one.
+    public static BuildResult Build(string scenePath, string contentRoot, string parentFolder, string buildName,
+        BuildPlatform platform, Action<string> status)
     {
         try
         {
-            return BuildCore(scenePath, contentRoot, parentFolder, buildName);
+            return BuildCore(scenePath, contentRoot, parentFolder, buildName, platform, status);
         }
         catch (Exception ex)
         {
@@ -62,29 +65,47 @@ public static class ProjectBuilder
                "\n\nFull log:\n" + result.Log;
     }
 
-    private static BuildResult BuildCore(string scenePath, string contentRoot, string parentFolder, string buildName)
+    private static BuildResult BuildCore(string scenePath, string contentRoot, string parentFolder, string buildName,
+        BuildPlatform platform, Action<string> status)
     {
         string name = SanitizeName(buildName);
         if (name.Length == 0)
             return Fail("The build name is empty.");
 
+        string rid = BuildTargets.Rid(platform);
+        bool otherPlatform = platform != BuildTargets.ThisPlatform;
+
         // A build from source has Player/Player.csproj above the editor. A released editor has no source, but carries the
-        // player already built (Player/ next to empire.dll), which is used as it is.
+        // player already built (Player/ next to empire.dll), which is used as it is. For another platform it downloads one, below.
         string? playerProject = FindPlayerProject();
-        string? prebuiltPlayer = playerProject is null ? FindPrebuiltPlayer() : null;
-        if (playerProject is null && prebuiltPlayer is null)
+        string? prebuiltPlayer = playerProject is null && !otherPlatform ? FindPrebuiltPlayer() : null;
+        if (playerProject is null && prebuiltPlayer is null && !otherPlatform)
             return Fail("Could not find Player/Player.csproj in a folder above the Editor, or a built Player folder next to it.");
+        if (playerProject is not null && otherPlatform && platform == BuildPlatform.Mac)
+            return Fail("An editor run from source can only build a Mac game on a Mac, because the game has to be signed there. " +
+                        "A released editor can build one on any computer.");
 
         string content = Path.GetFullPath(contentRoot);
         string scene = Path.GetFullPath(scenePath);
-        string outDir = Path.GetFullPath(Path.Combine(parentFolder, name));
+        string outDir = Path.GetFullPath(Path.Combine(parentFolder, BuildTargets.FolderName(name, platform)));
 
         if (!IsInside(scene, content))
             return Fail("The scene must be inside the project's content folder.");
         if (IsInside(outDir, content))
             return Fail("Choose a build folder outside the project's content folder.");
 
-        string rid = RuntimeInformation.RuntimeIdentifier;
+        if (playerProject is null && otherPlatform)
+        {
+            try
+            {
+                prebuiltPlayer = PlayerDownloads.GetAsync(EditorVersion, rid, status).GetAwaiter().GetResult();
+            }
+            catch (Exception ex) when (ex is InstallException or HttpRequestException or IOException or UnauthorizedAccessException or InvalidDataException)
+            {
+                return Fail($"Could not get the player for {platform}: {ex.Message}");
+            }
+            status("Building...");
+        }
 
         // Build files for the Player go in a temp folder outside the projects, so they never mix with the Editor's obj/bin.
         string artifacts = Path.Combine(Path.GetTempPath(), "empire-player-build");
@@ -117,14 +138,15 @@ public static class ProjectBuilder
         }
 
         // 3. Publish does not always include the Vulkan and GLFW native libraries. Copy them in from the Editor's
-        //    output folder, the NuGet package cache, and (on macOS) the Vulkan loader.
-        var copiedNatives = CopyNativeLibraries(AppContext.BaseDirectory, outDir)
-            .Concat(CopyNativeLibrariesFromPackages(outDir))
+        //    output folder, the NuGet package cache, and (on macOS) the Vulkan loader. The editor's own libraries are for this
+        //    platform, so another platform's game only takes its own from the package cache.
+        var copiedNatives = (otherPlatform ? [] : CopyNativeLibraries(AppContext.BaseDirectory, outDir))
+            .Concat(CopyNativeLibrariesFromPackages(outDir, rid))
             .ToList();
         log += "\nCopied native libraries: " + (copiedNatives.Count == 0 ? "none" : string.Join(", ", copiedNatives));
 
-        // 3b. macOS games carry their own Vulkan loader and MoltenVK, so players need nothing installed.
-        var (vulkanCopied, vulkanWarning) = BundleVulkan(outDir);
+        // 3b. macOS games carry their own Vulkan loader and MoltenVK, so players need nothing installed. A downloaded player has them.
+        var (vulkanCopied, vulkanWarning) = otherPlatform ? ([], null) : BundleVulkan(outDir);
         log += "\nBundled Vulkan: " + (vulkanCopied.Count == 0 ? "none" : string.Join(", ", vulkanCopied));
         if (vulkanWarning is not null) log += "\nWARNING: " + vulkanWarning;
 
@@ -177,8 +199,14 @@ public static class ProjectBuilder
         File.WriteAllText(LogPath, log);
         string message = $"Built \"{name}\" to:\n{outDir}";
         if (vulkanWarning is not null) message += "\n\nWarning: " + vulkanWarning;
+        if (OperatingSystem.IsWindows() && otherPlatform)
+            message += $"\n\nWindows can't mark a file as a program for {platform}. On that computer, run this in the game's folder first:\nchmod +x \"{name}\"";
         return new BuildResult(true, message, outDir, log);
     }
+
+    // This editor's version, whose release a downloaded player comes from: the scripts are compiled against the same engine.
+    private static string EditorVersion =>
+        typeof(ProjectBuilder).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0] ?? "";
 
     private static string? FindPlayerProject()
     {
@@ -279,15 +307,14 @@ public static class ProjectBuilder
     }
 
     // The Vulkan and GLFW natives come from the NuGet package cache, where the Editor loads them from.
-    // Copy the ones for this platform.
-    private static List<string> CopyNativeLibrariesFromPackages(string toFolder)
+    // Copy the ones for the platform being built.
+    private static List<string> CopyNativeLibrariesFromPackages(string toFolder, string rid)
     {
         var copied = new List<string>();
         string packages = Environment.GetEnvironmentVariable("NUGET_PACKAGES")
             ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".nuget", "packages");
         if (!Directory.Exists(packages)) return copied;
 
-        string rid = RuntimeInformation.RuntimeIdentifier;
         foreach (var package in Directory.EnumerateDirectories(packages))
             foreach (var version in Directory.EnumerateDirectories(package))
             {

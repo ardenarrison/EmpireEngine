@@ -42,6 +42,9 @@ public sealed class EditorCamera
     // (at least 0.5 units), so zooming is fine up close and quick when far away.
     public Vector3 Focus;
 
+    // While set, the right mouse button turns the view around this point, instead of turning the camera where it stands.
+    public Vector3? OrbitAround;
+
     public Vector3 Forward => new(
         MathF.Cos(Pitch) * MathF.Sin(Yaw),
         MathF.Sin(Pitch),
@@ -113,10 +116,14 @@ public sealed class EditorCamera
 
         if (_lastCursor is { } last)
         {
+            float distance = OrbitAround is { } around ? Vector3.Distance(Position, around) : 0f;
             Yaw += (float)(cursor.X - last.X) * 0.003f;
             Pitch = Math.Clamp(Pitch - (float)(cursor.Y - last.Y) * 0.003f, -1.5f, 1.5f);
+            if (OrbitAround is { } target)
+                Position = target - Forward * distance;
         }
         _lastCursor = cursor;
+        if (OrbitAround is not null) return;
 
         float speed = 6f * dt * (IsDown(window, GlfwKey.LeftShift) ? 3f : 1f);
         var move = Vector3.Zero;

@@ -50,6 +50,12 @@ public sealed class EditorApp
     private readonly CodeEditorView _code;
     private bool _codeMode;   // the C# code view replaces the 3D view while on
     private bool FullView => _vcMode || _codeMode;
+    private bool _modelMode;   // the Modeling section: its own panel, and no scene tools
+    private bool SceneTools => !FullView && !_modelMode;
+    private readonly ModelingView _modeling;
+    private bool _previewUploaded;
+    private bool _checkModels;   // look for changed model files on the next frame, not at the next regular check
+    private (Vector3 Position, float Yaw, float Pitch)? _cameraBeforeModeling;
     private readonly ModelBrowser _browser = new();
     private readonly AssetPanel _assetPanel;
     private readonly UiOverlay _uiOverlay = new();
@@ -94,6 +100,8 @@ public sealed class EditorApp
     private string _buildName = "";
     private BuildStage _buildStage = BuildStage.Off;
     private string _buildFolder = "";
+    private BuildPlatform _buildPlatform = BuildTargets.ThisPlatform;
+    private volatile string _buildStatus = "";
     private Task<BuildResult>? _buildTask;
     private BuildResult? _buildResult;
     private readonly FullscreenToggle _fullscreen = new();
@@ -144,6 +152,15 @@ public sealed class EditorApp
         _camera.Is2D = _is2D;
         _gizmo.Flat = _is2D;
         _assets = new AssetCache(contentRoot);
+        _modeling = new ModelingView(contentRoot, _assets)
+        {
+            Opened = FrameModel,
+            Closed = RestoreCamera,
+            Saved = () => _checkModels = true,
+            AddObject = AddShape,
+            SetView = ViewModel,
+            OrbitAround = at => _camera.OrbitAround = at,
+        };
         _sprites = new SpriteDrawer(_assets.GetImage);
         _terrains = new TerrainDrawer(_assets.GetImage);
         Engine.Core.Physics.PhysicsWorld.ModelLoader = _assets.GetModel;   // mesh colliders read models through the cache
@@ -316,9 +333,10 @@ public sealed class EditorApp
             _scriptFields.Update(now);   // re-reads script fields in the background after a .cs file is saved
 
             // Once a second, reload models whose files changed on disk, so a Blender re-export shows up right away.
-            if (now >= nextModelCheck)
+            if (now >= nextModelCheck || _checkModels)
             {
                 nextModelCheck = now + 1.0;
+                _checkModels = false;
                 foreach (var path in _assets.ReloadChanged())
                 {
                     if (_uploaded.Contains(path))
@@ -344,6 +362,7 @@ public sealed class EditorApp
                 else if (CloseTopDialog()) { }
                 else if (_vcMode) { if (!_vc.IsTyping) _vcMode = false; }
                 else if (_codeMode) { }   // the code view uses Escape itself; leave with its 3D view button
+                else if (_modelMode) { if (!_gui.IsTyping && !_modeling.CancelTool()) LeaveModeling(); }
                 else if (!OperatingSystem.IsIOS()) RequestExit();   // an iPad app is closed by the system, not from inside
             }
 
@@ -360,6 +379,7 @@ public sealed class EditorApp
             if (saveDown && !prevSave)
             {
                 if (_codeMode && _mode == EditorMode.Edit) _code.SaveCurrent();
+                else if (_modeling.Editing) _modeling.Save();
                 else SaveScene();
             }
             prevSave = saveDown;
@@ -371,17 +391,23 @@ public sealed class EditorApp
             bool zDown = window.GetKey(GlfwKey.Z) == GlfwKeyAction.Press;
             bool undoDown = shortcut && zDown && !shift;
             bool redoDown = shortcut && ((zDown && shift) || window.GetKey(GlfwKey.Y) == GlfwKeyAction.Press);
-            bool canUndo = _mode == EditorMode.Edit && !FullView && !_gui.IsTyping && !_gizmo.IsDragging;
+            bool canUndo = _mode == EditorMode.Edit && !FullView && !_gui.IsTyping && !_gizmo.IsDragging && !_modeling.IsDragging;
             if (canUndo && undoDown && !prevUndo)
-                ApplyHistory(_history.Undo(SceneSerializer.ToJson(_scene)), "Undo");
+            {
+                if (_modeling.Editing) _modeling.Undo();
+                else ApplyHistory(_history.Undo(SceneSerializer.ToJson(_scene)), "Undo");
+            }
             if (canUndo && redoDown && !prevRedo)
-                ApplyHistory(_history.Redo(SceneSerializer.ToJson(_scene)), "Redo");
+            {
+                if (_modeling.Editing) _modeling.Redo();
+                else ApplyHistory(_history.Redo(SceneSerializer.ToJson(_scene)), "Redo");
+            }
             prevUndo = undoDown;
             prevRedo = redoDown;
 
             // Cmd/Ctrl+D duplicates the selected object (and its children) in place, then selects the copy.
             bool duplicateDown = shortcut && window.GetKey(GlfwKey.D) == GlfwKeyAction.Press;
-            if (canUndo && duplicateDown && !prevDuplicate)
+            if (canUndo && SceneTools && duplicateDown && !prevDuplicate)
                 DuplicateSelected();
             prevDuplicate = duplicateDown;
 
@@ -391,13 +417,15 @@ public sealed class EditorApp
                 _extraSelected.Clear();
             _extraSelected.RemoveAll(extra => _scene.Find(extra) is null);
 
-            if (!FullView)
+            if (_modelMode && _mode == EditorMode.Edit)
+                _modeling.HandleKeys(_gui, _selected, !uiWantsMouse);
+            if (SceneTools)
                 DrawToolbar();
             if (_settings.ShowFpsCounter)
                 DrawFpsCounter();
 
             // The asset panel runs along the bottom while editing, so the scene is fitted above it.
-            ctx.BottomReservedFraction = _mode == EditorMode.Edit && !FullView
+            ctx.BottomReservedFraction = _mode == EditorMode.Edit && SceneTools
                 ? AssetPanel.Height / Math.Max(1f, UiInput.Current.DisplaySize.Y)
                 : 0f;
 
@@ -415,7 +443,7 @@ public sealed class EditorApp
             else if (_mode == EditorMode.Edit)
             {
                 _camera.ViewHeightPixels = SceneArea(ctx).W;
-                _camera.Update(window, dt, uiWantsMouse, UiInput.Current.MouseWheel);
+                _camera.Update(window, dt, uiWantsMouse || _modeling.Transforming, UiInput.Current.MouseWheel);
                 if (!uiWantsMouse) _camera.Pinch(_pinch);
                 _pinch = 0f;
                 _camera.Swipe(ui.SceneSwipe.X, ui.SceneSwipe.Y);
@@ -428,10 +456,12 @@ public sealed class EditorApp
             }
 
             // Play mode is the game view: the editor panels are not drawn.
-            if (_mode == EditorMode.Edit && !FullView)
+            if (_mode == EditorMode.Edit && SceneTools)
                 DrawPanels(renderer, window);
             else if (_mode == EditorMode.Edit)
             {
+                if (_modelMode && _modeling.DrawPanel(_gui, _scene, _selected, obj => ClickHierarchyRow(obj, shift: false, toggle: false)))
+                    LeaveModeling();
                 DrawMenuBar();
                 DrawBuildWindow();
                 DrawExitPrompt();
@@ -441,7 +471,7 @@ public sealed class EditorApp
             gameCanvas.Begin();
             if (_mode == EditorMode.Play)
                 UiRenderer.Draw(_scene, gameCanvas, SceneArea(ctx));
-            else if (_uiMode && !FullView)
+            else if (_uiMode && SceneTools)
             {
                 UiRenderer.Draw(_scene, gameCanvas, SceneArea(ctx), live: false);
                 if (_uiOverlay.Draw(_scene, gameCanvas, SceneArea(ctx), _selectedId, _gui, uiWantsMouse) is { } picked)
@@ -481,7 +511,9 @@ public sealed class EditorApp
             // Scene gizmos go on the canvas's bottom layer, under the panels.
             uiCanvas.Layer = Canvas2D.GizmoLayer;
             uiCanvas.Clip = null;
-            if (_mode == EditorMode.Edit && !FullView)
+            if (_mode == EditorMode.Edit && _modelMode && !_modeling.Editing)
+                DrawSelectionOutline(uiCanvas, viewProj, eye, ctx.SceneViewport);
+            else if (_mode == EditorMode.Edit && SceneTools)
             {
                 DrawColliderGizmos(uiCanvas, viewProj, ctx.SceneViewport);
                 DrawParticleShapeGizmos(uiCanvas, viewProj, ctx.SceneViewport);
@@ -490,16 +522,18 @@ public sealed class EditorApp
                 DrawSelectionOutline(uiCanvas, viewProj, eye, ctx.SceneViewport);
             }
 
-            bool sculptingNow = _mode == EditorMode.Edit && !FullView && !_uiMode &&
+            bool sculptingNow = _mode == EditorMode.Edit && SceneTools && !_uiMode &&
                                 UpdateTerrainSculpt(window, uiCanvas, viewProj, SceneArea(ctx), uiWantsMouse, dt);
-            if (_mode == EditorMode.Edit && !FullView && !_uiMode && !sculptingNow)
+            if (_mode == EditorMode.Edit && _modeling.Editing)
+                _modeling.Update(window, uiCanvas, viewProj, eye, SceneArea(ctx), uiWantsMouse, _settings.MoveSnap, _settings.ScaleSnap);
+            else if (_mode == EditorMode.Edit && SceneTools && !_uiMode && !sculptingNow)
             {
                 _gizmo.MoveSnap = _settings.MoveSnap;
                 _gizmo.ScaleSnap = _settings.ScaleSnap;
                 _gizmo.Update(window, uiCanvas, _selected, SelectedExtras(), viewProj, eye, SceneArea(ctx), uiWantsMouse);
             }
             UpdateSceneClick(window, viewProj, eye, SceneArea(ctx), uiWantsMouse,
-                canStart: _mode == EditorMode.Edit && !FullView && !_uiMode && !sculptingNow && !_gizmo.IsDragging &&
+                canStart: _mode == EditorMode.Edit && !FullView && !_uiMode && !sculptingNow && !_gizmo.IsDragging && !_modeling.Moving &&
                           !_gui.AnyActive && _hierDragId is null);
             uiCanvas.Layer = Canvas2D.PanelLayer;
 
@@ -532,9 +566,17 @@ public sealed class EditorApp
             _sprites.Sync(renderer, _scene);
             _scriptMeshes.Sweep(renderer);
             renderer.SetShadows(_scene.Settings.Shadows && (sun?.Shadows ?? false), sun?.ShadowStrength ?? 0f, sun?.ShadowDistance ?? 40f, _scene.Settings.ShadowResolution);
+            if (_modeling.TakeChangedModel() is { } changedModel)
+            {
+                if (_previewUploaded) renderer.ReloadModel(ModelingView.PreviewKey, changedModel);
+                else renderer.UploadModel(ModelingView.PreviewKey, changedModel);
+                _previewUploaded = true;
+            }
             renderer.BeginFrame(viewProj, eye,
                 sun?.Direction ?? Vector3.UnitY, sun?.Radiance ?? Vector3.Zero);
-            if (!FullView)
+            if (_modeling is { Target: { } modelTarget, Renderer: { } modelRenderer })
+                renderer.DrawModel(ModelingView.PreviewKey, modelTarget.WorldMatrix, modelRenderer.Tint, _modeling.Pose);
+            else if (!FullView)
             foreach (var obj in _scene.All)
                 foreach (var mr in obj.Components.OfType<MeshRenderer>())
                 {
@@ -543,7 +585,7 @@ public sealed class EditorApp
                     else if (EnsureUploaded(renderer, mr.Model))
                         renderer.DrawModel(mr.Model, obj.WorldMatrix, mr.Tint, mr.Pose);
                 }
-            if (!FullView)
+            if (!FullView && !_modeling.Editing)
             {
                 _terrains.Draw(renderer, _scene);
                 _sprites.Draw(renderer, _scene);
@@ -1537,9 +1579,16 @@ public sealed class EditorApp
                 _vcMode = false;
             }
         }
-        if (found is null && _scriptFields.For(script.ScriptName) is not null)
-            g.TextWrapped($"No script or enabled package has a class named {SafeLabel.Of(script.ScriptName, 40)}. " +
-                          "If it came from a package, install it in File > Package Manager.", Gui.ErrorColor);
+        // While compiling the class may just be new, and compile errors are shown below: neither means it is missing.
+        if (found is null && _scriptFields.For(script.ScriptName) is not null && !_scriptFields.IsCompiling && _scriptFields.Errors.Length == 0)
+        {
+            string file = Path.Combine(_contentRoot, "Scripts", script.ScriptName);
+            if (File.Exists(file + ".visualcode") && !File.Exists(file + ".cs"))
+                g.TextWrapped($"{SafeLabel.Of(script.ScriptName, 40)}.visualcode has errors. Open it in VC and press Check to see them.", Gui.ErrorColor);
+            else
+                g.TextWrapped($"No script or enabled package has a class named {SafeLabel.Of(script.ScriptName, 40)}. " +
+                              "If it came from a package, install it in File > Package Manager.", Gui.ErrorColor);
+        }
 
         var fields = _scriptFields.For(script.ScriptName);
         if (fields is null)
@@ -1795,6 +1844,7 @@ public sealed class EditorApp
     // "jumpHeight" -> "Jump Height", "_speed" -> "Speed", like Unity's Inspector.
     private static string NiceName(string name)
     {
+        if (name.StartsWith("_v_")) name = name[3..];   // a visual script's variable
         name = name.TrimStart('_');
         if (name.StartsWith("m_")) name = name[2..];
         if (name.Length == 0) return "Field";
@@ -2973,7 +3023,7 @@ public sealed class EditorApp
     {
         var g = _gui;
         const float pad = 6f, height = 24f;
-        bool panels = _mode == EditorMode.Edit && !FullView;   // the Inspector is docked on the right while editing
+        bool panels = _mode == EditorMode.Edit && SceneTools;   // the Inspector is docked on the right while editing
         float right = panels ? g.Size.X - SideWidth - 6f : g.Size.X - 6f;
         float top = panels ? PanelTop : 6f;
         float toolbarRight = (g.Size.X + ToolbarWidth) / 2f;
@@ -2991,7 +3041,7 @@ public sealed class EditorApp
     }
 
     // The width of the bar with UI, Play, VC and Code (Stop while playing), centered along the top.
-    private float ToolbarWidth => _mode == EditorMode.Edit ? 4 * 92f + 3 * 6f + 16f : 260f;
+    private float ToolbarWidth => _mode != EditorMode.Edit ? 260f : _is2D ? 4 * 92f + 3 * 6f + 16f : 5 * 92f + 4 * 6f + 16f;
 
     private void DrawToolbar()
     {
@@ -3020,10 +3070,49 @@ public sealed class EditorApp
                 _codeMode = !_codeMode;
                 _vcMode = false;
             }
+            if (!_is2D)
+            {
+                g.SameLine();
+                if (g.Button("Model", 92f, height - 16f))
+                {
+                    _modelMode = true;
+                    _uiMode = false;
+                }
+            }
         }
         else if (g.Button("Stop", width: -1f, height: height - 16f, highlighted: true))
             TogglePlay();
         g.EndWindow();
+    }
+
+    // ---- modeling --------------------------------------------------------------------
+
+    private void LeaveModeling() => _modeling.Close(() => _modelMode = false);
+
+    // Shows the model being edited, keeping the direction the camera looks in. RestoreCamera puts it back.
+    private void FrameModel(Vector3 center, float size)
+    {
+        _cameraBeforeModeling = (_camera.Position, _camera.Yaw, _camera.Pitch);
+        _camera.Position = center - _camera.Forward * MathF.Max(size * 1.5f, 1f);
+        _camera.Focus = center;
+    }
+
+    // Turns the view to these angles, or keeps them, and shows the selection or the whole model.
+    private void ViewModel(float? yaw, float? pitch)
+    {
+        _camera.Yaw = yaw ?? _camera.Yaw;
+        _camera.Pitch = pitch ?? _camera.Pitch;
+        var (center, size) = _modeling.Framing();
+        _camera.Position = center - _camera.Forward * MathF.Max(size * 1.5f, 0.5f);
+        _camera.Focus = center;
+    }
+
+    private void RestoreCamera()
+    {
+        _camera.OrbitAround = null;
+        if (_cameraBeforeModeling is { } before)
+            (_camera.Position, _camera.Yaw, _camera.Pitch) = before;
+        _cameraBeforeModeling = null;
     }
 
     // ---- scripts ---------------------------------------------------------------------
@@ -3079,10 +3168,12 @@ public sealed class EditorApp
     // Compiles the project's scripts for play mode and loads them. Returns the errors, or an empty string.
     private string CompileScripts()
     {
-        VisualCode.Compile.VisualScriptSync.Sync(Path.Combine(_contentRoot, "Scripts"));
+        string visualErrors = VisualCode.Compile.VisualScriptSync.Sync(Path.Combine(_contentRoot, "Scripts"));
         bool hasScripts = _scene.All.Any(o => o.Components.OfType<ScriptComponent>().Any());
         if (!hasScripts)
             return ScriptRuntime.Load(_scene, (Assembly?)null);
+        if (visualErrors.Length > 0)
+            return visualErrors;
 
         // Enabled packages first (built if they changed), then the project's scripts, which may use them.
         string engine = typeof(Behaviour).Assembly.Location;
@@ -3133,7 +3224,9 @@ public sealed class EditorApp
         string scenePath = _scenePath;
         string contentRoot = _contentRoot;
         string folder = _buildFolder;
-        _buildTask = Task.Run(() => ProjectBuilder.Build(scenePath, contentRoot, folder, name));
+        var platform = _buildPlatform;
+        _buildStatus = "Building... this can take a minute.";
+        _buildTask = Task.Run(() => ProjectBuilder.Build(scenePath, contentRoot, folder, name, platform, status => _buildStatus = status));
     }
 
     private void DrawBuildWindow()
@@ -3169,6 +3262,10 @@ public sealed class EditorApp
                 g.InputText("Build name", ref _buildName, 128);
                 if (_buildName.Trim().Length == 0)
                     g.TextDisabled("Enter a build name.");
+                g.Combo("Platform", ref _buildPlatform);
+                if (_buildPlatform != BuildTargets.ThisPlatform)
+                    g.TextWrapped($"Builds for {BuildTargets.Rid(_buildPlatform)}, in the folder " +
+                                  $"{BuildTargets.FolderName(ProjectBuilder.SanitizeName(_buildName), _buildPlatform)}.", Gui.DimColor);
                 if (_unsaved)
                     g.TextWrapped("Unsaved changes are not included. Save first with Cmd/Ctrl+S.", Gui.ErrorColor);
                 g.Separator();
@@ -3186,7 +3283,7 @@ public sealed class EditorApp
                 break;
 
             case BuildStage.Running:
-                g.Text("Building... this can take a minute.");
+                g.Text(_buildStatus);
                 if (_buildTask is { IsCompleted: true } task)
                 {
                     _buildResult = task.Result;
@@ -3348,7 +3445,7 @@ public sealed class EditorApp
         if (_mode == EditorMode.Play)
             TogglePlay();
 
-        if (SceneSerializer.ToJson(_scene) == _savedJson && !_code.HasUnsavedChanges)
+        if (SceneSerializer.ToJson(_scene) == _savedJson && !_code.HasUnsavedChanges && !_modeling.Dirty)
             _exitRequested = true;
         else
             _confirmingExit = true;
@@ -3376,17 +3473,24 @@ public sealed class EditorApp
         var rect = new Box(g.Size.X * 0.5f - 200f, g.Size.Y * 0.5f - 70f, 400f, 120f);
         g.BeginWindow("Unsaved Changes", rect, "Unsaved Changes", WindowFlags.Modal | WindowFlags.NoScroll);
 
-        string unsaved = SceneSerializer.ToJson(_scene) != _savedJson
-            ? (_code.HasUnsavedChanges ? $"{_scene.Name} and your scripts" : _scene.Name)
-            : "your scripts";
+        var parts = new List<string>();
+        if (SceneSerializer.ToJson(_scene) != _savedJson) parts.Add(_scene.Name);
+        if (_code.HasUnsavedChanges) parts.Add("your scripts");
+        if (_modeling.Dirty) parts.Add("your model");
+        string unsaved = string.Join(" and ", parts);
         bool changing = _nextProject is not null;
         g.TextWrapped($"Save changes to {unsaved} before {(changing ? "changing project" : "exiting")}?");
         g.Spacing();
         if (g.Button(changing ? "Save and Change" : "Save and Exit", highlighted: true))
         {
-            SaveScene();
-            _code.SaveAll();
-            _exitRequested = true;
+            if (_modeling.Save())
+            {
+                SaveScene();
+                _code.SaveAll();
+                _exitRequested = true;
+            }
+            else
+                CancelExit();   // the panel says why, and the changes are still there
         }
         g.SameLine();
         if (g.Button(changing ? "Change Without Saving" : "Exit Without Saving"))
@@ -3432,6 +3536,7 @@ public sealed class EditorApp
     // The scene and every script open in the code view.
     private void SaveProject()
     {
+        _modeling.Save();
         SaveScene();
         _code.SaveAll();
     }
@@ -4142,13 +4247,15 @@ public sealed class EditorApp
 
         if (left && _sceneClickStart is { } start)
         {
-            if (_gizmo.IsDragging || _gui.AnyActive || _mode != EditorMode.Edit)
+            if (_gizmo.IsDragging || _modeling.Moving || _gui.AnyActive || _mode != EditorMode.Edit)
                 _sceneClickStart = null;
             else
             {
                 if (!_sceneLooking && MathF.Abs(mouse.X - start.X) + MathF.Abs(mouse.Y - start.Y) > 5f)
                     _sceneLooking = true;
-                if (_sceneLooking && _is2D)
+                if (_sceneLooking && _modeling.Editing)
+                    _modeling.BoxDrag(start, mouse);   // the camera turns with the right button here, as dragging draws a box
+                else if (_sceneLooking && _is2D)
                     _camera.Pan(mouse.X - _sceneClickLast.X, mouse.Y - _sceneClickLast.Y);   // a 2D view slides instead of turning
                 else if (_sceneLooking)
                 {
@@ -4161,8 +4268,13 @@ public sealed class EditorApp
 
         if (released)
         {
-            if (_sceneClickStart is not null && !_sceneLooking && inside && !uiWantsMouse)
-                SelectInScene(window, viewProj, eye, area);
+            if (_sceneLooking && _modeling.Editing)
+                _modeling.BoxEnd(UiInput.Current.KeyShift);
+            else if (_sceneClickStart is not null && !_sceneLooking && inside && !uiWantsMouse)
+            {
+                if (_modeling.Editing) _modeling.Click(mouse, UiInput.Current.KeyShift, UiInput.Current.KeyAlt, viewProj, eye, area);
+                else SelectInScene(window, viewProj, eye, area);
+            }
             _sceneClickStart = null;
             _sceneLooking = false;
         }
@@ -4174,13 +4286,17 @@ public sealed class EditorApp
     {
         bool right = window.GetMouseButton(GlfwMouseButton.Right) == GlfwButtonAction.Press;
         if (right && !_prevRightInScene)
-            _sceneRightStart = overScene ? mouse : null;
+            _sceneRightStart = overScene && !_modeling.Transforming ? mouse : null;
         else if (!right && _prevRightInScene && _sceneRightStart is { } start && overScene && _mode == EditorMode.Edit &&
-                 MathF.Abs(mouse.X - start.X) + MathF.Abs(mouse.Y - start.Y) <= 5f &&
-                 PickObject(mouse, viewProj, eye, area) is { } picked)
+                 MathF.Abs(mouse.X - start.X) + MathF.Abs(mouse.Y - start.Y) <= 5f)
         {
-            if (!IsSelected(picked)) ClickHierarchyRow(picked, shift: false, toggle: false);
-            _gui.OpenPopup("scene-object", mouse, 160f);
+            if (_modelMode)
+                _modeling.OpenMenu(_gui, mouse);
+            else if (PickObject(mouse, viewProj, eye, area) is { } picked)
+            {
+                if (!IsSelected(picked)) ClickHierarchyRow(picked, shift: false, toggle: false);
+                _gui.OpenPopup("scene-object", mouse, 160f);
+            }
         }
         _prevRightInScene = right;
     }

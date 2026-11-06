@@ -1,3 +1,4 @@
+using System.Text;
 using VisualCode.Model;
 using VisualCode.Transpiler;
 
@@ -6,10 +7,12 @@ namespace VisualCode.Compile;
 // Before play mode compiles the Scripts folder, turns each .visualcode file into a .cs file next to it.
 public static class VisualScriptSync
 {
-    public static void Sync(string scriptsFolder)
+    // Returns the errors, one per line, or an empty string. A script with errors has no .cs file until they are fixed.
+    public static string Sync(string scriptsFolder)
     {
-        if (!Directory.Exists(scriptsFolder)) return;
+        if (!Directory.Exists(scriptsFolder)) return "";
 
+        var errors = new StringBuilder();
         var transpiler = new VcTranspiler();
         foreach (var file in Directory.GetFiles(scriptsFolder, "*.visualcode"))
         {
@@ -22,6 +25,8 @@ public static class VisualScriptSync
                 if (result.HasErrors)
                 {
                     Console.WriteLine($"{Path.GetFileName(file)}: transpile failed.");
+                    foreach (var d in result.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error))
+                        errors.AppendLine($"{Path.GetFileName(file)}: {d.Message}");
                     if (File.Exists(outPath)) File.Delete(outPath);
                     continue;
                 }
@@ -30,8 +35,10 @@ public static class VisualScriptSync
             catch (Exception ex)
             {
                 Console.WriteLine($"{Path.GetFileName(file)}: {ex.Message}");
+                errors.AppendLine($"{Path.GetFileName(file)}: {ex.Message}");
                 if (File.Exists(outPath)) File.Delete(outPath);
             }
         }
+        return errors.ToString();
     }
 }

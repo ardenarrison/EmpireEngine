@@ -26,6 +26,10 @@ public sealed record MeshData(string Name, float[] Positions, float[] Normals, f
     public ushort[]? Joints { get; init; }  // 4 per vertex: which of the skin's joints move the vertex
     public float[]? Weights { get; init; }  // 4 per vertex: how strongly each of them does
     public float[]? Colors { get; init; }   // 4 per vertex (red, green, blue, alpha): multiplies the material's color; null means white
+
+    // Where a glTF file keeps this mesh's positions and normals, so GlbWriter can change them in place. -1 for none.
+    public int PositionAccessor { get; init; } = -1;
+    public int NormalAccessor { get; init; } = -1;
 }
 
 public sealed class GlbModel
@@ -148,7 +152,7 @@ public static class GlbLoader
                 {
                     data = new MeshData(meshName, positions, normals, uvs, indices, data.Material) { Node = node, RestTransform = restWorld[node] };
                 }
-                meshes.Add(data);
+                meshes.Add(data with { PositionAccessor = posIdx, NormalAccessor = attrs.TryGetProperty("NORMAL", out var normalIdx) ? normalIdx.GetInt32() : -1 });
 
                 var posAcc = gltf.GetProperty("accessors")[posIdx];
                 if (posAcc.TryGetProperty("min", out var mn) && posAcc.TryGetProperty("max", out var mx))

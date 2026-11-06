@@ -17,7 +17,7 @@
 <h2>Building a game</h2>
 <ol class="steps">
   <li><strong>Save.</strong> The build uses the files on disk; unsaved edits are not included.</li>
-  <li>Choose <strong>File &gt; Build Project…</strong>, pick a folder <em>outside</em> the project, and enter a name for the game.</li>
+  <li>Choose <strong>File &gt; Build Project…</strong>, pick a folder <em>outside</em> the project, enter a name for the game, and choose its <strong>Platform</strong>: Windows, Mac or Linux. It starts on the platform you're on.</li>
   <li>Wait while it builds (it can take a minute). When it's done, <em>Open Folder</em> shows the game. If it fails, <em>Copy Errors</em> copies the full error report, and the whole log is in <code>empire-build.log</code> in your temp folder.</li>
 </ol>
 <p>The scene open in the editor is the scene the game starts with.</p>
@@ -33,7 +33,7 @@ GameData/
   Core/                      a copy of the project: Scenes/, Models/, Audio/ ...</code></pre>
 <ul>
   <li><strong>Self-contained</strong>: the .NET runtime is included, so players need nothing installed. On Macs, Vulkan is bundled too (Intel Mac builds are experimental: they carry their own native libraries, see <code>Tools/IntelNatives</code>, and have only been tried under Rosetta); on Windows and Linux players need a graphics driver with Vulkan, which current drivers include.</li>
-  <li><strong>For this platform</strong>: building on a Mac makes a Mac game, on Windows a Windows game. Build on each platform you want to ship for.</li>
+  <li><strong>For one platform</strong>: each build is for the platform you chose. See <a href="#building-for-another-platform">Building for another platform</a>.</li>
   <li>Scripts are compiled at build time. The game only loads <code>Scripts.dll</code> and never compiles anything. The <code>Scripts/</code> and <code>Packages/</code> folders are not copied into <code>Core/</code>.</li>
 </ul>
 
@@ -44,6 +44,16 @@ GameData/
   <li><strong>An editor run from a checkout of this repository</strong> (with <code>dotnet run --project Editor</code>, or the Hub built from source) has <code>Player/Player.csproj</code> in a folder above it. Building then runs <code>dotnet restore</code> and <code>dotnet publish</code> on it, which needs the <strong>.NET 10 SDK</strong>.</li>
 </ul>
 <p>If neither is found, the build stops with <em>Could not find Player/Player.csproj in a folder above the Editor, or a built Player folder next to it</em>.</p>
+
+<h3 id="building-for-another-platform">Building for another platform</h3>
+<p>You can build for Windows, Mac or Linux from any of them. A game for another platform goes in a folder of its own, <code>&lt;name&gt;-&lt;Platform&gt;</code> such as <code>MyGame-Windows</code>, so builds for different platforms never mix.</p>
+<ul>
+  <li><strong>What it runs on</strong>: games built for another platform are for 64-bit Intel or AMD processors on Windows and Linux, and Apple Silicon on the Mac. A build for your own platform uses your own processor type.</li>
+  <li><strong>A released editor</strong> needs the player for that platform, so the first build for it downloads the matching editor zip (around 100 MB) from the same version's GitHub release. The player is kept in <code>&lt;application data&gt;/EmpireEditor/Players/</code>, so later builds need no internet connection.</li>
+  <li><strong>An editor run from a checkout of this repository</strong> runs <code>dotnet publish</code> for that platform instead, which downloads what it needs the first time. It can only build a Mac game on a Mac, because the game has to be signed there.</li>
+  <li><strong>Built on Windows for Mac or Linux</strong>: Windows can't mark the file as a program, so run <code>chmod +x "&lt;name&gt;"</code> in the game's folder on that computer first. The editor reminds you when the build finishes.</li>
+  <li>Try the game on the real platform before you ship it. Building it doesn't run it.</li>
+</ul>
 
 <h3>Running the game</h3>
 <ul>

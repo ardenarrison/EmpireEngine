@@ -136,13 +136,7 @@ a:hover { text-decoration: underline; }
 .brand-mark {
   width: 26px;
   height: 26px;
-  border-radius: 6px;
-  background: var(--accent);
-  display: grid;
-  place-items: center;
-  color: #fff;
-  font-size: 14px;
-  font-weight: 800;
+  display: block;
 }
 .brand small {
   font-weight: 500;

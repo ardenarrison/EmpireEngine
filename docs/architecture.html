@@ -88,11 +88,16 @@ Audio.AudioEngine.Update(scene, dt);</code></pre>
 </ol>
 <p>In the editor the DLL goes in a temp folder with a fresh name each play, and package DLLs are read into memory first so they can be rebuilt while the editor runs. Built games compile once, at build time.</p>
 
+<p><code>VcTranspiler</code> reports anything that couldn't compile, such as a block using a variable that was never added, as an error. A visual script with errors has no <code>.cs</code> file, and <code>VisualScriptSync.Sync</code> returns the errors for play mode to show.</p>
+
 <h2>Play mode in the editor</h2>
 <p>Pressing Play saves a snapshot of the scene to a temp file, compiles and loads scripts, resets time, input, animators and particles, and switches to drawing through the scene camera. Stop reloads the snapshot, so nothing that happened while playing sticks. Undo works the same way: each settled edit stores the scene's JSON.</p>
 
 <h2>Assets</h2>
 <p><code>AssetCache</code> loads each model, image and sound once by its path in the project. <code>ModelLoader</code> picks <code>GlbLoader</code>, <code>FbxLoader</code> or <code>ObjLoader</code> by extension; all produce the same <code>GlbModel</code> (meshes, materials, nodes, skins, clips). The editor checks file times once a second and re-uploads models that changed. When a scene loads in the background, <code>SceneManager.AssetWarmer</code> loads its assets on that thread.</p>
+
+<h2>Modeling</h2>
+<p>The Modeling section lives in <code>Editor/Modeling</code>. <code>ModelEdit</code> holds a model being edited as a polygon mesh of points and faces. It joins a file's split vertices into points and pairs of triangles into quads. While the mesh's shape is unchanged it keeps the loaded file's arrays in their order, which lets <code>GlbWriter.UpdateVertices</code> write them straight back into the <code>.glb</code> and leave the rest of the file alone. An operation that adds or removes geometry builds new arrays instead, and saving then goes through <code>GlbWriter.Write</code>. <code>ModelModifiers.cs</code> has the modifiers, each of which makes a new <code>MeshWork</code> from the one it's given, so the edited mesh stays as it is until they're applied. <code>ModelingView</code> is the panel, the overlay and the tools. While editing, the model is drawn under its own key, through a <code>ModelPose</code> so moved vertices cost no upload. The scene editor finds out about a save the way it finds out about any other changed file, through <code>AssetCache.ReloadChanged</code>.</p>
 
 <h2>Physics</h2>
 <p><code>PhysicsWorld</code> steps at 60 Hz, up to 5 steps a frame. Each step rebuilds bodies from the scene, integrates forces, finds contacts (sphere, box with a 15-axis separating axis test, convex hulls, and triangle meshes through a tree), solves them with warm-started sequential impulses, moves the objects, then raises collision events by comparing this step's touching pairs with the last.</p>
