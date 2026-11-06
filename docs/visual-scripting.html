@@ -123,7 +123,7 @@
 </ul>
 
 <h3>Variables</h3>
-<p>Type a name under Variables in the palette and press <strong>Add</strong>. Then use <em>set [var] to ()</em>, <em>change [var] by ()</em>, and the variable's own reporter block. Variables belong to the script on one object, start at their set value each time play starts, and are not shown in the Inspector.</p>
+<p>Type a name under Variables in the palette and press <strong>Add</strong>. Then use <em>set [var] to ()</em>, <em>change [var] by ()</em>, and the variable's own reporter block. Typing a name into a block doesn't add the variable: until it's added the script has an error, and Save and Check name the variable. Variables belong to the script on one object, start at their set value each time play starts, and appear in the Inspector, where you can change them per object.</p>
 
 <h3>Operators</h3>
 <p><em>+</em>, <em>−</em>, <em>×</em>, <em>/</em>, <em>mod</em>, <em>&gt;</em>, <em>&lt;</em>, <em>=</em>, <em>and</em>, <em>or</em>, <em>not</em>, and <em>pick random () to ()</em>. Division by zero gives 0 rather than an error, and <em>=</em> treats numbers within 0.00001 of each other as equal, so small rounding differences don't matter.</p>
@@ -140,7 +140,7 @@ when W pressed
 <p>becomes:</p>
 <pre data-label="Scripts/Spinner.cs (generated)"><code class="language-cs">public class Spinner : Behaviour
 {
-    private float _v_speed = 1f;
+    public float _v_speed = 1f;
 
     public override void Start()
     {

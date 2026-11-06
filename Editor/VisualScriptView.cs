@@ -1130,6 +1130,8 @@ public sealed class VisualScriptView
     {
         int errors = result.Diagnostics.Count(d => d.Severity == DiagnosticSeverity.Error);
         int warnings = result.Diagnostics.Count - errors;
-        return errors == 0 && warnings == 0 ? "No problems." : $"{errors} error(s), {warnings} warning(s).";
+        if (errors == 0 && warnings == 0) return "No problems.";
+        var first = result.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error);
+        return $"{errors} error(s), {warnings} warning(s).{(first is null ? "" : " " + first.Message)}";
     }
 }

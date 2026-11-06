@@ -84,8 +84,11 @@ public sealed class Emit
                 return bool.TryParse(text, out var flag) && flag ? "true" : "false";
 
             case InputKind.Variable:
-                if (!_graph.Variables.Any(v => v.Name == text))
-                    Warn(owner, $"Variable '{text}' is not declared.");
+                // The field only exists for an added variable, so anything else would not compile.
+                if (text.Length == 0)
+                    Error(owner, "Choose a variable for this block.");
+                else if (!_graph.Variables.Any(v => v.Name == text))
+                    Error(owner, $"There is no variable '{text}'. Add it under Variables in the palette.");
                 return VarField(text);
 
             default: // Text, Key, Choice

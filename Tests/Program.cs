@@ -1081,6 +1081,508 @@ Directory.CreateDirectory(Path.Combine(projectDir, "Scenes"));
     Check(listed[0].Type == "2D" && listed[1].Type == "3D" && listed[0].Folder == flatProject, "each project in the list knows its folder and whether it is 2D or 3D");
     Check(EmpireProject.FindStartScene(listed[1].Folder) is { } zebraScene && File.Exists(zebraScene), "a project made for the list has a scene to open");
     Check(ProjectList.InFolder(Path.Combine(projectsFolder, "missing")).Count == 0, "a folder that isn't there has no projects");
+
+    // Editing a model's vertices.
+    static bool ModelEdit_Facing(Editor.Modeling.MeshWork work, Editor.Modeling.Poly poly) => Editor.Modeling.ModelEdit.Normal(poly, work.Points).LengthSquared() > 0f;
+    var cubeModel3 = Primitives.Get(Primitives.Cube);
+    var cubeEdit = new Editor.Modeling.ModelEdit(cubeModel3);
+    Check(cubeModel3.Meshes[0].Positions.Length / 3 == 24 && cubeEdit.PointCount == 8, "a cube's 24 vertices are edited as its 8 corners");
+    Check(cubeEdit.Edges.Count == 12 && cubeEdit.Polys.Count == 6 && cubeEdit.Polys.All(p => p.Corners.Length == 4), "and its triangles are joined into 6 four-sided faces with 12 edges");
+    int corner = Enumerable.Range(0, 8).First(i => cubeEdit.Point(i) == new Vector3(0.5f));
+    var farCorner = Enumerable.Range(0, 8).First(i => cubeEdit.Point(i) == new Vector3(-0.5f));
+    float[] farNormalsBefore = (float[])cubeEdit.Normals[0].Clone();
+    Check(!cubeEdit.Dirty, "a model starts with nothing to save");
+    cubeEdit.BeginChange([corner]);
+    cubeEdit.SetPoint(corner, new Vector3(1f));
+    cubeEdit.UpdateNormals([corner]);
+    cubeEdit.EndChange();
+    var cubePositions = cubeEdit.Positions[0];
+    var cornerCopies = Enumerable.Range(0, 24).Where(v => cubeModel3.Meshes[0].Positions[v * 3] == 0.5f && cubeModel3.Meshes[0].Positions[v * 3 + 1] == 0.5f && cubeModel3.Meshes[0].Positions[v * 3 + 2] == 0.5f).ToList();
+    Check(cornerCopies.Count == 3 && cornerCopies.All(v => cubePositions[v * 3] == 1f && cubePositions[v * 3 + 1] == 1f && cubePositions[v * 3 + 2] == 1f), "moving a corner moves every copy of it, so the surface doesn't tear");
+    Check(cubeModel3.Meshes[0].Positions[cornerCopies[0] * 3] == 0.5f, "and the loaded model isn't changed");
+    var cornerNormals = cornerCopies.Select(v => new Vector3(cubeEdit.Normals[0][v * 3], cubeEdit.Normals[0][v * 3 + 1], cubeEdit.Normals[0][v * 3 + 2])).ToList();
+    Check(cornerNormals.Distinct().Count() == 3 && cornerNormals.All(n => MathF.Abs(n.Length() - 1f) < 1e-4f), "a corner's hard edges stay hard when its normals are worked out again");
+    bool farUntouched = Enumerable.Range(0, 24).Where(v => cubeModel3.Meshes[0].Positions[v * 3] == -0.5f && cubeModel3.Meshes[0].Positions[v * 3 + 1] == -0.5f && cubeModel3.Meshes[0].Positions[v * 3 + 2] == -0.5f)
+        .All(v => cubeEdit.Normals[0][v * 3] == farNormalsBefore[v * 3] && cubeEdit.Normals[0][v * 3 + 1] == farNormalsBefore[v * 3 + 1] && cubeEdit.Normals[0][v * 3 + 2] == farNormalsBefore[v * 3 + 2]);
+    Check(farUntouched, "normals away from the change stay as they came");
+    Check(cubeEdit.Dirty && cubeEdit.CanUndo, "a change needs saving and can be undone");
+    cubeEdit.Undo();
+    Check(cubeEdit.Point(corner) == new Vector3(0.5f) && cubePositions[cornerCopies[0] * 3] == 0.5f && !cubeEdit.Dirty, "undo puts the vertices back");
+    cubeEdit.Redo();
+    Check(cubeEdit.Point(corner) == new Vector3(1f) && cubeEdit.Dirty, "redo moves them again");
+    cubeEdit.MarkSaved();
+    Check(!cubeEdit.Dirty, "saving clears that");
+    cubeEdit.Undo();
+    Check(cubeEdit.Dirty, "and undoing past the save needs saving again");
+    cubeEdit.BeginChange([corner]);
+    cubeEdit.SetPoint(corner, new Vector3(2f));
+    cubeEdit.EndChange();
+    cubeEdit.Undo();
+    cubeEdit.Redo();
+    Check(cubeEdit.Dirty, "a saved state that can no longer be reached never counts as saved");
+
+    var sphereEdit = new Editor.Modeling.ModelEdit(Primitives.Get(Primitives.Sphere));
+    int spherePoint = 40;
+    var sphereFirst = sphereEdit.Point(spherePoint);
+    sphereEdit.SetPoint(spherePoint, sphereFirst * 1.2f);
+    sphereEdit.UpdateNormals([spherePoint]);
+    var sphereMesh = Primitives.Get(Primitives.Sphere).Meshes[0];
+    var sameSpot = Enumerable.Range(0, sphereMesh.Positions.Length / 3).Where(v => sphereEdit.Positions[0][v * 3] == sphereFirst.X * 1.2f).ToList();
+    Check(sameSpot.Count > 0 && sameSpot.Select(v => (sphereEdit.Normals[0][v * 3], sphereEdit.Normals[0][v * 3 + 1], sphereEdit.Normals[0][v * 3 + 2])).Distinct().Count() == 1, "a smooth surface stays smooth across a texture seam");
+
+    // Changing the mesh's shape.
+    Editor.Modeling.ModelEdit Fresh() => new(Primitives.Get(Primitives.Cube));
+    void SelectTop(Editor.Modeling.ModelEdit edit)
+    {
+        edit.SelectNone();
+        for (int i = 0; i < edit.PointCount; i++)
+            if (edit.Point(i).Y > 0f) edit.Selection.Add(i);
+    }
+    bool Closed(Editor.Modeling.ModelEdit edit)   // every edge has exactly two faces, each running along it the other way
+    {
+        var runs = new Dictionary<(int, int), int>();
+        foreach (var poly in edit.Polys)
+            for (int i = 0; i < poly.Corners.Length; i++)
+            {
+                var run = (poly.Corners[i].Point, poly.Corners[(i + 1) % poly.Corners.Length].Point);
+                runs[run] = runs.GetValueOrDefault(run) + 1;
+            }
+        return runs.All(r => r.Value == 1 && runs.ContainsKey((r.Key.Item2, r.Key.Item1)));
+    }
+    bool ArraysMatch(Editor.Modeling.ModelEdit edit) => edit.Model.Meshes.Count == edit.Positions.Length &&
+        Enumerable.Range(0, edit.Positions.Length).All(m => edit.Model.Meshes[m].Indices.All(i => i * 3 + 2 < edit.Positions[m].Length) && edit.Normals[m].Length == edit.Positions[m].Length);
+
+    var extruded = Fresh();
+    int versionBefore = extruded.Version;
+    SelectTop(extruded);
+    var extrudeDirection = extruded.Extrude();
+    Check(extruded.PointCount == 12 && extruded.Polys.Count == 10 && extruded.Selection.Count == 4 && extruded.Version > versionBefore && extruded.NeedsNewFile,
+          "extruding a cube's top adds four corners and four side faces, and leaves the new corners selected");
+    Check(extrudeDirection == Vector3.UnitY && Closed(extruded) && ArraysMatch(extruded), "and goes along the face's normal, keeping the mesh closed");
+    foreach (int p in extruded.Selection.ToList()) extruded.SetPoint(p, extruded.Point(p) + Vector3.UnitY);
+    extruded.UpdateNormals(extruded.Selection);
+    Check(extruded.Model.BoundsMax.Y == 0.5f && extruded.Positions[0].Chunk(3).Max(v => v[1]) == 1.5f, "the new corners can be moved like any others");
+    var extrudeSides = extruded.Polys.Where(p => MathF.Abs(extruded.FaceNormal(p).Y) < 1e-4f).ToList();
+    Check(extrudeSides.Count == 8 && extrudeSides.All(p => Vector3.Dot(extruded.FaceNormal(p), extruded.FaceCenter(p) * new Vector3(1f, 0f, 1f)) > 0f), "and side faces all face outward");
+    extruded.Undo();
+    extruded.Undo();
+    Check(extruded.PointCount == 8 && extruded.Polys.Count == 6 && ArraysMatch(extruded), "undo takes an extrude back out");
+    extruded.Redo();
+    Check(extruded.PointCount == 12 && extruded.Polys.Count == 10 && Closed(extruded), "and redo puts it back");
+
+    var inset = Fresh();
+    SelectTop(inset);
+    Check(inset.Inset(0.25f) is null && inset.PointCount == 12 && inset.Polys.Count == 10 && Closed(inset) && inset.Selection.Count == 4, "inset makes a smaller face with a ring around it");
+    Check(MathF.Abs(inset.Selection.Max(p => inset.Point(p).X) - 0.375f) < 1e-5f, "the given share of the way to the middle");
+
+    var cut = Fresh();
+    var cutEdge = cut.Edges.First(e => cut.Point(e.A).Y != cut.Point(e.B).Y);
+    Check(cut.LoopCut(cutEdge.A, cutEdge.B) is null && cut.PointCount == 12 && cut.Polys.Count == 10 && Closed(cut) && cut.Selection.All(p => MathF.Abs(cut.Point(p).Y) < 1e-5f),
+          "a loop cut goes all the way around a cube's sides, halfway up, and stays closed");
+    var cutTop = cut.Polys.Where(p => p.Corners.Length > 4).ToList();
+    Check(cutTop.Count == 0, "and only splits the strip it crosses");
+    var ring = Fresh();
+    var ringEdge = ring.Edges.First(e => ring.Point(e.A).Y != ring.Point(e.B).Y);
+    Check(ring.EdgeRing(ringEdge.A, ringEdge.B).Count == 4, "the edges across a cube's upright edge make a ring of four");
+
+    var divided = Fresh();
+    SelectTop(divided);
+    Check(divided.Subdivide() is null && divided.Polys.Count == 9 && Closed(divided) && divided.Polys.Count(p => p.Corners.Length == 5) == 4, "subdividing the top gives four faces, and the neighbors get a corner so the mesh stays closed");
+    Check(ArraysMatch(divided) && divided.Model.Meshes[0].Indices.Length % 3 == 0, "and five-sided neighbors are drawn as triangles");
+    var dividedSmooth = new Editor.Modeling.ModelEdit(Primitives.Get(Primitives.Sphere));
+    Check(Closed(dividedSmooth), "a sphere's seam and poles are joined up when it's opened");
+    dividedSmooth.SelectAll();
+    int sphereFaces = dividedSmooth.Polys.Count;
+    Check(dividedSmooth.Subdivide() is null && Closed(dividedSmooth) && dividedSmooth.Polys.Count > sphereFaces * 3, "a whole sphere can be subdivided and stays closed");
+
+    var deleted = Fresh();
+    SelectTop(deleted);
+    Check(deleted.Delete(Editor.Modeling.DeleteKind.Faces) is null && deleted.Polys.Count == 5 && deleted.PointCount == 8, "deleting faces keeps the corners other faces use");
+    var gone = Fresh();
+    SelectTop(gone);
+    Check(gone.Delete(Editor.Modeling.DeleteKind.Vertices) is null && gone.Polys.Count == 1 && gone.PointCount == 4 && ArraysMatch(gone), "deleting vertices takes their faces with them");
+    gone.SelectAll();
+    gone.Delete(Editor.Modeling.DeleteKind.Vertices);
+    Check(gone.PointCount == 0 && gone.Model.Meshes.Count == 0, "everything can be deleted");
+    gone.AddPrimitive(Editor.Modeling.ModelPrimitive.Plane, Vector3.Zero);
+    Check(gone.PointCount == 4 && gone.Model.Meshes.Count == 1 && ArraysMatch(gone), "and a shape added to an empty model keeps its material");
+
+    var merged = Fresh();
+    SelectTop(merged);
+    Check(merged.Merge() is null && merged.PointCount == 5 && merged.Polys.Count == 5 && merged.Polys.Count(p => p.Corners.Length == 3) == 4 && Closed(merged) && merged.Selection.Count == 1,
+          "merging a cube's top makes a pyramid");
+    Check(merged.Point(merged.Selection.First()) == new Vector3(0f, 0.5f, 0f), "with its tip at their center");
+
+    var doubled = Fresh();
+    SelectTop(doubled);
+    doubled.Duplicate();
+    Check(doubled.PointCount == 12 && doubled.Polys.Count == 7, "duplicating makes a copy with its own corners");
+    Check(doubled.RemoveDoubles(0.001f) == 0, "removing doubles only looks within the selection");
+    doubled.SelectAll();
+    Check(doubled.RemoveDoubles(0.001f) == 4 && doubled.PointCount == 8, "so with everything selected it joins them back up");
+
+    var filled = Fresh();
+    SelectTop(filled);
+    filled.Delete(Editor.Modeling.DeleteKind.Faces);
+    SelectTop(filled);
+    Check(filled.Fill() is null && filled.Polys.Count == 6 && Closed(filled), "fill closes a hole with a face");
+    Check(filled.FaceNormal(filled.Polys[^1]).Y > 0f, "that faces outward");
+
+    var flipped = Fresh();
+    flipped.SelectAll();
+    flipped.FlipNormals();
+    Check(flipped.Polys.All(p => Vector3.Dot(flipped.FaceNormal(p), flipped.FaceCenter(p)) < 0f), "flip turns faces inside out");
+    flipped.RecalculateNormals();
+    Check(flipped.Polys.All(p => Vector3.Dot(flipped.FaceNormal(p), flipped.FaceCenter(p)) > 0f) && Closed(flipped), "and fix normals turns them all outward again");
+    var mixed = Fresh();
+    SelectTop(mixed);
+    mixed.FlipNormals();
+    mixed.RecalculateNormals();
+    Check(mixed.Polys.All(p => Vector3.Dot(mixed.FaceNormal(p), mixed.FaceCenter(p)) > 0f), "even when only some faces were the wrong way");
+
+    var smooth = Fresh();
+    smooth.SelectAll();
+    smooth.ShadeSmooth();
+    int NormalsPerCorner(Editor.Modeling.ModelEdit edit) => edit.Polys.SelectMany(p => p.Corners).GroupBy(c => c.Point).Max(g => g.Select(c => c.Normal).Distinct().Count());
+    Check(NormalsPerCorner(smooth) == 1, "shading smooth makes a cube's corners share one normal each");
+    smooth.ShadeFlat();
+    Check(NormalsPerCorner(smooth) == 3, "and shading flat splits them again");
+
+    var mirrored = Fresh();
+    SelectTop(mirrored);
+    mirrored.Mirror(1);
+    Check(mirrored.PointCount == 8 && MathF.Abs(mirrored.Center(mirrored.Selection).Y - 0.5f) < 1e-5f, "mirroring flips the selection across its center");
+
+    foreach (var kind in Enum.GetValues<Editor.Modeling.ModelPrimitive>())
+    {
+        var added = Fresh();
+        added.SelectNone();
+        added.AddPrimitive(kind, new Vector3(5f, 0f, 0f));
+        var center = added.Center(added.Selection);
+        bool outward = kind is Editor.Modeling.ModelPrimitive.Plane or Editor.Modeling.ModelPrimitive.Grid or Editor.Modeling.ModelPrimitive.Circle or Editor.Modeling.ModelPrimitive.Crown ||
+                       added.Polys.Where(p => added.IsSelected(p)).Sum(p => Vector3.Dot(added.FaceNormal(p), added.FaceCenter(p) - center)) > 0f;
+        Check(added.Selection.Count > 2 && ArraysMatch(added) && MathF.Abs(center.X - 5f) < 0.05f && outward && !added.Polys.Any(p => added.FaceNormal(p).LengthSquared() == 0f && p.Corners.Length > 3), $"{kind} can be added to a model, facing outward");
+    }
+
+    var round = Fresh();
+    round.SelectAll();
+    round.ToSphere();
+    float spread = Enumerable.Range(0, 8).Select(i => round.Point(i).Length()).Max() - Enumerable.Range(0, 8).Select(i => round.Point(i).Length()).Min();
+    Check(spread < 1e-4f, "to sphere puts every point the same distance from the center");
+    var lumpy = Fresh();
+    lumpy.SelectAll();
+    lumpy.Randomize(0.1f, 7);
+    Check(Enumerable.Range(0, 8).Any(i => lumpy.Point(i) != Fresh().Point(i)) && lumpy.Dirty, "randomize moves points, as one undo step");
+    lumpy.Undo();
+    Check(Enumerable.Range(0, 8).All(i => lumpy.Point(i) == Fresh().Point(i)), "which undo takes back");
+    var plane = Fresh();
+    SelectTop(plane);
+    plane.SetPoint(plane.Selection.First(), plane.Point(plane.Selection.First()) + Vector3.UnitY * 0.2f);
+    plane.Flatten();
+    var flatPoints = plane.Selection.Select(plane.Point).ToList();
+    Check(MathF.Abs(Vector3.Dot(flatPoints[3] - flatPoints[0], Vector3.Cross(flatPoints[1] - flatPoints[0], flatPoints[2] - flatPoints[0]))) < 1e-5f, "flatten puts the points on one plane");
+
+    var selecting = new Editor.Modeling.ModelEdit(Primitives.Get(Primitives.Cube));
+    selecting.AddPrimitive(Editor.Modeling.ModelPrimitive.Plane, new Vector3(5f, 0f, 0f));
+    selecting.SelectNone();
+    selecting.Selection.Add(0);
+    selecting.SelectLinked();
+    Check(selecting.Selection.Count == 8, "select linked stops at what's joined to the selection");
+    selecting.SelectInverse();
+    Check(selecting.Selection.Count == 4, "invert takes the rest");
+    var growing = Fresh();
+    growing.Selection.Add(0);
+    growing.SelectMore();
+    Check(growing.Selection.Count == 4, "select more adds what's one edge away");
+    growing.SelectLess();
+    Check(growing.Selection.Count == 1, "and select less takes it back");
+
+    var gridEdit = Fresh();
+    gridEdit.SelectAll();
+    gridEdit.Delete(Editor.Modeling.DeleteKind.Vertices);
+    gridEdit.AddPrimitive(Editor.Modeling.ModelPrimitive.Grid, Vector3.Zero);
+    var middleEdge = gridEdit.Edges.First(e => MathF.Abs(gridEdit.Point(e.A).Z) < 1e-4f && MathF.Abs(gridEdit.Point(e.B).Z) < 1e-4f && MathF.Abs(gridEdit.Point(e.A).X) < 0.2f);
+    Check(gridEdit.EdgeLoop(middleEdge.A, middleEdge.B).Count == 11, "an edge loop runs straight across a grid");
+
+    // L selects one loose piece of the model.
+    var pieces = Fresh();
+    pieces.SelectNone();
+    pieces.AddPrimitive(Editor.Modeling.ModelPrimitive.Cube, new Vector3(5f, 0f, 0f));
+    pieces.SelectNone();
+    pieces.SelectPiece(0);
+    Check(pieces.Selection.Count == 8 && pieces.Selection.All(p => pieces.Point(p).X < 2f), "a loose piece is selected on its own, and the other stays out");
+    int otherPiece = Enumerable.Range(0, pieces.PointCount).First(p => pieces.Point(p).X > 2f);
+    pieces.SelectPiece(otherPiece);
+    Check(pieces.Selection.Count == 16, "selecting another adds to the selection");
+    pieces.SelectPiece(0, remove: true);
+    Check(pieces.Selection.Count == 8 && pieces.Selection.All(p => pieces.Point(p).X > 2f), "and it can be taken out again");
+
+    // Modifiers.
+    Editor.Modeling.MeshWork Work(Editor.Modeling.ModelEdit edit) => new(Enumerable.Range(0, edit.PointCount).Select(edit.Point).ToList(), edit.Polys.Select(p => p.Copy()).ToList());
+    bool WorkClosed(Editor.Modeling.MeshWork work)
+    {
+        var runs = new Dictionary<(int, int), int>();
+        foreach (var poly in work.Polys)
+            for (int i = 0; i < poly.Corners.Length; i++)
+            {
+                var run = (poly.Corners[i].Point, poly.Corners[(i + 1) % poly.Corners.Length].Point);
+                runs[run] = runs.GetValueOrDefault(run) + 1;
+            }
+        return runs.All(r => r.Value == 1 && runs.ContainsKey((r.Key.Item2, r.Key.Item1)));
+    }
+    float Volume(Editor.Modeling.MeshWork work) => work.Triangles().Sum(t =>
+        Vector3.Dot(work.Points[t[0].Point], Vector3.Cross(work.Points[t[1].Point], work.Points[t[2].Point]))) / 6f;
+    Editor.Modeling.MeshWork CubeAt(Vector3 at)
+    {
+        var work = Work(Fresh());
+        return new(work.Points.Select(p => p + at).ToList(), work.Polys);
+    }
+
+    var surfaced = new Editor.Modeling.SubdivisionModifier().Run(Work(Fresh()));
+    Check(surfaced.Points.Count == 26 && surfaced.Polys.Count == 24 && surfaced.Polys.All(p => p.Corners.Length == 4) && WorkClosed(surfaced), "subdivision surface splits a cube into 24 faces and stays closed");
+    Check(surfaced.Points.Max(p => p.Length()) < 0.6f && Volume(surfaced) < 0.9f && Volume(surfaced) > 0.3f, "and rounds it, pulling the corners in");
+    var surfacedTwice = new Editor.Modeling.SubdivisionModifier { Levels = 3 }.Run(Work(Fresh()));
+    Check(surfacedTwice.Polys.Count == 6 * 64 && WorkClosed(surfacedTwice), "more levels split it further");
+    var openPlane = Fresh();
+    openPlane.SelectAll();
+    openPlane.Delete(Editor.Modeling.DeleteKind.Vertices);
+    openPlane.AddPrimitive(Editor.Modeling.ModelPrimitive.Grid, Vector3.Zero);
+    Check(new Editor.Modeling.SubdivisionModifier().Run(Work(openPlane)).Polys.Count == 400, "an open surface can be subdivided too");
+    var huge = new Editor.Modeling.SubdivisionModifier { Levels = 5 };
+    var hugeBase = Work(openPlane);
+    var hugeSphere = new Editor.Modeling.ModelEdit(Primitives.Get(Primitives.Sphere));
+    var hugeResult = huge.Run(Work(hugeSphere));
+    Check(huge.Problem is not null && hugeResult.Polys.Count == hugeSphere.Polys.Count, "a subdivision that would be far too big is left out, with a reason");
+
+    var arrayed = new Editor.Modeling.ArrayModifier { Count = 3, Offset = new Vector3(2f, 0f, 0f) }.Run(Work(Fresh()));
+    Check(arrayed.Points.Count == 24 && arrayed.Polys.Count == 18 && MathF.Abs(arrayed.Points.Max(p => p.X) - 4.5f) < 1e-5f, "array repeats the mesh, stepping by a share of its size");
+
+    var besides = CubeAt(new Vector3(2f, 0f, 0f));
+    var mirrored2 = new Editor.Modeling.MirrorModifier().Run(besides);
+    Check(mirrored2.Points.Count == 16 && mirrored2.Polys.Count == 12 && mirrored2.Points.Min(p => p.X) == -2.5f && Volume(mirrored2) > 1.99f, "mirror adds a reflection across the model's center, facing the right way");
+    var half = Fresh();
+    half.SelectNone();
+    for (int i = 0; i < half.PointCount; i++) if (half.Point(i).X < 0f) half.Selection.Add(i);
+    foreach (int p in half.Selection.ToList()) half.SetPoint(p, half.Point(p) * new Vector3(0f, 1f, 1f));
+    half.SelectNone();
+    var joined = new Editor.Modeling.MirrorModifier().Run(Work(half));
+    Check(joined.Points.Count == 12 && joined.Polys.Count == 10 && WorkClosed(joined), "points on the mirror join their reflection, and the wall between the halves goes, leaving one closed mesh");
+    var flatOnMirror = Fresh();
+    flatOnMirror.SelectAll();
+    flatOnMirror.Delete(Editor.Modeling.DeleteKind.Vertices);
+    flatOnMirror.AddPrimitive(Editor.Modeling.ModelPrimitive.Plane, Vector3.Zero);
+    Check(new Editor.Modeling.MirrorModifier { X = false, Y = true }.Run(Work(flatOnMirror)).Polys.Count == 1, "a mesh lying flat on the mirror is left as it is");
+
+    var thinPlane = Fresh();
+    thinPlane.SelectAll();
+    thinPlane.Delete(Editor.Modeling.DeleteKind.Vertices);
+    thinPlane.AddPrimitive(Editor.Modeling.ModelPrimitive.Plane, Vector3.Zero);
+    var solid = new Editor.Modeling.SolidifyModifier { Thickness = 0.1f }.Run(Work(thinPlane));
+    Check(solid.Points.Count == 8 && solid.Polys.Count == 6 && WorkClosed(solid), "solidify gives a plane thickness, with a rim, and closes it");
+    Check(MathF.Abs(Volume(solid) - 0.1f) < 1e-4f, "as thick as it was told");
+
+    var denseSphere = Work(new Editor.Modeling.ModelEdit(Primitives.Get(Primitives.Sphere)));
+    int denseTriangles = denseSphere.Triangles().Count();
+    var reduced = new Editor.Modeling.DecimateModifier { Ratio = 0.25f }.Run(denseSphere);
+    Check(reduced.Polys.All(p => p.Corners.Length == 3) && reduced.Polys.Count <= denseTriangles / 4 + 2 && reduced.Polys.Count > denseTriangles / 6 && WorkClosed(reduced), "decimate keeps about the share of triangles asked for, and the mesh stays closed");
+    Check(reduced.Points.All(p => MathF.Abs(p.Length() - 0.5f) < 0.005f), "and every point stays within 1% of the original surface");
+    var reducedPlane = new Editor.Modeling.DecimateModifier { Ratio = 0.1f }.Run(Work(openPlane));
+    var (planeMin, planeMax) = reducedPlane.Bounds();
+    Check(MathF.Abs(planeMax.X - 0.5f) < 1e-3f && MathF.Abs(planeMin.Z + 0.5f) < 1e-3f, "the outline of an open surface stays where it is");
+
+    var skinned2 = new Editor.Modeling.SkinModifier { Radius = 0.05f, Sides = 6 }.Run(Work(Fresh()));
+    Check(skinned2.Polys.Count > 12 * 6 && skinned2.Points.Max(p => p.Y) > 0.5f && skinned2.Polys.All(p => ModelEdit_Facing(skinned2, p)), "skin wraps every edge in a tube, with a ball at each corner");
+
+    var ringProfile = Fresh();
+    ringProfile.SelectAll();
+    ringProfile.Delete(Editor.Modeling.DeleteKind.Vertices);
+    ringProfile.AddPrimitive(Editor.Modeling.ModelPrimitive.Plane, Vector3.Zero);
+    ringProfile.SelectAll();
+    foreach (int p in ringProfile.Selection.ToList()) ringProfile.SetPoint(p, new Vector3(ringProfile.Point(p).X + 2f, ringProfile.Point(p).Z, 0f));
+    var swept = new Editor.Modeling.ScrewModifier { Steps = 16 }.Run(Work(ringProfile));
+    Check(swept.Polys.Count == 4 * 16 && swept.Points.Count == 4 * 16 && WorkClosed(swept), "screw sweeps a shape's edges all the way around into a closed ring");
+    Check(Volume(swept) > 0f, "facing outward");
+    var spiral = new Editor.Modeling.ScrewModifier { Steps = 8, Angle = 720f, Height = 3f }.Run(Work(ringProfile));
+    Check(spiral.Polys.Count == 4 * 8 && spiral.Points.Max(p => p.Y) > 3f, "with a height it climbs into a spiral");
+
+    Editor.Modeling.MeshWork Bool(Editor.Modeling.BooleanOperation operation)
+    {
+        var modifier = new Editor.Modeling.BooleanModifier { Operation = operation, Other = CubeAt(new Vector3(0.5f, 0f, 0f)) };
+        return modifier.Run(CubeAt(Vector3.Zero));
+    }
+    Check(MathF.Abs(Volume(Bool(Editor.Modeling.BooleanOperation.Union)) - 1.5f) < 1e-3f, "a boolean union of two overlapping cubes has both their volumes, less the overlap");
+    Check(MathF.Abs(Volume(Bool(Editor.Modeling.BooleanOperation.Difference)) - 0.5f) < 1e-3f, "a difference cuts the other away");
+    Check(MathF.Abs(Volume(Bool(Editor.Modeling.BooleanOperation.Intersect)) - 0.5f) < 1e-3f, "and an intersection keeps only the overlap");
+    var hole = new Editor.Modeling.BooleanModifier { Other = new(Work(new Editor.Modeling.ModelEdit(Primitives.Get(Primitives.Sphere))).Points.Select(p => p * 0.5f).ToList(), Work(new Editor.Modeling.ModelEdit(Primitives.Get(Primitives.Sphere))).Polys) }.Run(CubeAt(Vector3.Zero));
+    Check(Volume(hole) < 1f && Volume(hole) > 0.9f, "a sphere can be cut out of a cube");
+    var noTarget = new Editor.Modeling.BooleanModifier();
+    var untouched = noTarget.Run(CubeAt(Vector3.Zero));
+    Check(noTarget.Problem is not null && untouched.Polys.Count == 6, "with no object chosen it says so, and leaves the mesh alone");
+
+    var modifiersEdit = Fresh();
+    var baseCount = modifiersEdit.PointCount;
+    modifiersEdit.AddModifier(new Editor.Modeling.SubdivisionModifier());
+    modifiersEdit.AddModifier(new Editor.Modeling.ArrayModifier { Count = 2 });
+    var shown = modifiersEdit.Evaluate();
+    Check(modifiersEdit.PointCount == baseCount && modifiersEdit.Model.Meshes[0].Positions.Length == 72 && shown.Meshes[0].Indices.Length == 2 * 24 * 6 && modifiersEdit.Dirty && !modifiersEdit.ModifiersStale, "modifiers run in order on a copy, leaving the mesh as it is");
+    modifiersEdit.SetPoint(0, modifiersEdit.Point(0) + Vector3.UnitY);
+    Check(modifiersEdit.ModifiersStale, "moving a vertex means they need to run again");
+    modifiersEdit.Modifiers[0].Enabled = false;
+    modifiersEdit.ModifiersChanged();
+    Check(modifiersEdit.Evaluate().Meshes[0].Indices.Length == 2 * 6 * 6, "one can be switched off");
+    modifiersEdit.Modifiers[0].Enabled = true;
+    modifiersEdit.MoveModifier(modifiersEdit.Modifiers[1], -1);
+    Check(modifiersEdit.Modifiers[0] is Editor.Modeling.ArrayModifier, "and they can be put in a different order");
+    var applying = Fresh();
+    var subdivide = new Editor.Modeling.SubdivisionModifier();
+    applying.AddModifier(subdivide);
+    applying.ApplyModifier(subdivide);
+    Check(applying.PointCount == 26 && applying.Modifiers.Count == 0 && applying.NeedsNewFile, "applying a modifier makes its result the mesh");
+    applying.Undo();
+    Check(applying.PointCount == 8 && applying.Modifiers.Count == 1, "and undo brings back both the mesh and the modifier");
+    applying.ApplyModifiers();
+    Check(applying.PointCount == 26 && applying.Modifiers.Count == 0 && Closed(applying) && ArraysMatch(applying), "applying the whole stack does the same");
+
+    var animated = new GlbModel { Name = "Moving", Meshes = cubeModel3.Meshes, BoundsMin = cubeModel3.BoundsMin, BoundsMax = cubeModel3.BoundsMax,
+        Animations = [new AnimationClipData("Spin", 1f, [])] };
+    Check(!new Editor.Modeling.ModelEdit(animated).CanChangeShape && Fresh().CanChangeShape, "a model with animations can't change shape, because a new file would lose them");
+
+    var saving = Fresh();
+    SelectTop(saving);
+    saving.Extrude();
+    var savedBytes = GlbWriter.Write(saving.Model, saving.Positions, saving.Normals);
+    var savedBack = GlbLoader.Load(savedBytes, Path.GetTempPath(), "Saved");
+    saving.Rebind(savedBack);
+    saving.MarkSaved();
+    Check(!saving.Dirty && !saving.NeedsNewFile && savedBack.Meshes[0].Positions.SequenceEqual(saving.Positions[0]), "a changed mesh saves as a new file and reads back the same");
+    foreach (int p in saving.Selection.ToList()) saving.SetPoint(p, saving.Point(p) + Vector3.UnitY);
+    Check(GlbLoader.Load(GlbWriter.UpdateVertices(savedBytes, saving.Model.Meshes, saving.Positions, saving.Normals), Path.GetTempPath(), "Saved").BoundsMax.Y == 1.5f, "and from then on moved vertices save in place again");
+
+    string modelDir = Path.Combine(Path.GetTempPath(), "empire-model-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(Path.Combine(modelDir, "Models"));
+    string crownFile = Path.Combine(modelDir, "Models", "Crown.glb");
+    using var crownResource = new MemoryStream();
+    typeof(Primitives).Assembly.GetManifestResourceStream("Engine.Core.Assets.Empire_Crown.glb")!.CopyTo(crownResource);
+    byte[] crownBytes = crownResource.ToArray();
+    File.WriteAllBytes(crownFile, crownBytes);
+    var modelCache = new AssetCache(modelDir);
+    var crownLoaded = modelCache.GetModel("Models/Crown.glb");
+    var crownEdit = new Editor.Modeling.ModelEdit(crownLoaded);
+    Check(crownEdit.PointCount < crownLoaded.Meshes.Sum(m => m.Positions.Length / 3), "the crown's split vertices are joined up too");
+    var crownTop = Enumerable.Range(0, crownEdit.PointCount).MaxBy(i => crownEdit.Point(i).Y);
+    float crownHeight = crownLoaded.BoundsMax.Y;
+    crownEdit.SetPoint(crownTop, crownEdit.Point(crownTop) + new Vector3(0f, 2f, 0f));
+    crownEdit.UpdateNormals([crownTop]);
+    byte[] patched = GlbWriter.UpdateVertices(crownBytes, crownLoaded.Meshes, crownEdit.Positions, crownEdit.Normals);
+    var crownSaved = GlbLoader.Load(patched, modelDir, "Crown");
+    Check(crownSaved.Meshes.Count == crownLoaded.Meshes.Count && Enumerable.Range(0, crownSaved.Meshes.Count).All(m =>
+              crownSaved.Meshes[m].Positions.SequenceEqual(crownEdit.Positions[m]) && crownSaved.Meshes[m].Normals.SequenceEqual(crownEdit.Normals[m]) &&
+              crownSaved.Meshes[m].Indices.SequenceEqual(crownLoaded.Meshes[m].Indices) && crownSaved.Meshes[m].TexCoords.SequenceEqual(crownLoaded.Meshes[m].TexCoords)),
+          "a .glb saved in place has the new vertices and the same triangles and texture coordinates");
+    Check(Enumerable.Range(0, crownSaved.Meshes.Count).All(m => crownSaved.Meshes[m].Material.BaseColor.SequenceEqual(crownLoaded.Meshes[m].Material.BaseColor) &&
+              crownSaved.Meshes[m].Material.Roughness == crownLoaded.Meshes[m].Material.Roughness), "and keeps its materials");
+    Check(MathF.Abs(crownSaved.BoundsMax.Y - (crownHeight + 2f)) < 1e-3f, "and its size follows the change");
+
+    System.Threading.Thread.Sleep(20);
+    File.WriteAllBytes(crownFile, patched);
+    File.SetLastWriteTimeUtc(crownFile, DateTime.UtcNow.AddSeconds(5));
+    Check(modelCache.ReloadChanged().SequenceEqual(["Models/Crown.glb"]) && MathF.Abs(modelCache.GetModel("Models/Crown.glb").BoundsMax.Y - (crownHeight + 2f)) < 1e-3f,
+          "the scene editor's model cache picks up a saved model by itself");
+
+    // A file that keeps position and normal together in one buffer, and one that stores its vertices compressed.
+    byte[] MakeModelFile(string json, byte[] bin)
+    {
+        byte[] text = System.Text.Encoding.UTF8.GetBytes(json + new string(' ', (4 - json.Length % 4) % 4));
+        using var stream = new MemoryStream();
+        using var writer = new BinaryWriter(stream);
+        writer.Write(0x46546C67u); writer.Write(2u); writer.Write((uint)(28 + text.Length + bin.Length));
+        writer.Write((uint)text.Length); writer.Write(0x4E4F534Au); writer.Write(text);
+        writer.Write((uint)bin.Length); writer.Write(0x004E4942u); writer.Write(bin);
+        writer.Flush();
+        return stream.ToArray();
+    }
+    var interleavedBin = new byte[3 * 32];
+    for (int v = 0; v < 3; v++)
+    {
+        Buffer.BlockCopy(new[] { v * 1f, 0f, 0f, 0f, 1f, 0f, 7f, 8f }, 0, interleavedBin, v * 32, 32);
+    }
+    const string interleavedJson = """{"asset":{"version":"2.0"},"custom":{"keep":"me"},"meshes":[{"primitives":[{"attributes":{"POSITION":0,"NORMAL":1,"TEXCOORD_0":2}}]}],"bufferViews":[{"buffer":0,"byteLength":96,"byteStride":32}],"buffers":[{"byteLength":96}],"accessors":[{"bufferView":0,"componentType":5126,"count":3,"type":"VEC3","min":[0,0,0],"max":[2,0,0]},{"bufferView":0,"byteOffset":12,"componentType":5126,"count":3,"type":"VEC3"},{"bufferView":0,"byteOffset":24,"componentType":5126,"count":3,"type":"VEC2"}]}""";
+    byte[] interleaved = MakeModelFile(interleavedJson, interleavedBin);
+    var interleavedModel = GlbLoader.Load(interleaved, modelDir, "Strip");
+    float[] movedStrip = (float[])interleavedModel.Meshes[0].Positions.Clone();
+    movedStrip[7] = 5f;
+    byte[] interleavedOut = GlbWriter.UpdateVertices(interleaved, interleavedModel.Meshes, [movedStrip], [interleavedModel.Meshes[0].Normals]);
+    var interleavedBack = GlbLoader.Load(interleavedOut, modelDir, "Strip");
+    Check(interleavedBack.Meshes[0].Positions.SequenceEqual(movedStrip) && interleavedBack.Meshes[0].TexCoords.SequenceEqual(interleavedModel.Meshes[0].TexCoords) && interleavedBack.BoundsMax.Y == 5f,
+          "vertices sharing a buffer with texture coordinates are written without touching them");
+    Check(System.Text.Encoding.UTF8.GetString(interleavedOut).Contains("\"custom\":{\"keep\":\"me\"}"), "what the engine doesn't read in a file stays in it");
+
+    bool wrongCount = false;
+    try { GlbWriter.UpdateVertices(interleaved, interleavedModel.Meshes, [new float[3]], [new float[3]]); }
+    catch (InvalidDataException) { wrongCount = true; }
+    Check(wrongCount, "a file with a different number of vertices than the edit is refused, not overwritten");
+    bool compressed = false;
+    byte[] halfFloats = MakeModelFile(interleavedJson.Replace("\"componentType\":5126,\"count\":3,\"type\":\"VEC3\",\"min\"", "\"componentType\":5123,\"normalized\":true,\"count\":3,\"type\":\"VEC3\",\"min\""), interleavedBin);
+    try { GlbWriter.UpdateVertices(halfFloats, interleavedModel.Meshes, [movedStrip], [interleavedModel.Meshes[0].Normals]); }
+    catch (NotSupportedException) { compressed = true; }
+    Check(compressed, "a file with compressed vertices is refused");
+
+    var picture = new ImageData { Name = "p", Width = 2, Height = 2, Pixels = [255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 9, 8, 7, 200] };
+    var paintedMesh = cubeModel3.Meshes[0] with { Material = cubeModel3.Meshes[0].Material with { BaseColorImage = picture, Roughness = 0.25f, Metallic = 0.75f, AlphaCutoff = 0.4f } };
+    var paintedModel = new GlbModel { Name = "Painted", Meshes = [paintedMesh, paintedMesh], BoundsMin = cubeModel3.BoundsMin, BoundsMax = cubeModel3.BoundsMax };
+    var paintedBack = GlbLoader.Load(GlbWriter.Write(paintedModel, [paintedMesh.Positions, paintedMesh.Positions], [paintedMesh.Normals, paintedMesh.Normals]), modelDir, "Painted");
+    var paintedOut = paintedBack.Meshes[0];
+    Check(paintedBack.Meshes.Count == 2 && paintedOut.Positions.SequenceEqual(paintedMesh.Positions) && paintedOut.Normals.SequenceEqual(paintedMesh.Normals) &&
+          paintedOut.TexCoords.SequenceEqual(paintedMesh.TexCoords) && paintedOut.Indices.SequenceEqual(paintedMesh.Indices) && paintedBack.BoundsMax == paintedMesh.Positions.Chunk(3).Aggregate(new Vector3(float.MinValue), (m, p) => Vector3.Max(m, new Vector3(p[0], p[1], p[2]))),
+          "a model written as a new .glb reads back the same");
+    Check(paintedOut.Material.Roughness == 0.25f && paintedOut.Material.Metallic == 0.75f && MathF.Abs(paintedOut.Material.AlphaCutoff - 0.4f) < 1e-6f && paintedOut.Material.BaseColorImage?.Pixels?.SequenceEqual(picture.Pixels!) == true,
+          "with its material and its texture, pixel for pixel");
+    var crownAsNew = Primitives.Get(Primitives.Empire);
+    var crownAsNewBack = GlbLoader.Load(GlbWriter.Write(crownAsNew, crownAsNew.Meshes.Select(m => m.Positions).ToList(), crownAsNew.Meshes.Select(m => m.Normals).ToList()), modelDir, "Empire");
+    Check(crownAsNewBack.Meshes.Count == crownAsNew.Meshes.Count && crownAsNewBack.Meshes[0].PositionAccessor >= 0, "the built-in crown can be written as a file of its own, and that file can be edited in turn");
+
+    var boned = new GlbModel { Name = "Boned", Meshes = [cubeModel3.Meshes[0] with { Skin = 0 }] };
+    Check(Editor.Modeling.ModelEdit.Problem(boned) is { } skinned && skinned.Contains("skeleton") && Editor.Modeling.ModelEdit.Problem(cubeModel3) is null, "a model with a skeleton is refused with a reason");
+    var twice = new GlbModel { Name = "Twice", Meshes = [cubeModel3.Meshes[0] with { PositionAccessor = 1 }, cubeModel3.Meshes[0] with { PositionAccessor = 1, RestTransform = Matrix4x4.CreateTranslation(1f, 0f, 0f) }] };
+    Check(Editor.Modeling.ModelEdit.Problem(twice) is not null, "so is one mesh placed twice, where a move couldn't apply to both");
+    Directory.Delete(modelDir, true);
+
+    // Building for another platform.
+    var expectedRids = new Dictionary<Editor.BuildPlatform, string> { [Editor.BuildPlatform.Windows] = "win-x64", [Editor.BuildPlatform.Mac] = "osx-arm64", [Editor.BuildPlatform.Linux] = "linux-x64" };
+    var thisPlatform = Editor.BuildTargets.ThisPlatform;
+    Check(expectedRids.Where(p => p.Key != thisPlatform).All(p => Editor.BuildTargets.Rid(p.Key) == p.Value) &&
+          Editor.BuildTargets.Rid(thisPlatform) == System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier,
+          "a build for another platform uses its usual processor type, and one for this computer uses this computer's");
+    var otherBuild = expectedRids.Keys.First(p => p != thisPlatform);
+    Check(Editor.BuildTargets.FolderName("Game", thisPlatform) == "Game" && Editor.BuildTargets.FolderName("Game", otherBuild) == $"Game-{otherBuild}",
+          "a build for another platform gets its own folder, so two platforms' files never mix");
+
+    string playerZips = Path.Combine(Path.GetTempPath(), "empire-player-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(playerZips);
+    string MakeEditorZip(string name, params string[] entries)
+    {
+        string path = Path.Combine(playerZips, name + ".zip");
+        using var zip = System.IO.Compression.ZipFile.Open(path, System.IO.Compression.ZipArchiveMode.Create);
+        foreach (var entry in entries)
+        {
+            using var writer = new StreamWriter(zip.CreateEntry(entry).Open());
+            writer.Write(entry);
+        }
+        return path;
+    }
+    string plainPlayer = Path.Combine(playerZips, "plain");
+    Editor.PlayerDownloads.Unpack(MakeEditorZip("plain", "Empire/1.0/empire.dll", "Empire/1.0/Player/Player.dll", "Empire/1.0/Player/vulkan/icd/a.json"), plainPlayer);
+    Check(File.Exists(Path.Combine(plainPlayer, "Player.dll")) && File.Exists(Path.Combine(plainPlayer, "vulkan", "icd", "a.json")) && !File.Exists(Path.Combine(plainPlayer, "empire.dll")),
+          "only the player comes out of an editor zip");
+    string macPlayer = Path.Combine(playerZips, "mac");
+    const string macInside = "Empire/1.0/Empire Engine Editor.app/Contents/MacOS/";
+    Editor.PlayerDownloads.Unpack(MakeEditorZip("mac", macInside + "empire.dll", macInside + "Player/Player.dll", "__MACOSX/" + macInside + "Player/._Player.dll"), macPlayer);
+    Check(File.Exists(Path.Combine(macPlayer, "Player.dll")) && Directory.GetFiles(macPlayer).Length == 1, "and from inside the app in a Mac zip, without the Mac's extra files");
+    bool noPlayerThrows = false;
+    try { Editor.PlayerDownloads.Unpack(MakeEditorZip("none", "Empire/1.0/empire.dll"), Path.Combine(playerZips, "none")); }
+    catch (EmpireHub.InstallException) { noPlayerThrows = true; }
+    Check(noPlayerThrows, "a zip with no player in it is refused");
+    Directory.Delete(playerZips, true);
     Directory.Delete(projectsFolder, recursive: true);
 
     // Typing into a visual code field from an on-screen keyboard
@@ -2720,7 +3222,7 @@ if (!OperatingSystem.IsWindows())
     ball.Components.Add(new ScriptComponent { ScriptName = "Touch" });
     ScriptRuntime.Load(touchScene, new[] { touchAssembly });
     var touch = ball.Components.OfType<ScriptComponent>().Single().Instance!;
-    int Count(string name) => (int)(float)touch.GetType().GetField("_v_" + name, BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(touch)!;
+    int Count(string name) => (int)(float)touch.GetType().GetField("_v_" + name)!.GetValue(touch)!;
 
     void Frames(int n)
     {
@@ -2784,7 +3286,7 @@ if (!OperatingSystem.IsWindows())
     funcScene.Add(runner);
     ScriptRuntime.Load(funcScene, new[] { Assembly.LoadFrom(funcDll) });
     var funcInstance = runner.Components.OfType<ScriptComponent>().Single().Instance!;
-    float Total() => (float)funcInstance.GetType().GetField("_v_total", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(funcInstance)!;
+    float Total() => (float)funcInstance.GetType().GetField("_v_total")!.GetValue(funcInstance)!;
     SceneUpdate.Update(funcScene, 1f / 60f);
     Check(Total() == 5f, "a call runs the function until it waits, and the script waits with it (" + Total() + ")");
     SceneUpdate.Update(funcScene, 1f / 60f);
@@ -2927,6 +3429,35 @@ if (!OperatingSystem.IsWindows())
     empty.Nodes.Add(new() { Id = "b", Type = "destroy_object" });
     Check(new VisualCode.Transpiler.VcTranspiler().Transpile(empty, "X").Diagnostics.Any(d => d.Message.Contains("Choose an object")),
           "a destroy block with no object chosen is reported");
+
+    // A variable typed into a block but never added has no field, so the script must not generate code that can't compile.
+    var untyped = new VisualCode.Model.VcGraph();
+    untyped.Nodes.Add(new() { Id = "a", Type = "when_start", Next = "b" });
+    untyped.Nodes.Add(new() { Id = "b", Type = "set_var", Next = "c", Inputs = { ["var"] = new() { Literal = "spinspeed" }, ["value"] = new() { Literal = "0" } } });
+    untyped.Nodes.Add(new() { Id = "c", Type = "change_var", Inputs = { ["var"] = new() { Literal = "spinSpeed" }, ["value"] = new() { Literal = "1" } } });
+    var untypedResult = new VisualCode.Transpiler.VcTranspiler().Transpile(untyped, "Spin");
+    Check(untypedResult.HasErrors && untypedResult.Diagnostics.Any(d => d.Message.Contains("no variable 'spinspeed'")) &&
+          untypedResult.Diagnostics.Any(d => d.Message.Contains("no variable 'spinSpeed'")), "a block using a variable that wasn't added is an error that names it");
+    string syncDir = Path.Combine(Path.GetTempPath(), "empire-vc-sync-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(syncDir);
+    File.WriteAllText(Path.Combine(syncDir, "Spin.visualcode"), untyped.ToJson());
+    File.WriteAllText(Path.Combine(syncDir, "Spin.cs"), "// left from an earlier save");
+    string syncErrors = VisualCode.Compile.VisualScriptSync.Sync(syncDir);
+    Check(syncErrors.Contains("Spin.visualcode") && syncErrors.Contains("no variable 'spinspeed'") && !File.Exists(Path.Combine(syncDir, "Spin.cs")),
+          "a visual script with errors reports them and leaves no .cs file");
+    untyped.Variables.Add(new() { Name = "spinspeed", Type = "number", Default = "0" });
+    untyped.Variables.Add(new() { Name = "spinSpeed", Type = "number", Default = "0" });
+    File.WriteAllText(Path.Combine(syncDir, "Spin.visualcode"), untyped.ToJson());
+    string syncDll = Path.Combine(syncDir, "out", "Spin.dll");
+    Check(VisualCode.Compile.VisualScriptSync.Sync(syncDir).Length == 0 &&
+          Engine.Scripting.Build.ScriptBuilder.Compile(syncDir, syncDll, Engine.Scripting.Build.ScriptBuilder.DefaultReferences(typeof(Behaviour).Assembly.Location), out string syncCompile) && syncCompile.Length == 0,
+          "and once the variables are added it generates code that compiles");
+    var spinType = Assembly.Load(File.ReadAllBytes(syncDll)).GetType("Spin")!;
+    Check(ScriptFields.Describe(spinType).Any(f => f.Name == "_v_spinSpeed" && f.Kind == ScriptFieldKind.Float), "a visual script's variables are public fields the Inspector lists");
+    var spinInstance = Activator.CreateInstance(spinType)!;
+    ScriptFields.Apply(spinInstance, new Dictionary<string, string> { ["_v_spinSpeed"] = "45" }, _ => null);
+    Check((float)spinType.GetField("_v_spinSpeed")!.GetValue(spinInstance)! == 45f, "and a value set in the Inspector reaches the script");
+    Directory.Delete(syncDir, true);
     File.WriteAllText(Path.Combine(hookDir, "Cleaner.cs"), transpiled.Code);
     File.WriteAllText(Path.Combine(hookDir, "Mortal.cs"), """
         using System.Collections.Generic;

@@ -29,9 +29,11 @@
     <!-- The real editor. Only Program.cs is the desktop's own. -->
     <Compile Include="..\Editor\**\*.cs" Exclude="..\Editor\Program.cs;..\Editor\obj\**;..\Editor\bin\**" LinkBase="Editor" />
     <Compile Include="../Hub/EmpireProject.cs;../Hub/HubJson.cs;../Hub/HubSettings.cs;../Hub/ProjectTemplate.cs" Link="HubFiles/%(Filename)%(Extension)" />
+    <Compile Include="../Hub/Releases/*.cs" Link="HubReleases/%(Filename)%(Extension)" />
     <Using Include="Engine.Brutal.Ui" />
     <Using Include="Engine.Brutal.Gfx" />
     <Using Include="Editor.Ui" />
+    <Using Include="Editor.Modeling" />
     <ProjectReference Include="..\Engine.Brutal\Engine.Brutal.csproj" />
     <ProjectReference Include="..\Engine.Core\Engine.Core.csproj" />
     <ProjectReference Include="..\ScriptCompiler\ScriptCompiler.csproj" />
