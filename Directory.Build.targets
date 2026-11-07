@@ -83,6 +83,8 @@
   -->
   <ItemGroup Condition="'$(EmpireBundleVulkan)' == 'true' And '$(_EmpireVulkanArch)' == 'osx-x64'">
     <_EmpireIntelNative Include="$(MSBuildThisFileDirectory)ThirdParty/IntelMac/*.dylib" />
+    <!-- Games have no shader compiler: see Player/LeftOutOfGames.targets. -->
+    <_EmpireIntelNative Remove="$(MSBuildThisFileDirectory)ThirdParty/IntelMac/libshaderc_shared.1.dylib" Condition="'$(MSBuildProjectName)' == 'Player'" />
   </ItemGroup>
 
   <Target Name="EmpireIntelNativesBuild" AfterTargets="Build"

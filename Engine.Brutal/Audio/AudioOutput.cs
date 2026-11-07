@@ -10,6 +10,11 @@ namespace Engine.Brutal.Audio;
 // constructor says so on the console instead of throwing.
 public sealed unsafe class AudioOutput : IDisposable
 {
+    // Room for miniaudio's device. MaDevice is laid out for Windows: it's 3,312 bytes, but the library's own is 3,944 on a Mac and
+    // 3,832 on Linux, and it can't be asked. Allocating only sizeof(MaDevice) let the library wipe whatever came next on the heap,
+    // which crashed or hung programs at random as they started.
+    private const int DeviceBytes = 16 * 1024;
+
     private MaDevice* _device;
 
     public bool IsRunning { get; private set; }
@@ -24,7 +29,7 @@ public sealed unsafe class AudioOutput : IDisposable
             config.SampleRate = 0;   // the device's own rate, so there is no extra conversion
             config.DataCallback = (void*)(delegate* unmanaged[Cdecl]<MaDevice*, void*, void*, uint, void>)&OnAudio;
 
-            _device = (MaDevice*)NativeMemory.AllocZeroed((nuint)sizeof(MaDevice));
+            _device = (MaDevice*)NativeMemory.AllocZeroed((nuint)Math.Max(sizeof(MaDevice), DeviceBytes));
             var result = MiniAudio.DeviceInit(null, &config, _device);
             if (result != MaResult.Success)
             {

@@ -1559,6 +1559,7 @@ Directory.CreateDirectory(Path.Combine(projectDir, "Scenes"));
 
     string playerZips = Path.Combine(Path.GetTempPath(), "empire-player-" + Guid.NewGuid().ToString("N"));
     Directory.CreateDirectory(playerZips);
+    string sharedList = "";
     string MakeEditorZip(string name, params string[] entries)
     {
         string path = Path.Combine(playerZips, name + ".zip");
@@ -1566,7 +1567,7 @@ Directory.CreateDirectory(Path.Combine(projectDir, "Scenes"));
         foreach (var entry in entries)
         {
             using var writer = new StreamWriter(zip.CreateEntry(entry).Open());
-            writer.Write(entry);
+            writer.Write(entry.EndsWith(Editor.PlayerFiles.SharedList) ? sharedList : entry);
         }
         return path;
     }
@@ -1578,6 +1579,64 @@ Directory.CreateDirectory(Path.Combine(projectDir, "Scenes"));
     const string macInside = "Empire/1.0/Empire Engine Editor.app/Contents/MacOS/";
     Editor.PlayerDownloads.Unpack(MakeEditorZip("mac", macInside + "empire.dll", macInside + "Player/Player.dll", "__MACOSX/" + macInside + "Player/._Player.dll"), macPlayer);
     Check(File.Exists(Path.Combine(macPlayer, "Player.dll")) && Directory.GetFiles(macPlayer).Length == 1, "and from inside the app in a Mac zip, without the Mac's extra files");
+
+    // A release keeps what the player shares with the editor once, in the editor's folder.
+    sharedList = "Engine.Core.dll\nvulkan/icd/driver.json\n../outside.dll\n/rooted.dll\n";
+    string fromZip = Path.Combine(playerZips, "shared");
+    Editor.PlayerDownloads.Unpack(MakeEditorZip("shared", macInside + "empire.dll", macInside + "Engine.Core.dll", macInside + "vulkan/icd/driver.json", macInside + "Roslyn.dll",
+        macInside + "Player/Player.dll", macInside + "Player/" + Editor.PlayerFiles.SharedList), fromZip);
+    Check(File.Exists(Path.Combine(fromZip, "Engine.Core.dll")) && File.Exists(Path.Combine(fromZip, "vulkan", "icd", "driver.json")) &&
+          !File.Exists(Path.Combine(fromZip, "Roslyn.dll")) && !File.Exists(Path.Combine(fromZip, "empire.dll")),
+          "a downloaded player gets the files it shares with the editor, and none of the editor's own");
+    Check(Editor.PlayerFiles.Shared(fromZip).Count == 2, "and a shared file can't be outside the player's folder");
+
+    string installed = Path.Combine(playerZips, "installed");
+    Directory.CreateDirectory(Path.Combine(installed, "Player"));
+    Directory.CreateDirectory(Path.Combine(installed, "vulkan", "icd"));
+    File.WriteAllText(Path.Combine(installed, "Engine.Core.dll"), "new");
+    File.WriteAllText(Path.Combine(installed, "vulkan", "icd", "driver.json"), "driver");
+    File.WriteAllText(Path.Combine(installed, "Roslyn.dll"), "editor only");
+    File.WriteAllText(Path.Combine(installed, "Player", Editor.PlayerFiles.SharedList), sharedList);
+    string game = Path.Combine(playerZips, "game");
+    Directory.CreateDirectory(game);
+    File.WriteAllText(Path.Combine(game, "Engine.Core.dll"), "from an older build");
+    Editor.PlayerFiles.CopyShared(Path.Combine(installed, "Player"), game);
+    Check(File.ReadAllText(Path.Combine(game, "Engine.Core.dll")) == "new" && File.Exists(Path.Combine(game, "vulkan", "icd", "driver.json")) && !File.Exists(Path.Combine(game, "Roslyn.dll")),
+          "a game gets the shared files from the editor's folder, over any older ones, and none of the editor's own");
+    File.Delete(Path.Combine(installed, "Engine.Core.dll"));
+    bool missingShared = false;
+    try { Editor.PlayerFiles.CopyShared(Path.Combine(installed, "Player"), game); }
+    catch (FileNotFoundException) { missingShared = true; }
+    Check(missingShared, "a shared file missing from the editor stops the build instead of making a game that can't start");
+
+    sharedList = "";
+
+    // What games leave out
+    Check(Editor.PlayerFiles.IsLeftOut("libimgui.dylib") && Editor.PlayerFiles.IsLeftOut("imgui.dll") && Editor.PlayerFiles.IsLeftOut("libclrgc.so") &&
+          Editor.PlayerFiles.IsLeftOut("mscordaccore_amd64_amd64_10.0.1.dll") && Editor.PlayerFiles.IsLeftOut("libshaderc_shared.1.dylib") &&
+          Editor.PlayerFiles.IsLeftOut("libshaderc_shared.so.1") && Editor.PlayerFiles.IsLeftOut("shaderc_shared.dll") && Editor.PlayerFiles.IsLeftOut("libSPIRV-Tools-shared.dylib"),
+          "the editor's own native libraries, and the ones games leave out, aren't copied into a game");
+    Check(!Editor.PlayerFiles.IsLeftOut("libcoreclr.dylib") && !Editor.PlayerFiles.IsLeftOut("libglfw.dylib") && !Editor.PlayerFiles.IsLeftOut("libvulkan.1.dylib"),
+          "and the ones a game loads are");
+    string thisDll = typeof(Editor.PlayerFiles).Assembly.Location;
+    Check(Editor.PlayerFiles.MissingLibraries(thisDll, playerZips).Contains("System.Runtime"), "a library a package needs that a game doesn't have is found");
+    Check(Editor.PlayerFiles.MissingLibraries(thisDll, Path.GetDirectoryName(typeof(object).Assembly.Location)!, Path.GetDirectoryName(thisDll)!).Count == 0, "and none is when the game has them all");
+
+    string rebuilt = Path.Combine(playerZips, "rebuilt");
+    Directory.CreateDirectory(Path.Combine(rebuilt, "vulkan", "icd.d"));
+    Directory.CreateDirectory(Path.Combine(rebuilt, "Mods"));
+    string[] runtimeFiles = ["System.Net.Http.dll", "libclrgc.dylib", "libglfw.so.3", "libglfw.so", "createdump", "Game.deps.json", "Game.runtimeconfig.json", "Game.pdb"];
+    foreach (var file in runtimeFiles.Append("notes.txt").Append("Game").Append(Path.Combine("Mods", "mine.dll")).Append(Path.Combine("vulkan", "icd.d", "driver.json")))
+        File.WriteAllText(Path.Combine(rebuilt, file), "");
+    Editor.PlayerFiles.ClearEarlierBuild(rebuilt);
+    Check(runtimeFiles.All(f => File.Exists(Path.Combine(rebuilt, f))) && Directory.Exists(Path.Combine(rebuilt, "vulkan")), "a folder that holds no built game is left alone");
+    Directory.CreateDirectory(Path.Combine(rebuilt, "GameData"));
+    File.WriteAllText(Path.Combine(rebuilt, "GameData", "game.json"), "{}");
+    Editor.PlayerFiles.ClearEarlierBuild(rebuilt);
+    Check(!runtimeFiles.Any(f => File.Exists(Path.Combine(rebuilt, f))) && !Directory.Exists(Path.Combine(rebuilt, "vulkan")), "building over an earlier game takes out its runtime files, so left-out libraries don't stay");
+    Check(File.Exists(Path.Combine(rebuilt, "notes.txt")) && File.Exists(Path.Combine(rebuilt, "Mods", "mine.dll")) && File.Exists(Path.Combine(rebuilt, "GameData", "game.json")),
+          "and keeps everything else in the folder");
+
     bool noPlayerThrows = false;
     try { Editor.PlayerDownloads.Unpack(MakeEditorZip("none", "Empire/1.0/empire.dll"), Path.Combine(playerZips, "none")); }
     catch (EmpireHub.InstallException) { noPlayerThrows = true; }

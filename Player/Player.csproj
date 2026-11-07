@@ -15,4 +15,5 @@
   <ItemGroup>
     <ProjectReference Include="..\Engine.Brutal\Engine.Brutal.csproj" />
   </ItemGroup>
+  <Import Project="LeftOutOfGames.targets" />
 </Project>

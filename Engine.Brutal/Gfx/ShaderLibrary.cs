@@ -1,41 +1,47 @@
-using System.Text;
-using Brutal.ShaderCApi;
+using System.Runtime.CompilerServices;
 using Brutal.VulkanApi;
 
 namespace Engine.Brutal.Gfx;
 
-// Compiles GLSL to SPIR-V with ShaderC and caches the resulting shader modules by name.
+public enum ShaderStage { Vertex, Fragment }
+
+// A shader as GLSL. Every one the engine uses is listed in ShaderPack.All, which is how it gets into a built game.
+public sealed record ShaderSource(string Name, string Glsl, ShaderStage Stage);
+
+// Makes shader modules and caches them by name. The editor compiles them from GLSL. A game has no compiler, which is a large library:
+// it reads them ready-made from the file Build Project wrote, given here as compiledShaders.
 public sealed class ShaderLibrary : IDisposable
 {
     private readonly Device _device;
-    private readonly Compiler _compiler;
-    private readonly CompileOptions _options;
+    private readonly Dictionary<string, byte[]>? _compiled;
     private readonly Dictionary<string, VkShaderModule> _modules = new();
+    private ShaderCompiler? _compiler;
 
-    public ShaderLibrary(Device device)
+    public ShaderLibrary(Device device, string? compiledShaders = null)
     {
         _device = device;
-        _compiler = ShaderC.CreateCompiler();
-        _options = ShaderC.CreateCompilerOptions();
+        if (compiledShaders is not null) _compiled = ShaderPack.Read(compiledShaders);
     }
 
-    public VkShaderModule Get(string name, string glsl, ShaderKind kind)
+    public VkShaderModule Get(ShaderSource source)
     {
-        if (_modules.TryGetValue(name, out var module))
+        if (_modules.TryGetValue(source.Name, out var module))
             return module;
 
-        byte[] spirv = CompileSpirv(glsl, kind);
+        byte[] spirv = _compiled is null ? Compile(source)
+            : _compiled.GetValueOrDefault(source.Name) ?? throw new InvalidOperationException($"This game has no compiled {source.Name} shader. Build it again.");
         module = VkUtil.CreateShaderModule(_device, spirv);
-        _modules[name] = module;
+        _modules[source.Name] = module;
         return module;
     }
 
-    private unsafe byte[] CompileSpirv(string glsl, ShaderKind kind)
+    // On its own because a game doesn't have what ShaderCompiler uses: it must only be loaded when this runs, not with Get.
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private byte[] Compile(ShaderSource source)
     {
-        // Compile throws if shaderc reports an error, so reaching the return means success.
-        using var result = _compiler.Compile(Encoding.UTF8.GetBytes(glsl), kind, "shader"u8, "main"u8, _options);
-        int length = (int)result.GetLength().Value;
-        return new ReadOnlySpan<byte>(result.GetBytes(), length).ToArray();
+        if (!ShaderPack.All.Contains(source))
+            throw new InvalidOperationException($"The {source.Name} shader isn't in ShaderPack.All, so built games wouldn't have it.");
+        return (_compiler ??= new ShaderCompiler()).Compile(source);
     }
 
     public void Dispose()

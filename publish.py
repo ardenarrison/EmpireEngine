@@ -14,7 +14,10 @@ downloads the editor package from the GitHub release. The result is two folders 
     Empire/osx-arm64-editor/         the editor package      ->  EmpireEngine-<version>-osx-arm64.zip
         Empire/<version>/            what the hub unpacks into <hub>/Empire/<version>/
             empire                   the editor            (on macOS: Empire Engine Editor.app, with the editor and
-            Player/                  the game player        the player inside it, in Contents/MacOS)
+            Player/                  the game player's own  the player inside it, in Contents/MacOS)
+                                     files; what it shares
+                                     with the editor is kept
+                                     once, beside the editor
 
 To try the hub with an editor without a release, copy the Empire/ folder from the editor package next to EmpireHub (on macOS the
 hub keeps editors in ~/Library/Application Support/EmpireHub/Empire, so copy it there instead).
@@ -23,6 +26,7 @@ Needs the .NET SDK. Games are built self-contained, so people who run them need 
 and Linux, whatever the editor's build says it couldn't bundle.
 """
 import argparse
+import filecmp
 import platform
 import plistlib
 import re
@@ -34,6 +38,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 EXE = ".exe"   # added to program names for Windows platforms
+SHARED_LIST = "shared-with-editor.txt"   # PlayerFiles.SharedList in Editor/BuildTargets.cs
 
 
 def current_platform():
@@ -65,6 +70,33 @@ def run(command):
 def publish(project, destination, rid, *extra):
     run(["dotnet", "publish", ROOT / project, "-c", "Release", "-r", rid, "--self-contained", "true",
          "-o", destination, *extra])
+
+
+def check_left_out(player):
+    """Stops if the engine or a library it's built on uses something Player/LeftOutOfGames.targets leaves out of games."""
+    if subprocess.run(["dotnet", "run", ROOT / "Tools" / "CheckPlayerLibraries.cs", "--", player], cwd=ROOT).returncode != 0:
+        sys.exit("The player is missing libraries that the engine uses.")
+
+
+def share_player_files(editor_files, mac):
+    """Takes out of Player/ every file the editor has an exact copy of, so a release carries them once, and lists them there.
+
+    Building a game puts them back from the editor's folder (or from the zip, for another platform). Returns the list. Paths are
+    as they end up in the package: make_app_bundle renames icd.d to icd in a Mac app. This has to run before the app is signed.
+    """
+    player = editor_files / "Player"
+    shared = []
+    for file in sorted(player.rglob("*")):
+        relative = file.relative_to(player)
+        twin = editor_files / relative
+        if file.is_file() and twin.is_file() and filecmp.cmp(file, twin, shallow=False):
+            file.unlink()
+            shared.append(relative.as_posix().replace("/icd.d/", "/icd/") if mac else relative.as_posix())
+    for folder in sorted((path for path in player.rglob("*") if path.is_dir()), reverse=True):
+        if not any(folder.iterdir()):
+            folder.rmdir()
+    (player / SHARED_LIST).write_bytes(("\n".join(shared) + "\n").encode("utf-8"))
+    return shared
 
 
 APP_NAME = "Empire Engine Hub"
@@ -153,6 +185,8 @@ def package(rid, out_root, version, make_zip):
         shutil.rmtree(editor_files)
     publish("Editor/Editor.csproj", editor_files, rid)
     publish("Player/Player.csproj", editor_files / "Player", rid, "-p:GameName=Player")
+    check_left_out(editor_files / "Player")
+    shared = share_player_files(editor_files, mac)
     if mac:
         editor_dir.mkdir(parents=True)
         editor_app, editor_problems = make_app_bundle(editor_files, editor_dir, version, EDITOR_APP_NAME, "empire",
@@ -164,6 +198,7 @@ def package(rid, out_root, version, make_zip):
     expected = [hub_exe, editor_dir / ("empire" + exe), editor_dir / "Player" / ("Player" + exe)]
     if hub_must_not_have.exists():
         sys.exit(f"The hub package must not contain an editor, but {hub_must_not_have} exists.")
+    expected += [editor_dir / path for path in shared]
     missing = [path for path in expected if not path.exists()]
     if missing:
         sys.exit("The package is incomplete, these are missing:\n  " + "\n  ".join(str(path) for path in missing))
@@ -180,9 +215,10 @@ def package(rid, out_root, version, make_zip):
         # Mac builds carry their own Vulkan loader and MoltenVK (from ThirdParty/Vulkan). Without them the editor
         # and games only run on Macs that have Vulkan installed.
         vulkan_problems = []
-        for folder in (editor_dir, editor_dir / "Player") if (editor_dir / "libVulkanEx.dylib").exists() else ():
-            if not (folder / "libvulkan.1.dylib").exists() or not any((folder / "vulkan" / name / "MoltenVK_icd.json").exists() for name in ("icd.d", "icd")):
-                vulkan_problems.append(f"{folder.relative_to(editor_root)} has no bundled Vulkan (libvulkan.1.dylib, vulkan/icd.d or vulkan/icd).")
+        for name, has in (("The editor", lambda path: (editor_dir / path).exists()),
+                          ("The player", lambda path: path in shared or (editor_dir / "Player" / path).exists())) if (editor_dir / "libVulkanEx.dylib").exists() else ():
+            if not has("libvulkan.1.dylib") or not any(has(f"vulkan/{folder}/MoltenVK_icd.json") for folder in ("icd.d", "icd")):
+                vulkan_problems.append(f"{name} has no bundled Vulkan (libvulkan.1.dylib, vulkan/icd.d or vulkan/icd).")
         if vulkan_problems:
             problems += vulkan_problems
             problems.append("They come from ThirdParty/Vulkan in the repo: restore that folder, or set the EmpireVulkanLoader "

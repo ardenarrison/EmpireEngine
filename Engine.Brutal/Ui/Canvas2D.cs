@@ -1,6 +1,5 @@
 using Brutal;
 using Brutal.Numerics;
-using Brutal.ShaderCApi;
 using Brutal.VulkanApi;
 using Brutal.VulkanApi.Abstractions;
 using Engine.Brutal.Gfx;
@@ -148,6 +147,9 @@ public sealed unsafe class Canvas2D : IDisposable
     }
 
     // pixelScale is the display's framebuffer pixels per canvas pixel (2 on Retina); Render adjusts to it later.
+    internal static readonly ShaderSource VertexShader = new("canvas2d.vert", VertexGlsl, ShaderStage.Vertex);
+    internal static readonly ShaderSource FragmentShader = new("canvas2d.frag", FragmentGlsl, ShaderStage.Fragment);
+
     public Canvas2D(VulkanContext ctx, ShaderLibrary shaders, string fontPath, float fontSize = 20f, float pixelScale = 1f)
         : this(ctx, shaders, File.ReadAllBytes(fontPath), fontSize, pixelScale)
     {
@@ -599,8 +601,8 @@ public sealed unsafe class Canvas2D : IDisposable
 
     private VkPipeline CreatePipeline(ShaderLibrary shaders)
     {
-        var vert = shaders.Get("canvas2d.vert", VertexGlsl, ShaderKind.VertexShader);
-        var frag = shaders.Get("canvas2d.frag", FragmentGlsl, ShaderKind.FragmentShader);
+        var vert = shaders.Get(VertexShader);
+        var frag = shaders.Get(FragmentShader);
         byte[] mainName = "main\0"u8.ToArray();
 
         fixed (byte* entry = mainName)

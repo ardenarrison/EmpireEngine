@@ -154,6 +154,7 @@ public class MyEffect : Behaviour, IVulkanRender
     // Once when play stops or the game closes, after the GPU is idle. Destroy what you created.
     public void ReleaseVulkan() { }
 }</code></pre>
+<p>A built game has no shader compiler, so load your shaders as ready-made SPIR-V (from a file, say) rather than compiling GLSL in a script.</p>
 <div class="table-wrap"><table>
   <thead><tr><th><code>Gpu</code> member</th><th>Meaning</th></tr></thead>
   <tbody>

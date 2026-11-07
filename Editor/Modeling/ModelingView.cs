@@ -79,6 +79,8 @@ public sealed class ModelingView(string contentRoot, AssetCache assets)
     private float4 _area;
     private float2 _mouse;
     private bool[] _facing = [];
+    private float2[] _screen = [];             // where each point is in the view this frame, and whether it's drawn: kept to save making them each frame
+    private bool[] _visible = [];
     private Scene? _scene;
 
     public SceneObject? Target { get; private set; }
@@ -1229,8 +1231,13 @@ public sealed class ModelingView(string contentRoot, AssetCache assets)
 
     private void DrawOverlay(Canvas2D canvas, ModelEdit edit, Matrix4x4 world, Matrix4x4 viewProj, float4 area)
     {
-        var screen = new float2[edit.PointCount];
-        var visible = new bool[edit.PointCount];
+        if (_screen.Length != edit.PointCount)
+        {
+            _screen = new float2[edit.PointCount];
+            _visible = new bool[edit.PointCount];
+        }
+        var screen = _screen;
+        var visible = _visible;
         for (int i = 0; i < screen.Length; i++)
             visible[i] = Shown(edit, i) && Project(Vector3.Transform(edit.Point(i), world), viewProj, area, out screen[i]);
 

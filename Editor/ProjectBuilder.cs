@@ -17,6 +17,7 @@ public sealed record BuildResult(bool Success, string Message, string? OutputFol
 //                     the built Player/ folder that a released editor carries next to it (for another platform, PlayerDownloads)
 //   GameData/Core/...   a copy of the project's content; Models/... keeps its folder structure
 //   GameData/game.json  which scene the game starts with
+//   GameData/shaders.bin  the engine's shaders, compiled, since a game has no shader compiler
 public static class ProjectBuilder
 {
     public static readonly string LogPath = Path.Combine(Path.GetTempPath(), "empire-build.log");
@@ -107,6 +108,8 @@ public static class ProjectBuilder
             status("Building...");
         }
 
+        PlayerFiles.ClearEarlierBuild(outDir);
+
         // Build files for the Player go in a temp folder outside the projects, so they never mix with the Editor's obj/bin.
         string artifacts = Path.Combine(Path.GetTempPath(), "empire-player-build");
 
@@ -187,9 +190,21 @@ public static class ProjectBuilder
         if (!ScriptBuilder.Compile(Path.Combine(content, "Scripts"), scriptsDll,
                 Directory.GetFiles(outDir, "*.dll").Where(f => !IsNativeLibrary(f)).Concat(shippedPackages), out string scriptErrors))
         {
+            // Scripts run in the editor with all of .NET, so this can be the first a script hears of what games leave out.
+            if (new[] { "CS0012", "CS0234", "CS0246", "CS1069" }.Any(scriptErrors.Contains))
+                scriptErrors += "\n\nGames leave out some rarely used .NET libraries, so a script can run in the editor and not compile here. " +
+                                "See \"What a game leaves out\" in the Building page of the docs.";
             File.WriteAllText(LogPath, scriptErrors);
             return new BuildResult(false, "The scripts did not compile. Copy the errors and fix them.", null, scriptErrors);
         }
+
+        // Packages are compiled against all of .NET, so one that needs what games leave out would only fail when the game runs.
+        foreach (var compiled in shippedPackages)
+            if (PlayerFiles.MissingLibraries(compiled, outDir, gameData) is { Count: > 0 } missing)
+                return Fail($"{Path.GetFileNameWithoutExtension(compiled)} uses {string.Join(", ", missing)}, which games leave out, so it can't run in a game.");
+
+        status("Compiling shaders...");
+        ShaderPack.Write(Path.Combine(gameData, ShaderPack.FileName));
 
         // 5. Record which scene starts the game.
         string startScene = Path.GetRelativePath(content, scene).Replace('\\', '/');
@@ -218,7 +233,8 @@ public static class ProjectBuilder
         return null;
     }
 
-    // The built player a released editor carries: Player/ next to empire.dll, holding the Player program and Player.dll.
+    // The built player a released editor carries: Player/ next to empire.dll, holding the Player program and Player.dll, and
+    // sharing the rest of its files with the editor (PlayerFiles).
     private static string? FindPrebuiltPlayer()
     {
         string folder = Path.Combine(AppContext.BaseDirectory, "Player");
@@ -233,7 +249,7 @@ public static class ProjectBuilder
         foreach (var file in Directory.GetFiles(from))
         {
             string fileName = Path.GetFileName(file);
-            if (fileName.StartsWith('.')) continue;
+            if (fileName.StartsWith('.') || fileName == PlayerFiles.SharedList) continue;
             bool isProgram = fileName is "Player" or "Player.exe";
             string target = Path.Combine(to, isProgram ? gameName + Path.GetExtension(fileName) : fileName);
             File.Copy(file, target, overwrite: true);
@@ -246,6 +262,7 @@ public static class ProjectBuilder
             if (!dirName.StartsWith('.'))
                 CopyDirectory(dir, Path.Combine(to, dirName));
         }
+        PlayerFiles.CopyShared(from, to);
     }
 
     private static (int ExitCode, string Output) Run(string fileName, string arguments, string workingDirectory)
@@ -299,7 +316,7 @@ public static class ProjectBuilder
         {
             string name = Path.GetFileName(file);
             string target = Path.Combine(toFolder, name);
-            if (File.Exists(target) || !IsNativeLibrary(file)) continue;
+            if (File.Exists(target) || PlayerFiles.IsLeftOut(name) || !IsNativeLibrary(file)) continue;
             File.Copy(file, target);
             copied.Add(name);
         }

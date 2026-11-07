@@ -183,9 +183,22 @@ public sealed partial class ModelEdit
         return sum;
     }
 
-    public Vector3 FaceCenter(Poly poly) => Center(poly.Corners.Select(c => c.Point));
+    // These two run for every face in every frame, so they stay plain loops.
+    public Vector3 FaceCenter(Poly poly)
+    {
+        var sum = Vector3.Zero;
+        var corners = poly.Corners;
+        foreach (ref readonly var corner in corners.AsSpan())
+            sum += _points[corner.Point];
+        return corners.Length == 0 ? Vector3.Zero : sum / corners.Length;
+    }
 
-    public bool IsSelected(Poly poly) => poly.Corners.All(c => Selection.Contains(c.Point));
+    public bool IsSelected(Poly poly)
+    {
+        foreach (ref readonly var corner in poly.Corners.AsSpan())
+            if (!Selection.Contains(corner.Point)) return false;
+        return true;
+    }
 
     public IReadOnlyList<int> PolysOf(int point) => _polysOf[point];
 
