@@ -1,4 +1,5 @@
 using System.Reflection;
+using Engine.Brutal.Gfx;
 
 namespace Engine.Brutal.Rendering;
 
@@ -11,6 +12,21 @@ namespace Engine.Brutal.Rendering;
 // as it is in Smaa/SMAA.glsl (only the authors' contact emails are removed from its header), and the shaders below only supply what it asks the host program for.
 internal static class PostProcessShaders
 {
+    // The two shaders of a pass.
+    internal sealed record Pass(ShaderSource Vertex, ShaderSource Fragment)
+    {
+        public Pass(string name, string vertex, string fragment)
+            : this(new ShaderSource(name + ".vert", vertex, ShaderStage.Vertex), new ShaderSource(name + ".frag", fragment, ShaderStage.Fragment)) { }
+    }
+
+    public static Pass Fxaa => new("fxaa", FullscreenVertex, FxaaFragment);
+    public static Pass SmaaEdges => new("smaa.edges", SmaaEdgeVertex, SmaaEdgeFragment);
+    public static Pass SmaaWeights => new("smaa.weights", SmaaWeightsVertex, SmaaWeightsFragment);
+    public static Pass SmaaBlend => new("smaa.blend", SmaaBlendVertex, SmaaBlendFragment);
+    public static Pass Effects => new("effects", FullscreenVertex, EffectsFragment);
+
+    public static IEnumerable<ShaderSource> All => new[] { Fxaa, SmaaEdges, SmaaWeights, SmaaBlend, Effects }.SelectMany(p => new[] { p.Vertex, p.Fragment });
+
     // Passed to every pass as push constants: the size of the target in pixels as (1 / width, 1 / height, width, height); the
     // scene's rectangle as fractions of the target (x, y, width, height); and the effect settings (exposure as a multiplier,
     // contrast, vignette, sharpen).

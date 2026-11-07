@@ -1,7 +1,6 @@
 using System.Numerics;
 using System.Runtime.InteropServices;
 using Brutal;
-using Brutal.ShaderCApi;
 using Brutal.VulkanApi;
 using Brutal.VulkanApi.Abstractions;
 using Engine.Brutal.Gfx;
@@ -69,6 +68,9 @@ internal sealed class ParticleRenderer : IDisposable
     private readonly VulkanContext _ctx;
     private readonly Device _device;
     private readonly VkPipelineLayout _layout;
+    internal static readonly ShaderSource VertexShader = new("particle.vert", VertexGlsl, ShaderStage.Vertex);
+    internal static readonly ShaderSource FragmentShader = new("particle.frag", FragmentGlsl, ShaderStage.Fragment);
+
     private readonly VkShaderModule _vert;
     private readonly VkShaderModule _frag;
     private readonly Dictionary<(int Samples, bool Additive), VkPipeline> _pipelines = new();   // per MSAA sample count
@@ -90,8 +92,8 @@ internal sealed class ParticleRenderer : IDisposable
             Size = (ByteSize32)(PushFloats * sizeof(float)),
         };
         _layout = _device.CreatePipelineLayout(Array.Empty<VkDescriptorSetLayout>(), new[] { range }, null);
-        _vert = shaders.Get("particle.vert", VertexGlsl, ShaderKind.VertexShader);
-        _frag = shaders.Get("particle.frag", FragmentGlsl, ShaderKind.FragmentShader);
+        _vert = shaders.Get(VertexShader);
+        _frag = shaders.Get(FragmentShader);
         PipelineFor(1, additive: false);
         PipelineFor(1, additive: true);
     }

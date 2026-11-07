@@ -1,6 +1,5 @@
 using Brutal;
 using Brutal.Numerics;
-using Brutal.ShaderCApi;
 using Brutal.VulkanApi;
 using Brutal.VulkanApi.Abstractions;
 using Engine.Brutal.Gfx;
@@ -89,13 +88,13 @@ internal sealed unsafe class PostProcessPass : IDisposable
         {
             // SMAA: where the edges are, then how much of each neighbor to blend across them, then the blend itself.
             var clear = new float4(0f, 0f, 0f, 0f);
-            DrawIntermediate(cmd, _edges!.Value, clear, rect, Pipeline(ref _smaaEdges, "smaa.edges", PostProcessShaders.SmaaEdgeVertex, PostProcessShaders.SmaaEdgeFragment, FormatRg8), _edgesSet);
-            DrawIntermediate(cmd, _weights!.Value, clear, rect, Pipeline(ref _smaaWeights, "smaa.weights", PostProcessShaders.SmaaWeightsVertex, PostProcessShaders.SmaaWeightsFragment, FormatRgba8), _weightsSet);
-            Output(cmd, fx, rect, Pipeline(ref _smaaBlend, "smaa.blend", PostProcessShaders.SmaaBlendVertex, PostProcessShaders.SmaaBlendFragment, (int)_ctx.ColorFormat), _blendSet);
+            DrawIntermediate(cmd, _edges!.Value, clear, rect, Pipeline(ref _smaaEdges, PostProcessShaders.SmaaEdges, FormatRg8), _edgesSet);
+            DrawIntermediate(cmd, _weights!.Value, clear, rect, Pipeline(ref _smaaWeights, PostProcessShaders.SmaaWeights, FormatRgba8), _weightsSet);
+            Output(cmd, fx, rect, Pipeline(ref _smaaBlend, PostProcessShaders.SmaaBlend, (int)_ctx.ColorFormat), _blendSet);
         }
 
         if (fx)
-            Draw(cmd, swapchain, Backdrop, rect, Pipeline(ref _effects, "effects", PostProcessShaders.FullscreenVertex, PostProcessShaders.EffectsFragment, (int)_ctx.ColorFormat),
+            Draw(cmd, swapchain, Backdrop, rect, Pipeline(ref _effects, PostProcessShaders.Effects, (int)_ctx.ColorFormat),
                 mode == PostAntiAliasing.None ? _effectsFromScene : _effectsFromGraded);
     }
 
@@ -388,16 +387,16 @@ internal sealed unsafe class PostProcessPass : IDisposable
     // ---- pipelines -------------------------------------------------------------------------------------------------------
 
     private VkPipeline PipelineFxaa() =>
-        _fxaa ??= CreatePipeline("fxaa", PostProcessShaders.FullscreenVertex, PostProcessShaders.FxaaFragment, (int)_ctx.ColorFormat);
+        _fxaa ??= CreatePipeline(PostProcessShaders.Fxaa, (int)_ctx.ColorFormat);
 
-    private VkPipeline Pipeline(ref VkPipeline? cache, string name, string vertex, string fragment, int format) =>
-        cache ??= CreatePipeline(name, vertex, fragment, format);
+    private VkPipeline Pipeline(ref VkPipeline? cache, PostProcessShaders.Pass pass, int format) =>
+        cache ??= CreatePipeline(pass, format);
 
     // A pipeline for a full-screen triangle into one color target: no vertex data, no depth, no blending.
-    private VkPipeline CreatePipeline(string name, string vertexGlsl, string fragmentGlsl, int colorFormat)
+    private VkPipeline CreatePipeline(PostProcessShaders.Pass pass, int colorFormat)
     {
-        var vert = _shaders.Get(name + ".vert", vertexGlsl, ShaderKind.VertexShader);
-        var frag = _shaders.Get(name + ".frag", fragmentGlsl, ShaderKind.FragmentShader);
+        var vert = _shaders.Get(pass.Vertex);
+        var frag = _shaders.Get(pass.Fragment);
         byte[] mainName = "main\0"u8.ToArray();
         var colorFormats = new[] { (VkFormat)colorFormat };
         var viewport = new VkViewport { Width = _ctx.Width, Height = _ctx.Height, MinDepth = 0, MaxDepth = 1 };

@@ -20,8 +20,14 @@ public sealed class BrutalPlayer
     public const float UiFontSize = 18f;
 
     private readonly AssetCache _assets;
+    private readonly string? _compiledShaders;
 
-    public BrutalPlayer(AssetCache assets) => _assets = assets;
+    // compiledShaders is a game's shaders file, which a game needs because it has no shader compiler.
+    public BrutalPlayer(AssetCache assets, string? compiledShaders = null)
+    {
+        _assets = assets;
+        _compiledShaders = compiledShaders;
+    }
 
     public void Run(Scene scene, string title = "Empire Engine")
     {
@@ -56,7 +62,7 @@ public sealed class BrutalPlayer
     {
         // Declaration order matters: renderer, then shaders, then context (disposed in reverse).
         using var ctx = new VulkanContext(window, 1280, 720);
-        using var shaders = new ShaderLibrary(ctx.Device);
+        using var shaders = new ShaderLibrary(ctx.Device, _compiledShaders);
         using var renderer = new BrutalRenderer(ctx, shaders);
         using var uiCanvas = new Canvas2D(ctx, shaders, Canvas2D.DefaultFont(), UiFontSize, window.ContentScale.X);
 

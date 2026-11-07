@@ -1,0 +1,126 @@
+<Project>
+  <!--
+    What a game leaves out of the .NET runtime it carries, to keep it small. Only games: the editor keeps everything.
+
+    Nothing a game runs uses these libraries, on any platform. BRUTAL's number types do carry XML attributes, which only fail if something
+    reads them, such as writing one as JSON. If a new feature needs a library, delete its line
+    here. publish.py stops with a message if the engine starts using one (Tools/CheckPlayerLibraries.cs), and the editor won't build a game with a package that does.
+    A script that uses one runs in the editor but doesn't compile in Build Project, since scripts are compiled against the game's
+    libraries. Before adding a library, check nothing needs it: a publish with PublishTrimmed=true and TrimMode=partial keeps only
+    what is used, and needs -p:JsonSerializerIsReflectionEnabledByDefault=true to run.
+  -->
+  <ItemGroup>
+    <LeftOutOfGames Include="Microsoft.CSharp.dll" />
+    <LeftOutOfGames Include="Microsoft.VisualBasic.Core.dll" />
+    <LeftOutOfGames Include="Microsoft.VisualBasic.dll" />
+    <LeftOutOfGames Include="System.ComponentModel.Annotations.dll" />
+    <LeftOutOfGames Include="System.ComponentModel.DataAnnotations.dll" />
+    <LeftOutOfGames Include="System.ComponentModel.TypeConverter.dll" />
+    <LeftOutOfGames Include="System.Data.Common.dll" />
+    <LeftOutOfGames Include="System.Data.DataSetExtensions.dll" />
+    <LeftOutOfGames Include="System.Data.dll" />
+    <LeftOutOfGames Include="System.Formats.Asn1.dll" />
+    <LeftOutOfGames Include="System.Formats.Tar.dll" />
+    <LeftOutOfGames Include="System.IO.Pipes.AccessControl.dll" />
+    <LeftOutOfGames Include="System.IO.Pipes.dll" />
+    <LeftOutOfGames Include="System.Linq.AsyncEnumerable.dll" />
+    <LeftOutOfGames Include="System.Linq.Expressions.dll" />
+    <LeftOutOfGames Include="System.Linq.Parallel.dll" />
+    <LeftOutOfGames Include="System.Linq.Queryable.dll" />
+    <LeftOutOfGames Include="System.Net.Http.Json.dll" />
+    <LeftOutOfGames Include="System.Net.Http.dll" />
+    <LeftOutOfGames Include="System.Net.HttpListener.dll" />
+    <LeftOutOfGames Include="System.Net.Mail.dll" />
+    <LeftOutOfGames Include="System.Net.NameResolution.dll" />
+    <LeftOutOfGames Include="System.Net.NetworkInformation.dll" />
+    <LeftOutOfGames Include="System.Net.Ping.dll" />
+    <LeftOutOfGames Include="System.Net.Primitives.dll" />
+    <LeftOutOfGames Include="System.Net.Quic.dll" />
+    <LeftOutOfGames Include="System.Net.Requests.dll" />
+    <LeftOutOfGames Include="System.Net.Security.dll" />
+    <LeftOutOfGames Include="System.Net.ServerSentEvents.dll" />
+    <LeftOutOfGames Include="System.Net.ServicePoint.dll" />
+    <LeftOutOfGames Include="System.Net.Sockets.dll" />
+    <LeftOutOfGames Include="System.Net.WebClient.dll" />
+    <LeftOutOfGames Include="System.Net.WebHeaderCollection.dll" />
+    <LeftOutOfGames Include="System.Net.WebProxy.dll" />
+    <LeftOutOfGames Include="System.Net.WebSockets.Client.dll" />
+    <LeftOutOfGames Include="System.Net.WebSockets.dll" />
+    <LeftOutOfGames Include="System.Net.dll" />
+    <LeftOutOfGames Include="System.Private.DataContractSerialization.dll" />
+    <LeftOutOfGames Include="System.Private.Xml.dll" />
+    <LeftOutOfGames Include="System.Private.Xml.Linq.dll" />
+    <LeftOutOfGames Include="System.Reflection.DispatchProxy.dll" />
+    <LeftOutOfGames Include="System.Runtime.Serialization.Formatters.dll" />
+    <LeftOutOfGames Include="System.Runtime.Serialization.Json.dll" />
+    <LeftOutOfGames Include="System.Runtime.Serialization.Primitives.dll" />
+    <LeftOutOfGames Include="System.Runtime.Serialization.Xml.dll" />
+    <LeftOutOfGames Include="System.Runtime.Serialization.dll" />
+    <LeftOutOfGames Include="System.Security.Cryptography.Algorithms.dll" />
+    <LeftOutOfGames Include="System.Security.Cryptography.Cng.dll" />
+    <LeftOutOfGames Include="System.Security.Cryptography.Csp.dll" />
+    <LeftOutOfGames Include="System.Security.Cryptography.Encoding.dll" />
+    <LeftOutOfGames Include="System.Security.Cryptography.OpenSsl.dll" />
+    <LeftOutOfGames Include="System.Security.Cryptography.Primitives.dll" />
+    <LeftOutOfGames Include="System.Security.Cryptography.X509Certificates.dll" />
+    <LeftOutOfGames Include="System.ServiceModel.Web.dll" />
+    <LeftOutOfGames Include="System.Text.Encoding.CodePages.dll" />
+    <LeftOutOfGames Include="System.Threading.Tasks.Dataflow.dll" />
+    <LeftOutOfGames Include="System.Transactions.Local.dll" />
+    <LeftOutOfGames Include="System.Transactions.dll" />
+    <LeftOutOfGames Include="System.Web.HttpUtility.dll" />
+    <LeftOutOfGames Include="System.Web.dll" />
+    <LeftOutOfGames Include="System.Xml.ReaderWriter.dll" />
+    <LeftOutOfGames Include="System.Xml.Linq.dll" />
+    <LeftOutOfGames Include="System.Xml.Serialization.dll" />
+    <LeftOutOfGames Include="System.Xml.XDocument.dll" />
+    <LeftOutOfGames Include="System.Xml.XPath.XDocument.dll" />
+    <LeftOutOfGames Include="System.Xml.XPath.dll" />
+    <LeftOutOfGames Include="System.Xml.XmlDocument.dll" />
+    <LeftOutOfGames Include="System.Xml.XmlSerializer.dll" />
+    <LeftOutOfGames Include="System.Xml.dll" />
+
+    <!-- For debuggers and crash dumps, and garbage collectors a game never turns on. -->
+    <LeftOutOfGames Include="createdump;createdump.exe" />
+    <LeftOutOfGames Include="libmscordaccore.dylib;libmscordaccore.so;mscordaccore.dll" />
+    <LeftOutOfGames Include="libmscordbi.dylib;libmscordbi.so;mscordbi.dll" />
+    <LeftOutOfGames Include="libclrgc.dylib;libclrgc.so;clrgc.dll" />
+    <LeftOutOfGames Include="libclrgcexp.dylib;libclrgcexp.so;clrgcexp.dll" />
+
+    <!-- The shader compiler: Build Project compiles a game's shaders (ShaderPack), so a game only reads them. -->
+    <LeftOutOfGames Include="Brutal.ShaderC.dll" />
+    <LeftOutOfGames Include="libshaderc_shared.dylib;libshaderc_shared.1.dylib;libshaderc_shared.so;libshaderc_shared.so.1;shaderc_shared.dll" />
+    <LeftOutOfGames Include="libSPIRV-Tools-shared.dylib;libSPIRV-Tools-shared.so;SPIRV-Tools-shared.dll" />
+
+    <!-- Exact copies, under other names, of libglfw.dylib, the one that is loaded. -->
+    <LeftOutOfGames Include="libglfw.3.dylib;libglfw.3.5.dylib" />
+  </ItemGroup>
+
+  <!-- deps.json is made from the runtime pack's list and the files from the list of what's published, so they go from both. -->
+  <Target Name="LeaveRuntimeFilesOutOfDeps" AfterTargets="ResolveRuntimePackAssets">
+    <ItemGroup>
+      <_LeftOutRuntimeFile Include="@(LeftOutOfGames)" DestinationSubPath="%(Identity)" />
+      <RuntimePackAsset Remove="@(_LeftOutRuntimeFile)" MatchOnMetadata="DestinationSubPath" />
+      <_VersionedRuntimeFile Include="@(RuntimePackAsset)" Condition="$([System.String]::Copy('%(Filename)').StartsWith('mscordaccore_'))" />
+      <RuntimePackAsset Remove="@(_VersionedRuntimeFile)" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="LeaveRuntimeFilesOutOfGames" AfterTargets="ComputeResolvedFilesToPublishList">
+    <ItemGroup>
+      <_LeftOutPublishedFile Include="@(LeftOutOfGames)" RelativePath="%(Identity)" />
+      <ResolvedFileToPublish Remove="@(_LeftOutPublishedFile)" MatchOnMetadata="RelativePath" />
+      <_VersionedPublishedFile Include="@(ResolvedFileToPublish)" Condition="$([System.String]::Copy('%(Filename)').StartsWith('mscordaccore_'))" />
+      <ResolvedFileToPublish Remove="@(_VersionedPublishedFile)" />
+    </ItemGroup>
+  </Target>
+
+  <!-- BRUTAL's packages list their files separately, and deps.json keeps them unless they go here. -->
+  <Target Name="LeavePackageFilesOutOfGames" AfterTargets="ResolvePackageAssets">
+    <ItemGroup>
+      <_LeftOutPackageFile Include="@(LeftOutOfGames)" DestinationSubPath="%(Identity)" />
+      <NativeCopyLocalItems Remove="@(_LeftOutPackageFile)" MatchOnMetadata="DestinationSubPath" />
+      <RuntimeCopyLocalItems Remove="@(_LeftOutPackageFile)" MatchOnMetadata="DestinationSubPath" />
+    </ItemGroup>
+  </Target>
+</Project>

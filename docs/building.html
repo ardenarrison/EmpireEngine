@@ -40,16 +40,20 @@ GameData/
 <h3>What you need to build</h3>
 <p>Build Project takes the player from one of two places, and uses the first it finds:</p>
 <ul>
-  <li><strong>A released editor</strong> (installed from the Hub) carries the player already built, in the <code>Player/</code> folder next to <code>empire.dll</code> (on a Mac, inside the editor app). Building copies it, names the program after your game, and adds your project's content and compiled scripts. <strong>Nothing needs to be installed</strong>, not even the .NET SDK.</li>
+  <li><strong>A released editor</strong> (installed from the Hub) carries the player already built: its own files are in the <code>Player/</code> folder next to <code>empire.dll</code> (on a Mac, inside the editor app), and the files it shares with the editor are kept once, beside the editor. Building copies them, names the program after your game, and adds your project's content and compiled scripts. <strong>Nothing needs to be installed</strong>, not even the .NET SDK.</li>
   <li><strong>An editor run from a checkout of this repository</strong> (with <code>dotnet run --project Editor</code>, or the Hub built from source) has <code>Player/Player.csproj</code> in a folder above it. Building then runs <code>dotnet restore</code> and <code>dotnet publish</code> on it, which needs the <strong>.NET 10 SDK</strong>.</li>
 </ul>
+<h3>What a game leaves out</h3>
+<p>To keep games small, a game doesn't carry all of .NET. It leaves out libraries nothing in the engine uses, such as networking (<code>System.Net.*</code>, including <code>HttpClient</code>), <code>System.Data</code>, XML (<code>System.Xml</code>), <code>dynamic</code> and expression trees, along with .NET's debugger files. It also has no shader compiler: Build Project compiles the engine's shaders into <code>GameData/shaders.bin</code>. The list is <code>Player/LeftOutOfGames.targets</code>.</p>
+<p>The editor keeps everything, so a script that uses one of these runs when you press Play, but Build Project stops with a compile error. A package that uses one stops the build too. One case only shows up when the game runs: BRUTAL's own number types (<code>Brutal.Numerics</code>, such as <code>float3</code>) can't be written as JSON in a game, for example with <code>SaveGame</code>. Use <code>System.Numerics</code> types like <code>Vector3</code> for anything you save. If you run the editor from source you can delete the library's line from the list, and the game will carry it.</p>
+
 <p>If neither is found, the build stops with <em>Could not find Player/Player.csproj in a folder above the Editor, or a built Player folder next to it</em>.</p>
 
 <h3 id="building-for-another-platform">Building for another platform</h3>
 <p>You can build for Windows, Mac or Linux from any of them. A game for another platform goes in a folder of its own, <code>&lt;name&gt;-&lt;Platform&gt;</code> such as <code>MyGame-Windows</code>, so builds for different platforms never mix.</p>
 <ul>
   <li><strong>What it runs on</strong>: games built for another platform are for 64-bit Intel or AMD processors on Windows and Linux, and Apple Silicon on the Mac. A build for your own platform uses your own processor type.</li>
-  <li><strong>A released editor</strong> needs the player for that platform, so the first build for it downloads the matching editor zip (around 100 MB) from the same version's GitHub release. The player is kept in <code>&lt;application data&gt;/EmpireEditor/Players/</code>, so later builds need no internet connection.</li>
+  <li><strong>A released editor</strong> needs the player for that platform, so the first build for it downloads the matching editor zip (around 50 MB) from the same version's GitHub release. The player is kept in <code>&lt;application data&gt;/EmpireEditor/Players/</code>, so later builds need no internet connection.</li>
   <li><strong>An editor run from a checkout of this repository</strong> runs <code>dotnet publish</code> for that platform instead, which downloads what it needs the first time. It can only build a Mac game on a Mac, because the game has to be signed there.</li>
   <li><strong>Built on Windows for Mac or Linux</strong>: Windows can't mark the file as a program, so run <code>chmod +x "&lt;name&gt;"</code> in the game's folder on that computer first. The editor reminds you when the build finishes.</li>
   <li>Try the game on the real platform before you ship it. Building it doesn't run it.</li>
@@ -96,7 +100,7 @@ python3 publish.py --rid win-x64 --rid linux-x64 --zip</code></pre>
 <pre data-label="Empire/osx-arm64/ (the Hub package on a Mac)"><code>Empire Engine Hub.app    the Hub, as a Mac app: drag it into Applications</code></pre>
 <pre data-label="Empire/win-x64-editor/ (the editor package; macOS below)"><code>Empire/&lt;version&gt;/        what the Hub unpacks into &lt;hub&gt;/Empire/&lt;version&gt;/
   empire                 the editor (empire.exe on Windows)
-  Player/                the game player</code></pre>
+  Player/                the game player's own files; what it shares with the editor sits beside the editor</code></pre>
 <pre data-label="Empire/osx-arm64-editor/ (the editor package on a Mac)"><code>Empire/&lt;version&gt;/
   Empire Engine Editor.app    the editor and the game player, as a Mac app</code></pre>
 <p>To try the Hub with an editor before a release exists, copy the <code>Empire/</code> folder from the editor package next to <code>EmpireHub</code> (on a Mac, into <code>~/Library/Application Support/EmpireHub/</code>, where the app keeps its editors).</p>

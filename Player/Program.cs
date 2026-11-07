@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Text.Json;
 using Engine.Brutal;
 using Engine.Brutal.Audio;
+using Engine.Brutal.Gfx;
 using Engine.Core.Assets;
 using Engine.Core.Audio;
 using Engine.Core.Scene;
@@ -49,5 +50,5 @@ if (scriptErrors.Length > 0)
 }
 
 using var audio = new AudioOutput();
-new BrutalPlayer(assets).Run(scene, manifest.Name);
+new BrutalPlayer(assets, Path.Combine(gameData, ShaderPack.FileName)).Run(scene, manifest.Name);
 return 0;

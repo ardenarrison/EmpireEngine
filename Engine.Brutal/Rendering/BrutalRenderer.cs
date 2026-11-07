@@ -1,6 +1,5 @@
 using System.Numerics;
 using Brutal;
-using Brutal.ShaderCApi;
 using Brutal.VulkanApi;
 using Brutal.VulkanApi.Abstractions;
 using Engine.Brutal.Gfx;
@@ -347,6 +346,11 @@ public sealed class BrutalRenderer : IRenderer
         .Replace("FRAME_BLOCK", FrameGlsl)
         .Replace("MAX_LIGHTS", SceneLighting.MaxLights.ToString());
 
+    internal static readonly ShaderSource ModelVertexShader = new("pbr.vert", Expand(VertexGlsl), ShaderStage.Vertex);
+    internal static readonly ShaderSource ModelFragmentShader = new("pbr.frag", Expand(FragmentGlsl), ShaderStage.Fragment);
+    internal static readonly ShaderSource SkyVertexShader = new("sky.vert", SkyVertexGlsl, ShaderStage.Vertex);
+    internal static readonly ShaderSource SkyFragmentShader = new("sky.frag", Expand(SkyFragmentGlsl), ShaderStage.Fragment);
+
     private readonly VulkanContext _ctx;
     private readonly ShaderLibrary _shaders;
     private readonly Device _device;
@@ -471,8 +475,8 @@ public sealed class BrutalRenderer : IRenderer
 
     private unsafe VkPipeline CreatePipeline(int samples, bool transparent = false)
     {
-        var vert = _shaders.Get("pbr.vert", Expand(VertexGlsl), ShaderKind.VertexShader);
-        var frag = _shaders.Get("pbr.frag", Expand(FragmentGlsl), ShaderKind.FragmentShader);
+        var vert = _shaders.Get(ModelVertexShader);
+        var frag = _shaders.Get(ModelFragmentShader);
         byte[] mainName = "main\0"u8.ToArray();
 
         fixed (byte* entry = mainName)
@@ -656,7 +660,7 @@ public sealed class BrutalRenderer : IRenderer
     // Depth-only pipeline for the shadow pass. Same vertex shader and layout; no fragment stage or color output.
     private unsafe VkPipeline CreateShadowPipeline()
     {
-        var vert = _shaders.Get("pbr.vert", Expand(VertexGlsl), ShaderKind.VertexShader);
+        var vert = _shaders.Get(ModelVertexShader);
         byte[] mainName = "main\0"u8.ToArray();
         var bindings = new[]
         {
@@ -1009,8 +1013,8 @@ public sealed class BrutalRenderer : IRenderer
 
     private unsafe VkPipeline CreateSkyPipeline(int samples)
     {
-        var vert = _shaders.Get("sky.vert", SkyVertexGlsl, ShaderKind.VertexShader);
-        var frag = _shaders.Get("sky.frag", Expand(SkyFragmentGlsl), ShaderKind.FragmentShader);
+        var vert = _shaders.Get(SkyVertexShader);
+        var frag = _shaders.Get(SkyFragmentShader);
         byte[] mainName = "main\0"u8.ToArray();
         var colorFormats = new[] { _ctx.ColorFormat };
         var viewport = new VkViewport { Width = _ctx.Width, Height = _ctx.Height, MinDepth = 0, MaxDepth = 1 };
