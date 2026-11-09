@@ -42,14 +42,49 @@ if (Input.GetKey("Shift")) { ... }</code></pre>
 <div class="table-wrap"><table>
   <thead><tr><th>Axis</th><th>Value</th></tr></thead>
   <tbody>
-    <tr><td><code>"Horizontal"</code></td><td>−1 to 1 from <kbd>A</kbd>/<kbd>D</kbd> or <kbd>←</kbd>/<kbd>→</kbd></td></tr>
-    <tr><td><code>"Vertical"</code></td><td>−1 to 1 from <kbd>S</kbd>/<kbd>W</kbd> or <kbd>↓</kbd>/<kbd>↑</kbd></td></tr>
+    <tr><td><code>"Horizontal"</code></td><td>−1 to 1 from <kbd>A</kbd>/<kbd>D</kbd> or <kbd>←</kbd>/<kbd>→</kbd>, and the first controller's left stick and pad</td></tr>
+    <tr><td><code>"Vertical"</code></td><td>−1 to 1 from <kbd>S</kbd>/<kbd>W</kbd> or <kbd>↓</kbd>/<kbd>↑</kbd>, and the first controller's left stick and pad</td></tr>
     <tr><td><code>"Mouse X"</code></td><td>Mouse movement to the right this frame</td></tr>
     <tr><td><code>"Mouse Y"</code></td><td>Mouse movement upward this frame</td></tr>
     <tr><td><code>"Mouse ScrollWheel"</code></td><td>The scroll wheel this frame</td></tr>
   </tbody>
 </table></div>
 <p>The keyboard axes jump straight to −1, 0 or 1 (there's no smoothing). The mouse axes are a tenth of the movement in screen points, so multiply by a sensitivity that feels right.</p>
+
+<h2 id="controllers">Controllers</h2>
+<p>Games read game controllers on Mac, Windows and Linux, in the editor's play mode and in built games. The Nintendo Switch Pro Controller works, as do most Xbox, PlayStation and other controllers the GLFW library knows. Connect one before or during play. The iPad doesn't read controllers yet.</p>
+<pre><code class="language-cs">if (Input.GetGamepadButtonDown(GamepadButton.South)) Jump();          // the bottom face button
+float steer = Input.GetGamepadAxis(GamepadAxis.LeftX);                 // -1 to 1
+float gas = Input.GetGamepadAxis(GamepadAxis.RightTrigger);            // 0 to 1
+if (Input.IsGamepadConnected()) Console.WriteLine(Input.GetGamepadName());</code></pre>
+<p><code>Input.GetAxis("Horizontal")</code> and <code>"Vertical"</code> read the first controller's left stick and pad as well as the keys, so a game that moves with them works with a controller without any changes.</p>
+<p>Buttons are named by where they are, so the same name is the same button on every controller. The letters printed on them differ:</p>
+<div class="table-wrap"><table>
+  <thead><tr><th><code>GamepadButton</code></th><th>Nintendo</th><th>Xbox</th><th>PlayStation</th></tr></thead>
+  <tbody>
+    <tr><td><code>South</code> (bottom)</td><td>B</td><td>A</td><td>Cross</td></tr>
+    <tr><td><code>East</code> (right)</td><td>A</td><td>B</td><td>Circle</td></tr>
+    <tr><td><code>West</code> (left)</td><td>Y</td><td>X</td><td>Square</td></tr>
+    <tr><td><code>North</code> (top)</td><td>X</td><td>Y</td><td>Triangle</td></tr>
+    <tr><td><code>LeftBumper</code>, <code>RightBumper</code></td><td>L, R</td><td>LB, RB</td><td>L1, R1</td></tr>
+    <tr><td><code>Back</code>, <code>Start</code>, <code>Guide</code></td><td>−, +, Home</td><td>View, Menu, Xbox</td><td>Share, Options, PS</td></tr>
+    <tr><td><code>LeftStick</code>, <code>RightStick</code></td><td colspan="3">Pressing a stick in</td></tr>
+    <tr><td><code>DpadUp</code>, <code>DpadRight</code>, <code>DpadDown</code>, <code>DpadLeft</code></td><td colspan="3">The pad</td></tr>
+  </tbody>
+</table></div>
+<div class="table-wrap"><table>
+  <thead><tr><th>Member</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td><code>GetGamepadButton(button, gamepad = 0)</code></td><td>Held down now</td></tr>
+    <tr><td><code>GetGamepadButtonDown</code>, <code>GetGamepadButtonUp</code></td><td>Pressed, or let go, this frame</td></tr>
+    <tr><td><code>GetGamepadAxis(axis, gamepad = 0)</code></td><td><code>LeftX</code>, <code>LeftY</code>, <code>RightX</code>, <code>RightY</code> from −1 to 1 with right and up positive, and 0 near the middle (<code>Input.StickDeadZone</code>); <code>LeftTrigger</code> and <code>RightTrigger</code> from 0 to 1 (ZL and ZR on a Nintendo controller)</td></tr>
+    <tr><td><code>IsGamepadConnected(gamepad = 0)</code>, <code>gamepadCount</code></td><td>Whether one is there, and how many. They're numbered from 0, the first connected.</td></tr>
+    <tr><td><code>GetGamepadName(gamepad = 0)</code></td><td>Such as "Nintendo Switch Pro Controller"</td></tr>
+  </tbody>
+</table></div>
+<p><strong>Connecting a Pro Controller to a Mac:</strong> open <em>System Settings &gt; Bluetooth</em>, hold the small sync button on the top of the controller until its lights run back and forth, then click <strong>Connect</strong> next to "Pro Controller". Use Bluetooth: over a cable it may not send anything the engine can read. A controller the engine doesn't know the layout of is left out, and the console says so when it's connected.</p>
+<p><strong>Adding a controller's layout:</strong> with the controller connected, run <code>dotnet run Tools/MapController.cs</code> in the engine's repository folder. It asks for each button in turn, by the letters on a Nintendo controller, and adds the layout to <code>Engine.Brutal/Gfx/GamepadMappings.txt</code>, which games load when they start. Then it lets you try the buttons. Build or play the game again to use it.</p>
+<p><strong>Switch 2 Pro Controller:</strong> macOS can't pair it on its own. The free <a href="https://github.com/Peterksharma/switch2mac">switch2mac</a> app (macOS 15 or later on an Apple Silicon Mac) connects it and makes it a controller any app can read, and the engine already knows its layout. If a newly installed copy of the app doesn't make the controller appear, quit it from the menu bar, open it again and press a button: on its first launch macOS can refuse it. A player needs switch2mac too.</p>
 
 <h2>Mouse</h2>
 <pre><code class="language-cs">if (Input.GetMouseButtonDown(MouseButton.Left)) { ... }   // also 0, 1, 2 or "Left", "Right", "Middle"

@@ -267,6 +267,7 @@ Destroy(ball);                              // takes it and its children out at 
     <tr><td><code>FixedUpdate</code></td><td>None: add forces in <code>Update</code></td></tr>
     <tr><td><code>StartCoroutine</code></td><td><code>Spawn</code>, plus <code>TickRoutines()</code> in <code>Update</code></td></tr>
     <tr><td><code>GameObject.Find</code></td><td><code>Scene.FindObjectWithName</code></td></tr>
+    <tr><td><code>Instantiate</code></td><td><code>Models.Load</code></td></tr>
     <tr><td><code>Instantiate</code> / <code>Destroy</code></td><td><code>SceneManager.World.Add</code> / <code>Destroy(obj)</code>, or additive scene loading</td></tr>
     <tr><td><code>[SerializeField] private</code></td><td>Not supported: only public fields are shown and saved</td></tr>
     <tr><td><code>PlayerPrefs</code></td><td><code>Prefs.SetInt</code> and friends (or <code>SaveGame.SetInt</code> for values that travel with a save slot)</td></tr>

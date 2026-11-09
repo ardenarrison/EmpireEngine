@@ -51,6 +51,17 @@ public sealed class UndoHistory
         return _current;
     }
 
+    // Changes every remembered scene, when a file they point at has moved.
+    public void Rewrite(Func<string, string> change)
+    {
+        _current = change(_current);
+        for (var step = _undo.First; step is not null; step = step.Next)
+            step.Value = change(step.Value);
+        var redo = _redo.Reverse().Select(change).ToList();
+        _redo.Clear();
+        foreach (string json in redo) _redo.Push(json);
+    }
+
     private void Push(string json)
     {
         _undo.AddLast(json);

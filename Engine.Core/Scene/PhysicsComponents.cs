@@ -146,3 +146,11 @@ public sealed class CircleCollider2D : Collider
 {
     public float Radius { get; set; } = 0.5f;
 }
+
+// An outline of Points in local units around Center, for 2D games, in either direction round. It can have dents, but its edges
+// can't cross. It reaches Depth units in Z, like a BoxCollider2D, and scales with the object.
+public sealed class PolygonCollider2D : Collider
+{
+    public List<Vector2> Points { get; set; } = [new(-0.5f, -0.5f), new(0.5f, -0.5f), new(0.5f, 0.5f), new(-0.5f, 0.5f)];
+    public float Depth { get; set; } = 1f;
+}

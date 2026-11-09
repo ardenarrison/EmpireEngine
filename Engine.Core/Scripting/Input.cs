@@ -15,6 +15,21 @@ public enum Keys
 // The mouse buttons, for Input.GetMouseButton. 0, 1 and 2 also work, as in Unity.
 public enum MouseButton { Left, Right, Middle }
 
+// A controller's buttons, named by where they are, so a game's "jump" is the same button on every controller. Nintendo, Xbox and
+// PlayStation print different letters on them: South is B on a Nintendo controller, A on an Xbox one and Cross on a PlayStation one.
+public enum GamepadButton
+{
+    South, East, West, North,
+    LeftBumper, RightBumper, Back, Start, Guide, LeftStick, RightStick,
+    DpadUp, DpadRight, DpadDown, DpadLeft,
+}
+
+// A controller's sticks, from -1 to 1 with right and up positive, and its triggers, from 0 when let go to 1 when held down.
+public enum GamepadAxis { LeftX, LeftY, RightX, RightY, LeftTrigger, RightTrigger }
+
+// One controller as it is right now: its name, each GamepadButton held or not, and each GamepadAxis.
+public readonly record struct GamepadState(string Name, bool[] Buttons, float[] Axes);
+
 // The mouse as the engine sees it at one moment. Position is in the game view: (0, 0) is its top-left corner, x grows to
 // the right and y downward, in screen points. Scroll is how far the wheel moved since the last sample (up is positive).
 public readonly record struct MouseState(Vector2 Position, bool Left, bool Right, bool Middle, float Scroll);
@@ -115,15 +130,58 @@ public static class Input
     public static bool GetMouseButtonUp(int button) => GetMouseButtonUp(ToButton(button));
     public static bool GetMouseButtonUp(string button) => GetMouseButtonUp(ParseButton(button));
 
+    // ---- controllers ----------------------------------------------------------------------------------------------------
+
+    // The controllers connected right now. The engine sets it, as it does the other providers.
+    public static Func<IReadOnlyList<GamepadState>> GamepadProvider { get; set; } = () => [];
+
+    private static IReadOnlyList<GamepadState> _pads = [], _previousPads = [];
+
+    // How far a stick has to move before it counts, so one resting a little off center doesn't creep.
+    public const float StickDeadZone = 0.15f;
+
+    // How many controllers are connected. They are numbered from 0, the first connected; most methods take that number.
+    public static int gamepadCount => _pads.Count;
+
+    public static bool IsGamepadConnected(int gamepad = 0) => gamepad >= 0 && gamepad < _pads.Count;
+
+    // The controller's name, such as "Nintendo Switch Pro Controller", or "" when there is none.
+    public static string GetGamepadName(int gamepad = 0) => IsGamepadConnected(gamepad) ? _pads[gamepad].Name : "";
+
+    // Held down now; pressed this frame; let go this frame.
+    public static bool GetGamepadButton(GamepadButton button, int gamepad = 0) => Held(_pads, gamepad, button);
+    public static bool GetGamepadButtonDown(GamepadButton button, int gamepad = 0) => Held(_pads, gamepad, button) && !Held(_previousPads, gamepad, button);
+    public static bool GetGamepadButtonUp(GamepadButton button, int gamepad = 0) => !Held(_pads, gamepad, button) && Held(_previousPads, gamepad, button);
+
+    // A stick from -1 to 1, 0 inside the dead zone and growing smoothly from its edge; a trigger from 0 to 1. 0 with no controller.
+    public static float GetGamepadAxis(GamepadAxis axis, int gamepad = 0)
+    {
+        if (!IsGamepadConnected(gamepad) || (int)axis >= _pads[gamepad].Axes.Length) return 0f;
+        float value = Math.Clamp(_pads[gamepad].Axes[(int)axis], -1f, 1f);
+        if (axis is GamepadAxis.LeftTrigger or GamepadAxis.RightTrigger) return Math.Max(0f, value);
+        if (MathF.Abs(value) < StickDeadZone) return 0f;
+        return MathF.Sign(value) * (MathF.Abs(value) - StickDeadZone) / (1f - StickDeadZone);
+    }
+
+    private static bool Held(IReadOnlyList<GamepadState> pads, int gamepad, GamepadButton button) =>
+        gamepad >= 0 && gamepad < pads.Count && (int)button < pads[gamepad].Buttons.Length && pads[gamepad].Buttons[(int)button];
+
+    // The first controller's left stick and pad for an axis, which adds to the keys.
+    private static float FirstGamepad(GamepadAxis stick, GamepadButton less, GamepadButton more) =>
+        GetGamepadAxis(stick) + (GetGamepadButton(more) ? 1f : 0f) - (GetGamepadButton(less) ? 1f : 0f);
+
     // A value for common controls, as in Unity:
     //   "Horizontal"  -1 to 1 from A/D or the left/right arrows      "Vertical"  -1 to 1 from S/W or the down/up arrows
+    //                 (and the first controller's left stick and pad, for both)
     //   "Mouse X"     mouse movement to the right this frame        "Mouse Y"   mouse movement upward this frame
     //   "Mouse ScrollWheel"  the scroll wheel this frame
     // The mouse axes are a tenth of the movement in screen points, so multiply by a sensitivity that feels right.
     public static float GetAxis(string axis) => axis.Replace(" ", "").ToLowerInvariant() switch
     {
-        "horizontal" => (GetKey(Keys.D) || GetKey(Keys.Right) ? 1f : 0f) - (GetKey(Keys.A) || GetKey(Keys.Left) ? 1f : 0f),
-        "vertical" => (GetKey(Keys.W) || GetKey(Keys.Up) ? 1f : 0f) - (GetKey(Keys.S) || GetKey(Keys.Down) ? 1f : 0f),
+        "horizontal" => Math.Clamp((GetKey(Keys.D) || GetKey(Keys.Right) ? 1f : 0f) - (GetKey(Keys.A) || GetKey(Keys.Left) ? 1f : 0f) +
+                                   FirstGamepad(GamepadAxis.LeftX, GamepadButton.DpadLeft, GamepadButton.DpadRight), -1f, 1f),
+        "vertical" => Math.Clamp((GetKey(Keys.W) || GetKey(Keys.Up) ? 1f : 0f) - (GetKey(Keys.S) || GetKey(Keys.Down) ? 1f : 0f) +
+                                 FirstGamepad(GamepadAxis.LeftY, GamepadButton.DpadDown, GamepadButton.DpadUp), -1f, 1f),
         "mousex" => _mouseDelta.X * 0.1f,
         "mousey" => -_mouseDelta.Y * 0.1f,
         "mousescrollwheel" => _mouse.Scroll * 0.1f,
@@ -203,6 +261,10 @@ public static class Input
 
         _previousMouse = _mouse;
         _mouse = MouseProvider();
+
+        _previousPads = _pads;
+        // Copies, so a provider that fills the same arrays every frame can't make this frame and the last one the same.
+        _pads = (GamepadProvider() ?? []).Select(p => p with { Buttons = (bool[])p.Buttons.Clone(), Axes = (float[])p.Axes.Clone() }).ToList();
         _mouseDelta = _settleMouse ? Vector2.Zero : _mouse.Position - _previousMouse.Position;
         _settleMouse = false;
     }
@@ -216,6 +278,7 @@ public static class Input
         inputString = "";
         _mouse = _previousMouse = default;
         _mouseDelta = Vector2.Zero;
+        _pads = _previousPads = [];
         _settleMouse = true;
         _cursorLocked = false;
         cursorVisible = true;

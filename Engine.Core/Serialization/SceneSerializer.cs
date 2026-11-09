@@ -26,6 +26,12 @@ public static class SceneSerializer
     // the same settings, which is how a system is matched to a preset.
     public static string ParticleJson(ParticleSystem particles) => JsonSerializer.Serialize(particles, Options);
 
+    private sealed class PrefabFile
+    {
+        public int FormatVersion { get; set; } = SceneSerializer.FormatVersion;
+        public List<ObjectRecord> Objects { get; set; } = new();
+    }
+
     private sealed class SceneFile
     {
         public int FormatVersion { get; set; } = SceneSerializer.FormatVersion;
@@ -156,6 +162,7 @@ public static class SceneSerializer
         public float? Friction { get; set; }
         public float? Bounciness { get; set; }
         public bool? IsTrigger { get; set; }
+        public float[][]? Points { get; set; }        // PolygonCollider2D
         public float? Depth { get; set; }             // BoxCollider2D; left out at 1          // colliders; left out when false
         public Dictionary<string, string>? Fields { get; set; }
         public string? Clip { get; set; }
@@ -288,6 +295,53 @@ public static class SceneSerializer
         var root = copies[source];
         root.Name = CopyName(scene, source);
         return root;
+    }
+
+    // ---- prefabs -----------------------------------------------------------------------------
+
+    public const string PrefabExtension = ".pre";
+
+    public static bool IsPrefab(string path) => string.Equals(Path.GetExtension(path), PrefabExtension, StringComparison.OrdinalIgnoreCase);
+
+    // Saves an object and everything under it as a prefab: their positions, rotations and scales, components, and the values
+    // set for their scripts.
+    public static void SavePrefab(SceneObject root, string path)
+    {
+        var file = new PrefabFile();
+        foreach (var obj in Scene.Scene.Subtree(root))   // parents come before their children
+            file.Objects.Add(ToRecord(obj));
+        file.Objects[0].Parent = null;   // whatever the root is under in the scene isn't in the prefab
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
+        File.WriteAllText(path, JsonSerializer.Serialize(file, Options));
+    }
+
+    // Adds a new copy of a prefab to the scene, as it was saved, and returns its root. Each copy has new ids, so a script value
+    // that points at an object in the prefab points at that object's copy in this one.
+    public static SceneObject AddPrefab(Scene.Scene scene, string path)
+    {
+        var file = JsonSerializer.Deserialize<PrefabFile>(File.ReadAllText(path), Options)
+                   ?? throw new InvalidDataException($"Empty prefab: {path}");
+        if (file.FormatVersion > FormatVersion)
+            throw new NotSupportedException($"Prefab format {file.FormatVersion} is newer than this engine supports.");
+        if (file.Objects.Count == 0)
+            throw new InvalidDataException($"Empty prefab: {path}");
+
+        var copies = new Dictionary<Guid, SceneObject>();
+        foreach (var rec in file.Objects)
+        {
+            if (rec.Parent is { } parent && !copies.ContainsKey(parent))
+                throw new InvalidDataException($"'{rec.Name}' references a parent that is not defined before it.");
+            copies[rec.Id] = FromRecord(rec, Guid.NewGuid());
+        }
+
+        foreach (var script in copies.Values.SelectMany(o => o.Components.OfType<ScriptComponent>()))
+            foreach (string field in script.Fields.Keys.ToList())
+                foreach (var (id, copy) in copies)
+                    script.Fields[field] = script.Fields[field].Replace(id.ToString(), copy.Id.ToString());
+
+        foreach (var rec in file.Objects)
+            scene.Add(copies[rec.Id], rec.Parent is { } parent ? copies[parent] : null);
+        return copies[file.Objects[0].Id];
     }
 
     private static string CopyName(Scene.Scene scene, SceneObject source)
@@ -493,6 +547,18 @@ public static class SceneSerializer
                         Friction = box2.Friction,
                         Bounciness = box2.Bounciness,
                         IsTrigger = box2.IsTrigger ? true : null,
+                    });
+                    break;
+                case PolygonCollider2D polygon:
+                    rec.Components.Add(new ComponentRecord
+                    {
+                        Type = "PolygonCollider2D",
+                        Center = [polygon.Center.X, polygon.Center.Y, polygon.Center.Z],
+                        Points = polygon.Points.Select(p => new[] { p.X, p.Y }).ToArray(),
+                        Depth = polygon.Depth != 1f ? polygon.Depth : null,
+                        Friction = polygon.Friction,
+                        Bounciness = polygon.Bounciness,
+                        IsTrigger = polygon.IsTrigger ? true : null,
                     });
                     break;
                 case CircleCollider2D circle:
@@ -776,6 +842,17 @@ public static class SceneSerializer
                     {
                         Center = Vec3(c.Center, Vector3.Zero),
                         Size = c.Size is { Length: >= 2 } s2 ? new Vector2(s2[0], s2[1]) : Vector2.One,
+                        Depth = c.Depth ?? 1f,
+                        Friction = c.Friction ?? 0.5f,
+                        Bounciness = c.Bounciness ?? 0f,
+                        IsTrigger = c.IsTrigger ?? false,
+                    });
+                    break;
+                case "PolygonCollider2D":
+                    o.Components.Add(new PolygonCollider2D
+                    {
+                        Center = Vec3(c.Center, Vector3.Zero),
+                        Points = c.Points?.Where(p => p.Length == 2).Select(p => new Vector2(p[0], p[1])).ToList() ?? new(),
                         Depth = c.Depth ?? 1f,
                         Friction = c.Friction ?? 0.5f,
                         Bounciness = c.Bounciness ?? 0f,

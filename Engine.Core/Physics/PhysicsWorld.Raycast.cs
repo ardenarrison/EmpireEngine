@@ -58,6 +58,20 @@ public sealed partial class PhysicsWorld
             case BoxCollider2D box2:
                 return RayCollider(new BoxCollider { Center = box2.Center, Size = new Vector3(box2.Size, MathF.Max(MathF.Abs(box2.Depth), 0.01f)) },
                     obj, origin, dir, maxDistance, out t, out normal);
+            case PolygonCollider2D polygon:
+            {
+                bool hit = false;
+                float nearest = maxDistance;
+                foreach (var shape in Shape.FromPolygon(polygon, obj, world))
+                    if (RayPoly(Poly.FromHull(shape), origin, dir, out float enter, out var faceNormal) && enter <= nearest)
+                    {
+                        hit = true;
+                        nearest = enter;
+                        normal = faceNormal;
+                    }
+                t = nearest;
+                return hit;
+            }
             case CircleCollider2D circle:
                 return RayCollider(new SphereCollider { Center = circle.Center, Radius = circle.Radius }, obj, origin, dir, maxDistance, out t, out normal);
             case SphereCollider sphere:

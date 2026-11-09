@@ -111,9 +111,11 @@ public static class VulkanScripts
         Failed.Clear();
     }
 
-    private static IEnumerable<IVulkanRender> Scripts(Scene scene) =>
+    // A list, not a query over the scene, because a script can add objects while it runs.
+    private static List<IVulkanRender> Scripts(Scene scene) =>
         scene.All
             .SelectMany(o => o.Components.OfType<ScriptComponent>())
             .Select(c => c.Instance)
-            .OfType<IVulkanRender>();
+            .OfType<IVulkanRender>()
+            .ToList();
 }

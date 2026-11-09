@@ -127,7 +127,7 @@ public static class GameUi
             for (int i = elements.Count - 1; i >= 0; i--)
             {
                 var ui = elements[i].Element;
-                if (ui.Visible && Contains(PixelRect(ui, view), mouse))
+                if (ui.Visible && ui.Kind != UiKind.Label && Contains(PixelRect(ui, view), mouse))   // a label is only text, not something to click
                 {
                     Hovered = ui;
                     break;

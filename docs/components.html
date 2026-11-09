@@ -162,6 +162,18 @@
   </tbody>
 </table></div>
 
+<h2>Polygon Collider 2D <small>(PolygonCollider2D)</small></h2>
+<p>An outline of any shape, for 2D projects. It can have dents, so a ball can roll into a cup, but its edges can't cross. Added to an object with a sprite or model, it starts as a rectangle around it.</p>
+<table>
+  <thead><tr><th>Setting</th><th>Type</th><th>Default</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td>Center</td><td><code>Vector3</code></td><td>0, 0, 0</td><td>Where the outline sits on the object, in local units</td></tr>
+    <tr><td>Points</td><td><code>List&lt;Vector2&gt;</code></td><td>A 1 by 1 square</td><td>The outline's corners around Center, in order, in either direction</td></tr>
+    <tr><td>Depth</td><td><code>float</code></td><td>1</td><td>How far it reaches in Z, like a Box Collider 2D</td></tr>
+  </tbody>
+</table>
+<p>It also has Friction, Bounciness and Is Trigger, like the other colliders. Press <strong>Edit Points</strong> to change the outline in the scene view (see <a href="editor.html#2d-projects">2D projects</a>), or type exact values under <em>Point 1</em>, <em>Point 2</em> and so on. If the edges cross, the outline turns red, the Inspector says so, and it won't collide. Scripts can change <code>Points</code> while the game plays.</p>
+
 <h2>Terrain <small>(Terrain)</small></h2>
 <p>Sculptable, paintable ground that is also a collider. One per object. <a href="terrain.html">Terrain →</a></p>
 <table>
@@ -216,18 +228,18 @@
 <h2>Audio Listener <small>(AudioListener)</small></h2>
 <p>Where the scene is heard from; put it on the camera. One per object. No settings. Static <code>AudioListener.Volume</code> (master, 0 to 1) and <code>AudioListener.Pause</code>.</p>
 
-<h2>UI Button, Text Field, Checkbox, Dropdown, Bar <small>(UiElement)</small></h2>
+<h2>UI Button, Text Field, Checkbox, Dropdown, Bar, Text Label <small>(UiElement)</small></h2>
 <table>
   <thead><tr><th>Setting</th><th>Type</th><th>Default</th><th>Meaning</th></tr></thead>
   <tbody>
-    <tr><td>Kind</td><td><code>UiKind</code></td><td>Button</td><td>Button, TextField, Checkbox, Dropdown, Bar</td></tr>
-    <tr><td>Label</td><td><code>string</code></td><td>"Button"</td><td>Button or checkbox text, or field name</td></tr>
+    <tr><td>Kind</td><td><code>UiKind</code></td><td>Button</td><td>Button, TextField, Checkbox, Dropdown, Bar, Label</td></tr>
+    <tr><td>Label</td><td><code>string</code></td><td>"Button"</td><td>Button, checkbox or label text, or field name</td></tr>
     <tr><td>X, Y, W, H</td><td><code>float</code></td><td>0.4, 0.45, 0.2, 0.07</td><td>Fractions of the game view</td></tr>
     <tr><td>Text</td><td><code>string</code></td><td>""</td><td>Text field value</td></tr>
     <tr><td>Checked</td><td><code>bool</code></td><td>false</td><td>Checkbox state</td></tr>
     <tr><td>Options, Selected</td><td><code>List&lt;string&gt;</code>, <code>int</code></td><td>2 options, 0</td><td>Dropdown</td></tr>
     <tr><td>Value</td><td><code>float</code></td><td>0.5</td><td>Bar fill, 0 to 1</td></tr>
-    <tr><td>Center Text</td><td><code>bool</code></td><td>true</td><td>Buttons and dropdowns</td></tr>
+    <tr><td>Center Text</td><td><code>bool</code></td><td>true</td><td>Buttons, dropdowns and labels</td></tr>
     <tr><td>Visible</td><td><code>bool</code></td><td>true</td><td>Off hides it; hidden elements take no clicks</td></tr>
     <tr><td>Interactable</td><td><code>bool</code></td><td>true</td><td>Off dims it and ignores input</td></tr>
   </tbody>
