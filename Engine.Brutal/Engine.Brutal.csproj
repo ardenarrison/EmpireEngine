@@ -20,6 +20,7 @@
     <EmbeddedResource Include="Ui\Fonts\JetBrainsMono-Regular.ttf" LogicalName="Engine.Brutal.Ui.Fonts.JetBrainsMono-Regular.ttf" />
     <!-- Empire Engine's icon for the editor's and games' windows (AppIcon), and the white-backed copy for the macOS Dock. -->
     <EmbeddedResource Include="..\EmpireEngineIcon.png" LogicalName="Engine.Brutal.EmpireEngineIcon.png" />
+    <EmbeddedResource Include="Gfx\GamepadMappings.txt" LogicalName="Engine.Brutal.Gfx.GamepadMappings.txt" />
     <EmbeddedResource Include="..\EmpireEngineIcon-mac.png" LogicalName="Engine.Brutal.EmpireEngineIcon-mac.png" />
     <!-- The logos on the splash every game opens with (SplashScreen). See Ui\Logos\README.txt before changing them. -->
     <EmbeddedResource Include="Ui\Logos\BrutalLogo.png" LogicalName="Engine.Brutal.Ui.Logos.BrutalLogo.png" />

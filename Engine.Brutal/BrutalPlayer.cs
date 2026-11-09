@@ -77,9 +77,28 @@ public sealed class BrutalPlayer
             .Where(m => !string.IsNullOrEmpty(m))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
-        var uploaded = new HashSet<string>(models, StringComparer.OrdinalIgnoreCase);   // models from scenes loaded later are uploaded when first drawn
+        var uploaded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);   // models from scenes loaded later are uploaded when first drawn
+        var unreadable = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        // A model file that is missing or broken leaves its objects undrawn. The rest of the game still runs.
+        bool Upload(string key)
+        {
+            if (uploaded.Contains(key)) return true;
+            if (unreadable.Contains(key)) return false;
+            try
+            {
+                renderer.UploadModel(key, _assets.GetModel(key));
+                uploaded.Add(key);
+                return true;
+            }
+            catch (Exception ex) when (ex is IOException or InvalidDataException or NotSupportedException or System.Text.Json.JsonException)
+            {
+                Console.WriteLine($"Could not load {key}: {ex.Message}");
+                unreadable.Add(key);
+                return false;
+            }
+        }
         foreach (var key in models)
-            renderer.UploadModel(key, _assets.GetModel(key));
+            Upload(key);
         renderer.AfterSceneDraws = cmd => VulkanScripts.Render(scene, cmd);
 
         Engine.Core.Physics.PhysicsWorld.ModelLoader = _assets.GetModel;   // for mesh colliders
@@ -92,6 +111,7 @@ public sealed class BrutalPlayer
         double lastTime = 0;
         var appWindow = new GlfwAppWindow(window);
         KeyboardInput.Bind(appWindow);
+        GamepadInput.Bind();
         TextInput.Bind(window);
         float scroll = 0f;
         window.OnScroll += (_, offset) => scroll += (float)offset.Y;
@@ -162,9 +182,8 @@ public sealed class BrutalPlayer
                         continue;
                     }
                     if (mr.Model.Length == 0) continue;
-                    if (uploaded.Add(mr.Model))
-                        renderer.UploadModel(mr.Model, _assets.GetModel(mr.Model));
-                    renderer.DrawModel(mr.Model, obj.WorldMatrix, mr.Tint, mr.Pose);
+                    if (Upload(mr.Model))
+                        renderer.DrawModel(mr.Model, obj.WorldMatrix, mr.Tint, mr.Pose);
                 }
             terrains.Draw(renderer, scene);
             sprites.Draw(renderer, scene);

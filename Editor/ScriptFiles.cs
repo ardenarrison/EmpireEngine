@@ -14,6 +14,10 @@ public static class ScriptFiles
         return name;
     }
 
+    // A script's text with its class renamed, so it still matches the file's name.
+    public static string RenameClass(string text, string oldName, string newName) =>
+        System.Text.RegularExpressions.Regex.Replace(text, $@"\b(class|struct)(\s+){System.Text.RegularExpressions.Regex.Escape(oldName)}\b", $"$1$2{newName}");
+
     // Creates Scripts/<name>.cs with a starter template, unless the file already exists.
     public static void Create(string folder, string name)
     {

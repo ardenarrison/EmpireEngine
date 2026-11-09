@@ -1,6 +1,6 @@
 namespace Engine.Core.Scene;
 
-public enum UiKind { Button, TextField, Checkbox, Dropdown, Bar }
+public enum UiKind { Button, TextField, Checkbox, Dropdown, Bar, Label }
 
 // A 2D element drawn over the scene while the game plays, in the editor and in built games. X and Y are the top-left
 // corner and W and H the size, as fractions (0 to 1) of the game view. GameUi handles the mouse and keyboard each
@@ -9,7 +9,7 @@ public enum UiKind { Button, TextField, Checkbox, Dropdown, Bar }
 public sealed class UiElement : Component
 {
     public UiKind Kind { get; set; } = UiKind.Button;
-    public string Label { get; set; } = "Button";     // button text, checkbox text, or a text field's hint when empty
+    public string Label { get; set; } = "Button";     // button, checkbox or label text, or a text field's hint when empty
     public float X { get; set; } = 0.4f;
     public float Y { get; set; } = 0.45f;
     public float W { get; set; } = 0.2f;
@@ -20,7 +20,7 @@ public sealed class UiElement : Component
     public int Selected { get; set; }                 // dropdown index
     public float Value { get; set; } = 0.5f;          // bar fill, 0 to 1
 
-    public bool CenterText { get; set; } = true;     // button and dropdown text centered by default
+    public bool CenterText { get; set; } = true;     // button, dropdown and label text centered by default
     public bool Visible { get; set; } = true;        // false hides it; hidden elements take no clicks
     public bool Interactable { get; set; } = true;   // false shows it dimmed and ignores clicks and typing
 

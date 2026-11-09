@@ -1,0 +1,10 @@
+# Controller layouts GLFW doesn't know, which games add to its own when they start. Each line says, for one controller,
+# which of its buttons and axes is which, in the SDL_GameControllerDB format. Lines starting with # are skipped.
+#
+# Don't write these by hand. Connect the controller and run, from the repository folder:
+#     dotnet run Tools/MapController.cs
+# It asks for each button in turn and puts the controller's line here.
+
+# Nintendo Switch 2 Pro Controller through switch2mac ("Finally the Controller Works"), which macOS needs to read it. Taken from
+# the virtual gamepad that app makes (Output/VirtualHID.swift) and checked against a real controller on a Mac.
+030000007e0500006920000000000000,Pro Controller 2 (Finally),a:b0,b:b1,x:b2,y:b3,back:b4,guide:b5,start:b6,leftstick:b7,rightstick:b8,leftshoulder:b9,rightshoulder:b10,dpup:h0.1,dpright:h0.2,dpdown:h0.4,dpleft:h0.8,leftx:a0,lefty:a1,rightx:a2,righty:a5,lefttrigger:a3,righttrigger:a4,platform:Mac OS X,

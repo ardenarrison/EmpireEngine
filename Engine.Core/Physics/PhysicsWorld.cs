@@ -143,6 +143,11 @@ public sealed partial class PhysicsWorld
                         body.Shapes.Add(groundShape);
                     continue;
                 }
+                if (collider is PolygonCollider2D polygon)
+                {
+                    body.Shapes.AddRange(Shape.FromPolygon(polygon, obj, world));
+                    continue;
+                }
                 if (collider is MeshCollider mesh)
                 {
                     // Moving bodies collide as the mesh's convex hull; static and kinematic ones use its triangles.

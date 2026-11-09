@@ -467,8 +467,7 @@ public sealed class CodeEditorView
             if (_docs.TryGetValue(oldPath, out var open) && open.Dirty) open.Save();
             // The class name has to match the file name, so the declaration is renamed with it.
             string text = File.ReadAllText(oldPath);
-            File.WriteAllText(newPath, System.Text.RegularExpressions.Regex.Replace(
-                text, $@"\b(class|struct)(\s+){System.Text.RegularExpressions.Regex.Escape(oldName)}\b", $"$1$2{newName}"));
+            File.WriteAllText(newPath, ScriptFiles.RenameClass(text, oldName, newName));
             File.Delete(oldPath);
         }
         catch (Exception ex)

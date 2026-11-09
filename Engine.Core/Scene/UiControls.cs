@@ -7,6 +7,7 @@ namespace Engine.Core.Scene;
 //     {
 //         public Button play;          // only objects with a UI Button can be dropped here
 //         public TextField playerName;
+//         public TextLabel score;
 //
 //         public override void Start()
 //         {
@@ -31,7 +32,7 @@ public abstract class UiControl
         Element = element;
     }
 
-    // Button text, checkbox text, or a text field's hint (shown while it is empty).
+    // Button, checkbox or label text, or a text field's hint (shown while it is empty).
     public string Label
     {
         get => Element.Label;
@@ -65,12 +66,13 @@ public abstract class UiControl
         controlType == typeof(Checkbox) ? UiKind.Checkbox :
         controlType == typeof(Dropdown) ? UiKind.Dropdown :
         controlType == typeof(Bar) ? UiKind.Bar :
+        controlType == typeof(TextLabel) ? UiKind.Label :
         throw new ArgumentException($"{controlType.Name} is not a UI control type.");
 
-    // True for Button, TextField, Checkbox, Dropdown and Bar.
+    // True for Button, TextField, Checkbox, Dropdown, Bar and TextLabel.
     public static bool IsControlType(Type type) =>
         type == typeof(Button) || type == typeof(TextField) || type == typeof(Checkbox) ||
-        type == typeof(Dropdown) || type == typeof(Bar);
+        type == typeof(Dropdown) || type == typeof(Bar) || type == typeof(TextLabel);
 
     // The control of this type on an object, or null when the object is null or has no UI element of that kind.
     public static T? From<T>(SceneObject? obj) where T : UiControl => (T?)From(typeof(T), obj);
@@ -85,6 +87,7 @@ public abstract class UiControl
             UiKind.TextField => new TextField(obj, element),
             UiKind.Checkbox => new Checkbox(obj, element),
             UiKind.Dropdown => new Dropdown(obj, element),
+            UiKind.Label => new TextLabel(obj, element),
             _ => new Bar(obj, element),
         };
     }
@@ -209,6 +212,19 @@ public sealed class Dropdown : UiControl
     public bool IsOpen => GameUi.OpenDropdown == Element;
 
     public void RemoveAllListeners() => Element.SelectHandlers = null;
+}
+
+// Text on its own, for scores, titles and the like. It takes no input: clicks go through it to whatever is behind.
+public sealed class TextLabel : UiControl
+{
+    internal TextLabel(SceneObject obj, UiElement element) : base(obj, element) { }
+
+    // What it says. The same as Label, under the name that reads best here.
+    public string Text
+    {
+        get => Label;
+        set => Label = value;
+    }
 }
 
 // A bar that fills from the left, for health, loading and the like. It takes no input.

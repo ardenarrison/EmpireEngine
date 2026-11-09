@@ -143,6 +143,9 @@ public static class UiRenderer
                 if (box.H >= c.FontSize) Label(c, ui.Label, box, Dim(TextColor), center: false);
                 break;
             }
+            case UiKind.Label:
+                Label(c, ui.Label, box, Dim(TextColor), ui.CenterText);
+                break;
         }
     }
 

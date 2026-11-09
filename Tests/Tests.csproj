@@ -20,7 +20,7 @@
     <Compile Include="../Editor/ProjectSettings.cs" Link="EditorProject/%(Filename)%(Extension)" />
     <Compile Include="../Editor/Snapping.cs;../Editor/FrameRateCounter.cs" Link="EditorProject/%(Filename)%(Extension)" />
     <Compile Include="../Editor/ProjectFile.cs" Link="EditorProject/%(Filename)%(Extension)" />
-    <Compile Include="../Editor/VcTyping.cs;../Editor/ProjectList.cs;../Editor/BuildTargets.cs;../Editor/Modeling/ModelEdit.cs;../Editor/Modeling/ModelOperations.cs;../Editor/Modeling/ModelModifiers.cs" Link="EditorProject/%(Filename)%(Extension)" />
+    <Compile Include="../Editor/ProjectFiles.cs;../Editor/UndoHistory.cs;../Editor/ScriptFiles.cs;../Editor/VcTyping.cs;../Editor/ProjectList.cs;../Editor/BuildTargets.cs;../Editor/Modeling/ModelEdit.cs;../Editor/Modeling/ModelOperations.cs;../Editor/Modeling/ModelModifiers.cs" Link="EditorProject/%(Filename)%(Extension)" />
     <Compile Include="../Hub/ProjectTemplate.cs" Link="HubFiles/%(Filename)%(Extension)" />
     <!-- and how the editor picks its light or dark look -->
     <Compile Include="../Editor/Ui/ThemeChoice.cs;../Editor/Terminal/TerminalGlyphs.cs" Link="EditorUi/%(Filename)%(Extension)" />

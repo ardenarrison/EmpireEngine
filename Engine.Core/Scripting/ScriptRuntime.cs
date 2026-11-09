@@ -183,10 +183,11 @@ public static class ScriptRuntime
         }
     }
 
-    // Runs Start (once) and then Update for every script. Called once per frame while the scene plays.
+    // Runs Start (once) and then Update for every script. Called once per frame while the scene plays. Goes through a copy of the
+    // list because a script can add objects. Those start on the next frame, so a script that makes copies of itself can't run away.
     internal static void Run(Engine.Core.Scene.Scene scene)
     {
-        foreach (var obj in scene.All)
+        foreach (var obj in scene.All.ToList())
             foreach (var comp in obj.Components.OfType<ScriptComponent>().ToList())
             {
                 if (comp.Instance is null && (comp.ComponentInstance is null || comp.ComponentStopped))

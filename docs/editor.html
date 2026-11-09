@@ -57,7 +57,7 @@
     <tr><td>Hierarchy</td><td>Every object in the scene, children indented under their parents. <em>Add Child</em> and <em>Delete</em> act on the selection. <strong>Double-click</strong> an object to fly the editor camera to it: it keeps looking the same way and backs off far enough to see the whole object.</td></tr>
     <tr><td>Tool buttons</td><td><em>None</em>, <em>Move</em> and <em>Scale</em> pick the handles shown on the selected object.</td></tr>
     <tr><td>Inspector</td><td>The selected object's name, parent, position, scale and rotation, then one section per component, then <em>Add Component</em>. Click a scene file in Assets to see that scene's settings here instead.</td></tr>
-    <tr><td>Assets</td><td>Browses the project folder. Right-click to <em>Create Scene</em>.</td></tr>
+    <tr><td>Assets</td><td>Browses the project folder. Right-click a file to copy, cut, rename or delete it, or anywhere else to create something or paste. See <a href="#assets">The Assets panel</a>.</td></tr>
   </tbody>
 </table></div>
 
@@ -87,6 +87,7 @@
   <li><strong>UI</strong>: Button, Text Field, Checkbox, Dropdown, Bar</li>
 </ul>
 <p><strong>Shapes</strong> opens a second menu of shapes that come with the engine: Cube, Sphere, Capsule, Cone and Empire, the Empire Engine crown. Each is placed in front of the scene camera as an object with a Mesh Renderer. They need no file in the project and work in built games, and in 3D projects only. Change a shape's color with the Mesh Renderer's Tint, and add a collider yourself if it should be solid.</p>
+<p><strong>Prefabs</strong> (<code>.pre</code>) drag in the same way. To make one, right-click an object and choose <strong>Save as Prefab</strong>; see <a href="scenes.html">Scenes</a>.</p>
 <p>You can also <strong>drag a model</strong> from the Assets panel and drop it on the scene: it lands on the ground under the cursor (or 10 units ahead when there's no ground there). <strong>Dragging a sound</strong> onto the scene makes an object that plays it.</p>
 
 <h3>Selecting</h3>
@@ -109,6 +110,25 @@
 
 <h3>Components</h3>
 <p>Press <em>Add Component</em> for the list of built-in components, followed by components from your own scripts and turned-on packages. Each component's section has an <strong>X</strong> on its title bar that removes it. See the <a href="components.html">Component reference</a>.</p>
+
+<h2 id="assets">The Assets panel</h2>
+<p>The panel shows the project folder. Click a folder to open it, and use the buttons at the top to go back.</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>Right-click</th><th>Commands</th></tr></thead>
+  <tbody>
+    <tr><td>A file</td><td><strong>Copy</strong>, <strong>Cut</strong>, <strong>Rename</strong> and <strong>Delete</strong></td></tr>
+    <tr><td>A folder</td><td>The same, plus everything below, for the inside of that folder</td></tr>
+    <tr><td>Anywhere else</td><td><strong>Create Scene</strong>, <strong>Create Script</strong>, <strong>Create Folder</strong>, <strong>Create Text File</strong> and <strong>Paste</strong></td></tr>
+  </tbody>
+</table></div>
+<ul>
+  <li><strong>Renaming and moving:</strong> scenes, prefabs, the open scene, undo and the project's start scene all follow the file. A script that names the file in its own code, such as <code>Models.Load("Models/Rock.glb")</code>, isn't changed, so update that yourself.</li>
+  <li><strong>Copying:</strong> a copy never replaces anything. <code>Rock.glb</code> becomes <code>Rock copy.glb</code>, then <code>Rock copy 2.glb</code>.</li>
+  <li><strong>Deleting:</strong> this can't be undone, so the editor asks first and names any scenes and prefabs that still use the file. Objects that used it go without it: a missing model is skipped, with a message, in the editor and in a built game. The scene that's open, and any folder holding it, can't be deleted.</li>
+  <li><strong>Scripts:</strong> a script's name is its class name, so spaces are dropped: <code>Enemy Ai</code> becomes <code>EnemyAi</code>. Renaming one renames its class, and objects that use it follow. A copy gets a class of its own, such as <code>PlayerCopy</code>. New scripts always go in <code>Scripts</code>, the only folder that is compiled, and scripts can't leave it.</li>
+  <li><strong>What can't change:</strong> the <code>Scripts</code>, <code>Scenes</code>, <code>Packages</code> and <code>Generated</code> folders and the project's own settings files stay where they are, and a <code>.cs</code> file generated from a visual script can only be changed through that script. Only scripts can go in <code>Scripts</code>, because a built game leaves that folder out.</li>
+  <li><strong>During play:</strong> files can't be cut, renamed, pasted or deleted while the game is playing or a model is being edited.</li>
+</ul>
 
 <h2>Keyboard shortcuts</h2>
 <p>On macOS use <kbd>Cmd</kbd>; on Windows and Linux use <kbd>Ctrl</kbd>.</p>
@@ -168,7 +188,8 @@
   <li>New cameras are orthographic. Scenes don't get a sun, since sprites aren't lit.</li>
 </ul>
 <p>A sprite's <strong>Pixels Per Unit</strong> sets its size: a 100 x 50 picture at 100 is 1 x 0.5 world units. Sprites show their own colors, tinted by <strong>Tint</strong>, with see-through pixels left see-through. Which sprite is in front comes from Z: nearer the camera (larger Z) is drawn on top. Scripts, audio and UI work as in 3D.</p>
-<p><strong>2D physics.</strong> In a 2D project <em>Add Component</em> offers <strong>Rigidbody 2D</strong>, <strong>Box Collider 2D</strong> and <strong>Circle Collider 2D</strong> in place of the 3D ones. A Rigidbody 2D moves only across the X-Y plane (its Z never changes) and turns only around Z; gravity pulls down Y. A new 2D collider is fitted to the object's sprite. Box colliders reach half a unit either side in Z (their <em>Depth</em>, 1), so sprites layered at slightly different Z still meet. Triggers, collision events, the collision blocks and raycasts all work with them. In scripts, <code>rigidbody2D</code> gives the body, with <code>Velocity2D</code>, <code>AngularVelocity2D</code>, <code>AddForce(Vector2)</code> and <code>AddTorque(float)</code>; it is also a <code>Rigidbody</code>, so <code>GetComponent&lt;Rigidbody&gt;()</code> finds it.</p>
+<p><strong>2D physics.</strong> In a 2D project <em>Add Component</em> offers <strong>Rigidbody 2D</strong>, <strong>Box Collider 2D</strong>, <strong>Circle Collider 2D</strong> and <strong>Polygon Collider 2D</strong> in place of the 3D ones. A Rigidbody 2D moves only across the X-Y plane (its Z never changes) and turns only around Z; gravity pulls down Y. A new 2D collider is fitted to the object's sprite. Box colliders reach half a unit either side in Z (their <em>Depth</em>, 1), so sprites layered at slightly different Z still meet. Triggers, collision events, the collision blocks and raycasts all work with them. In scripts, <code>rigidbody2D</code> gives the body, with <code>Velocity2D</code>, <code>AngularVelocity2D</code>, <code>AddForce(Vector2)</code> and <code>AddTorque(float)</code>; it is also a <code>Rigidbody</code>, so <code>GetComponent&lt;Rigidbody&gt;()</code> finds it.</p>
+<p><strong>Editing a polygon collider.</strong> Press <strong>Edit Points</strong> on the collider in the Inspector. In the scene view, drag a yellow square to move a point, drag a small dot on an edge to add a point there, and right-click a point to remove it. <strong>Add Point</strong> and <strong>Remove Point</strong> in the Inspector do the same without a mouse, and <strong>Remove Point</strong> removes the point you last touched, shown in orange. Press <strong>Stop Editing Points</strong> or Escape, or select something else, when you're done. Undo works on every change.</p>
 
 <h2 id="project-settings">Project settings</h2>
 <p><strong>File &gt; Project Settings…</strong> opens the settings that belong to this project. They are saved in <code>project-settings.json</code> in the project folder, so they travel with the project and with version control.</p>

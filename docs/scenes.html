@@ -59,7 +59,7 @@
 </table></div>
 
 <h2>Making scenes</h2>
-<p>Right-click anywhere in the Assets panel and choose <strong>Create Scene</strong>. The new <code>.empirescene</code> file goes in the folder being shown. Scenes in <code>Scenes/</code> are loaded from scripts by name (<code>SceneManager.LoadScene("Level2")</code>); scenes elsewhere are loaded by their path from the project folder.</p>
+<p>Right-click an empty part of the Assets panel and choose <strong>Create Scene</strong>. The new <code>.empirescene</code> file goes in the folder being shown. Scenes in <code>Scenes/</code> are loaded from scripts by name (<code>SceneManager.LoadScene("Level2")</code>); scenes elsewhere are loaded by their path from the project folder.</p>
 
 <h2>Finding objects from a script</h2>
 <pre><code class="language-cs">var player = Scene.FindObjectWithName("Player");          // first match, or null
@@ -68,6 +68,23 @@ List&lt;SceneObject&gt; coins = Scene.FindObjectsWithName("Coin");  // every mat
 // The scene that's playing, for anything else:
 foreach (var obj in SceneManager.World!.All) { ... }</code></pre>
 <p>Names are matched exactly, capital letters included, in Hierarchy order. Searching takes time in a big scene, so find what you need once in <code>Start</code> and keep it. For objects you know in advance, an <a href="scripting.html#inspector-fields">object field</a> dragged in from the Hierarchy is better still.</p>
+
+<h2>Prefabs</h2>
+<p>A prefab is an object saved as a file you can use again. It keeps the object and everything under it: their positions, rotations and scales, their components, and the values set for their scripts.</p>
+<ul>
+  <li><strong>To make one,</strong> right-click an object in the Hierarchy or the scene and choose <strong>Save as Prefab</strong>. It goes in the project's <code>Prefabs</code> folder as a <code>.pre</code> file named after the object. If that name is taken, it gets a number, so an earlier prefab is never replaced.</li>
+  <li><strong>To place one,</strong> drag it from the Assets panel onto the scene.</li>
+  <li><strong>To load one while the game plays,</strong> use <code>Models.Load</code>, below.</li>
+</ul>
+<p>Each copy is separate from the file: changing a prefab later doesn't change copies already in a scene. A script value that points at an object inside the prefab points at that copy's own object. One that points outside it only finds its object in the scene it was saved from.</p>
+
+<h2>Loading models and prefabs from a script</h2>
+<pre><code class="language-cs">var rock = Models.Load("Models/Rock.glb");     // a new object that draws the model
+var enemy = Models.Load("Prefabs/Enemy.pre");  // a new copy of the prefab, as it was saved
+
+enemy.Position = new Vector3(0, 2, 0);         // move it wherever you need it</code></pre>
+<p><code>Models.Load</code> takes <code>.glb</code>, <code>.gltf</code>, <code>.fbx</code>, <code>.obj</code> and <code>.pre</code> files, and returns the new object. The path starts at the project folder, and the same path works in a built game. The object is in the scene straight away, and its scripts' <code>Start</code> runs on the next frame. It stays until you <a href="scripting.html">destroy</a> it or the scene is replaced.</p>
+<p>A file that's missing, can't be read, or is outside the project is a script error: it stops the script that asked, says what was wrong, and the game carries on.</p>
 
 <h2>Scene files</h2>
 <p>Scenes are saved as readable JSON (<code>.empirescene</code>), so they diff well in version control. See <a href="file-formats.html#scene-files-empirescene">File formats</a> for the layout.</p>

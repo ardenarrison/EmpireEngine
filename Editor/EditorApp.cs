@@ -32,7 +32,7 @@ public enum BuildStage { Off, PickFolder, EnterName, Running, Done }
 // Play mode: components update each frame. Stopping restores the scene from the snapshot taken on Play.
 public sealed class EditorApp
 {
-    private readonly string _scenePath;
+    private string _scenePath;
     private readonly string _contentRoot;
     private readonly AssetCache _assets;
     private readonly EditorCamera _camera = new();
@@ -59,6 +59,7 @@ public sealed class EditorApp
     private readonly ModelBrowser _browser = new();
     private readonly AssetPanel _assetPanel;
     private readonly UiOverlay _uiOverlay = new();
+    private readonly PolygonEditor _polygonEditor = new();
     private bool _pickingParent;
     private bool _addingComponent;
     private readonly HashSet<string> _badModels = new(StringComparer.OrdinalIgnoreCase);
@@ -171,6 +172,8 @@ public sealed class EditorApp
         SaveGame.Directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "EmpireEditor", Path.GetFileName(Path.GetFullPath(contentRoot).TrimEnd('\\', '/')), "Saves");
         _assetPanel = new AssetPanel(contentRoot);
+        _assetPanel.Moved += FollowMove;
+        _assetPanel.Deleted += () => _inspectedScene = null;
         string sceneViewName = _is2D ? "2D view" : "3D view";
         _vc = new VisualScriptView(Path.Combine(contentRoot, "Scripts"))
         {
@@ -187,6 +190,7 @@ public sealed class EditorApp
                 foreach (var script in obj.Components.OfType<ScriptComponent>().Where(s => s.ScriptName == oldName))
                     script.ScriptName = newName;
         };
+        _assetPanel.SaveScripts = _code.SaveAll;
         _terminal = new Editor.Terminal.TerminalWindow(contentRoot);
         AppDomain.CurrentDomain.ProcessExit += (_, _) => _terminal.Shutdown();   // stops the shell, and anything running in it, with the editor
         _packages = new PackageManagerWindow(contentRoot);
@@ -202,6 +206,7 @@ public sealed class EditorApp
         Editor.Code.CodeEditorView.ExtraReferences = () => Packages.Enabled(_contentRoot)
             .Select(id => Packages.DllPath(_contentRoot, id)).Where(File.Exists);
         _scene = SceneSerializer.Load(scenePath);
+        _assetPanel.OpenSceneJson = () => SceneSerializer.ToJson(_scene);
         if (!_is2D) EnsureSun();   // sprites aren't lit, so a 2D scene doesn't need a sun
         EnsureCamera();
         _savedJson = SceneSerializer.ToJson(_scene);
@@ -295,6 +300,7 @@ public sealed class EditorApp
         double lastTime = 0;
         bool prevPlay = false;
         KeyboardInput.Bind(window);
+        GamepadInput.Bind();
         // Scripts see the mouse in the scene view, measured from its corner, and the wheel through ImGui (which owns
         // the window's scroll callback).
         MouseInput.Bind(window, () => SceneArea(ctx), () => UiInput.Current.MouseWheel);
@@ -360,6 +366,7 @@ public sealed class EditorApp
                 else if (_confirmingExit) CancelExit();
                 else if (_gui.IsTyping) { }   // the field being typed in uses Escape to stop typing
                 else if (CloseTopDialog()) { }
+                else if (_polygonEditor.Active) _polygonEditor.End();
                 else if (_vcMode) { if (!_vc.IsTyping) _vcMode = false; }
                 else if (_codeMode) { }   // the code view uses Escape itself; leave with its 3D view button
                 else if (_modelMode) { if (!_gui.IsTyping && !_modeling.CancelTool()) LeaveModeling(); }
@@ -391,7 +398,7 @@ public sealed class EditorApp
             bool zDown = window.GetKey(GlfwKey.Z) == GlfwKeyAction.Press;
             bool undoDown = shortcut && zDown && !shift;
             bool redoDown = shortcut && ((zDown && shift) || window.GetKey(GlfwKey.Y) == GlfwKeyAction.Press);
-            bool canUndo = _mode == EditorMode.Edit && !FullView && !_gui.IsTyping && !_gizmo.IsDragging && !_modeling.IsDragging;
+            bool canUndo = _mode == EditorMode.Edit && !FullView && !_gui.IsTyping && !_gizmo.IsDragging && !_polygonEditor.Dragging && !_modeling.IsDragging;
             if (canUndo && undoDown && !prevUndo)
             {
                 if (_modeling.Editing) _modeling.Undo();
@@ -524,22 +531,24 @@ public sealed class EditorApp
 
             bool sculptingNow = _mode == EditorMode.Edit && SceneTools && !_uiMode &&
                                 UpdateTerrainSculpt(window, uiCanvas, viewProj, SceneArea(ctx), uiWantsMouse, dt);
+            if (_mode != EditorMode.Edit || !SceneTools || _uiMode) _polygonEditor.End();
+            _polygonEditor.Update(window, uiCanvas, _selected, viewProj, SceneArea(ctx), uiWantsMouse);
             if (_mode == EditorMode.Edit && _modeling.Editing)
                 _modeling.Update(window, uiCanvas, viewProj, eye, SceneArea(ctx), uiWantsMouse, _settings.MoveSnap, _settings.ScaleSnap);
-            else if (_mode == EditorMode.Edit && SceneTools && !_uiMode && !sculptingNow)
+            else if (_mode == EditorMode.Edit && SceneTools && !_uiMode && !sculptingNow && !_polygonEditor.Active)
             {
                 _gizmo.MoveSnap = _settings.MoveSnap;
                 _gizmo.ScaleSnap = _settings.ScaleSnap;
                 _gizmo.Update(window, uiCanvas, _selected, SelectedExtras(), viewProj, eye, SceneArea(ctx), uiWantsMouse);
             }
             UpdateSceneClick(window, viewProj, eye, SceneArea(ctx), uiWantsMouse,
-                canStart: _mode == EditorMode.Edit && !FullView && !_uiMode && !sculptingNow && !_gizmo.IsDragging && !_modeling.Moving &&
+                canStart: _mode == EditorMode.Edit && !FullView && !_uiMode && !sculptingNow && !_polygonEditor.OverHandle && !_gizmo.IsDragging && !_modeling.Moving &&
                           !_gui.AnyActive && _hierDragId is null);
             uiCanvas.Layer = Canvas2D.PanelLayer;
 
             // An edit becomes an undo step once it has settled: no button held, no field or drag in progress.
             bool settled = window.GetMouseButton(GlfwMouseButton.Left) != GlfwButtonAction.Press &&
-                           !_gui.AnyActive && !_gizmo.IsDragging && _hierDragId is null;
+                           !_gui.AnyActive && !_gizmo.IsDragging && !_polygonEditor.Dragging && _hierDragId is null;
             if (_mode == EditorMode.Edit && settled)
                 _history.Record(SceneSerializer.ToJson(_scene));
 
@@ -549,6 +558,8 @@ public sealed class EditorApp
                     DropSoundIntoScene(drop.ModelPath, drop.Cursor, ctx.SceneViewport, viewProj);
                 else if (SpriteRenderer.IsSpriteImage(drop.ModelPath))
                     DropSpriteIntoScene(drop.ModelPath, drop.Cursor, ctx.SceneViewport, viewProj);
+                else if (SceneSerializer.IsPrefab(drop.ModelPath))
+                    DropPrefabIntoScene(drop.ModelPath, drop.Cursor, ctx.SceneViewport, viewProj);
                 else
                     DropModelIntoScene(renderer, drop.ModelPath, drop.Cursor, ctx.SceneViewport, viewProj);
             }
@@ -628,6 +639,8 @@ public sealed class EditorApp
         DrawHierarchy(window);
         DrawToolButtons();
         DrawInspector();
+        _assetPanel.CanChange = _mode == EditorMode.Edit && !_modelMode;
+        _assetPanel.OpenScene = Path.GetFullPath(_scenePath);
         _assetPanel.Draw(_gui);
 
         if (_browser.Draw(_gui) is { } picked)
@@ -704,6 +717,7 @@ public sealed class EditorApp
             if (editing && g.BeginContextMenu($"object:{obj.Id:N}", forLastItem: true))
             {
                 if (g.MenuItem("Duplicate")) DuplicateSelected();
+                if (g.MenuItem("Save as Prefab")) SaveSelectedAsPrefab();
                 g.EndPopup();
             }
         }
@@ -740,6 +754,7 @@ public sealed class EditorApp
             if (g.MenuItem("Checkbox")) AddUi(UiKind.Checkbox);
             if (g.MenuItem("Dropdown")) AddUi(UiKind.Dropdown);
             if (g.MenuItem("Bar")) AddUi(UiKind.Bar);
+            if (g.MenuItem("Text Label")) AddUi(UiKind.Label);
             g.EndPopup();
         }
 
@@ -747,6 +762,7 @@ public sealed class EditorApp
         if (editing && g.BeginPopup("scene-object"))
         {
             if (g.MenuItem("Duplicate")) DuplicateSelected();
+            if (g.MenuItem("Save as Prefab")) SaveSelectedAsPrefab();
             g.EndPopup();
         }
 
@@ -871,6 +887,7 @@ public sealed class EditorApp
             Rigidbody => "Rigidbody",
             BoxCollider2D => "Box Collider 2D",
             CircleCollider2D => "Circle Collider 2D",
+            PolygonCollider2D => "Polygon Collider 2D",
             BoxCollider => "Box Collider",
             SphereCollider => "Sphere Collider",
             MeshCollider => "Mesh Collider",
@@ -929,6 +946,9 @@ public sealed class EditorApp
                 break;
             case CircleCollider2D circle:
                 DrawCircleColliderBody(circle, editing);
+                break;
+            case PolygonCollider2D polygon:
+                DrawPolygonColliderBody(obj, polygon, editing);
                 break;
             case SphereCollider sphere:
                 DrawSphereColliderBody(sphere, editing);
@@ -2179,6 +2199,40 @@ public sealed class EditorApp
         DrawColliderMaterial(circle, editing);
     }
 
+    private void DrawPolygonColliderBody(SceneObject obj, PolygonCollider2D polygon, bool editing)
+    {
+        var g = _gui;
+        var center = new float2(polygon.Center.X, polygon.Center.Y);
+        if (g.DragFloat2("Center", ref center, 0.01f) && editing)
+            polygon.Center = new Vector3(center.X, center.Y, polygon.Center.Z);
+
+        bool active = _polygonEditor.IsEditing(obj, polygon);
+        if (g.Button(active ? "Stop Editing Points" : "Edit Points", enabled: editing, highlighted: active))
+        {
+            if (active) _polygonEditor.End();
+            else _polygonEditor.Begin(obj, polygon);
+        }
+        if (active)
+            g.TextWrapped("Drag a point to move it, or a dot on an edge to add one. Right-click a point to remove it.", Gui.DimColor);
+
+        var points = polygon.Points;
+        if (Engine.Core.Physics.Polygon2D.Problem(points) is { } problem)
+            g.TextWrapped(problem, Gui.ErrorColor);
+        for (int i = 0; i < points.Count; i++)
+        {
+            var point = new float2(points[i].X, points[i].Y);
+            if (g.DragFloat2($"Point {i + 1}", ref point, 0.01f) && editing)
+                points[i] = new Vector2(point.X, point.Y);
+        }
+        if (g.Button("Add Point", enabled: editing) && points.Count > 0)
+            points.Add((points[^1] + points[0]) / 2f);
+        g.SameLine();
+        if (g.Button("Remove Point", enabled: editing && points.Count > 3))
+            points.RemoveAt(_polygonEditor.ChosenPoint >= 0 && _polygonEditor.ChosenPoint < points.Count ? _polygonEditor.ChosenPoint : points.Count - 1);
+
+        DrawColliderMaterial(polygon, editing);
+    }
+
     private void DrawSphereColliderBody(SphereCollider sphere, bool editing)
     {
         var g = _gui;
@@ -2257,7 +2311,7 @@ public sealed class EditorApp
     }
 
     // A new collider is fitted to the object's model when it has one, otherwise it is a unit shape.
-    private void AddCollider(SceneObject obj, bool sphere, bool flat = false)
+    private void AddCollider(SceneObject obj, bool sphere, bool flat = false, bool polygon = false)
     {
         Vector3? min = null, max = null;
         if (obj.Components.OfType<SpriteRenderer>().FirstOrDefault() is { } sprite && _sprites.Model(sprite) is { } spriteModel)
@@ -2284,7 +2338,12 @@ public sealed class EditorApp
 
         var center = min is { } lo && max is { } hi ? (lo + hi) / 2f : Vector3.Zero;
         var size = min is { } lo2 && max is { } hi2 ? Vector3.Max(hi2 - lo2, new Vector3(0.001f)) : Vector3.One;
-        if (flat && sphere)
+        if (polygon)
+        {
+            var half = new Vector2(size.X, size.Y) / 2f;
+            obj.Components.Add(new PolygonCollider2D { Center = center with { Z = 0f }, Points = [-half, new(half.X, -half.Y), half, new(-half.X, half.Y)] });
+        }
+        else if (flat && sphere)
             obj.Components.Add(new CircleCollider2D { Center = center with { Z = 0f }, Radius = MathF.Max(size.X, size.Y) / 2f });
         else if (flat)
             obj.Components.Add(new BoxCollider2D { Center = center with { Z = 0f }, Size = new Vector2(size.X, size.Y) });
@@ -2330,6 +2389,14 @@ public sealed class EditorApp
                     var corners = new[] { c + new Vector3(-h.X, -h.Y, 0), c + new Vector3(h.X, -h.Y, 0), c + new Vector3(h.X, h.Y, 0), c + new Vector3(-h.X, h.Y, 0) };
                     for (int i = 0; i < 4; i++)
                         DrawWorldLine(draw, world, viewProj, size, corners[i], corners[(i + 1) % 4], color, thickness);
+                }
+                else if (collider is PolygonCollider2D polygon)
+                {
+                    // Red when it can't collide, so a shape that has gone wrong shows up where it is being drawn.
+                    var outline = Engine.Core.Physics.Polygon2D.Problem(polygon.Points) is null ? color : new float4(1f, 0.25f, 0.2f, 1f);
+                    var points = polygon.Points;
+                    for (int i = 0; i < points.Count; i++)
+                        DrawWorldLine(draw, world, viewProj, size, polygon.Center + new Vector3(points[i], 0f), polygon.Center + new Vector3(points[(i + 1) % points.Count], 0f), outline, thickness);
                 }
                 else if (collider is CircleCollider2D circle && Matrix4x4.Decompose(world, out var cScale, out var cRotation, out _))
                 {
@@ -2726,6 +2793,7 @@ public sealed class EditorApp
                 Add("Rigidbody 2D", () => obj.Components.Add(new Rigidbody2D()));
             Add("Box Collider 2D", () => AddCollider(obj, sphere: false, flat: true));
             Add("Circle Collider 2D", () => AddCollider(obj, sphere: true, flat: true));
+            Add("Polygon Collider 2D", () => AddCollider(obj, sphere: false, flat: true, polygon: true));
         }
         else
         {
@@ -2771,6 +2839,7 @@ public sealed class EditorApp
             UiKind.TextField => "Text Field",
             UiKind.Checkbox => "Checkbox",
             UiKind.Dropdown => "Dropdown",
+            UiKind.Label => "Text",
             _ => "Bar",
         },
         H = kind == UiKind.Bar ? 0.03f : 0.07f,
@@ -2998,7 +3067,7 @@ public sealed class EditorApp
     }
 
     // World point to screen pixels inside the scene rectangle. Returns false for points behind the camera.
-    private static bool TryProject(Vector3 point, Matrix4x4 viewProj, float4 size, out float2 screen)
+    internal static bool TryProject(Vector3 point, Matrix4x4 viewProj, float4 size, out float2 screen)
     {
         var clip = Vector4.Transform(new Vector4(point, 1f), viewProj);
         if (clip.W <= 0.01f)
@@ -3626,6 +3695,46 @@ public sealed class EditorApp
         Console.WriteLine($"Placed {relPath} in the scene as a sprite.");
     }
 
+    // Places a copy of a prefab dragged from the asset panel onto the scene, at the drop point.
+    private void DropPrefabIntoScene(string relPath, float2 cursor, float4 viewport, Matrix4x4 viewProj)
+    {
+        if (DropPoint(cursor, viewport, viewProj) is not { } spawn)
+            return;
+        try
+        {
+            var root = SceneSerializer.AddPrefab(_scene, Path.Combine(_contentRoot, relPath));
+            root.Position = spawn;
+            _selectedId = root.Id;
+            Console.WriteLine($"Placed {relPath} in the scene.");
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or NotSupportedException or System.Text.Json.JsonException)
+        {
+            Console.WriteLine($"Could not load {relPath}: {ex.Message}");
+        }
+    }
+
+    // Saves the selected object and everything under it in the project's Prefabs folder, under a name that isn't taken.
+    private void SaveSelectedAsPrefab()
+    {
+        if (_selected is not { } selected) return;
+        string name = ProjectBuilder.SanitizeName(selected.Name);
+        if (name.Length == 0) name = "Prefab";
+        string folder = Path.Combine(_contentRoot, "Prefabs");
+        string file = Path.Combine(folder, name + SceneSerializer.PrefabExtension);
+        for (int i = 2; File.Exists(file); i++)
+            file = Path.Combine(folder, $"{name} {i}{SceneSerializer.PrefabExtension}");
+        try
+        {
+            SceneSerializer.SavePrefab(selected, file);
+            _assetPanel.Reload();
+            Console.WriteLine($"Saved {Path.GetRelativePath(_contentRoot, file)}.");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Console.WriteLine($"Could not save the prefab: {ex.Message}");
+        }
+    }
+
     // An empty object with a Sprite Renderer, picked from the hierarchy's right-click menu.
     private void AddSpriteObject()
     {
@@ -3717,20 +3826,8 @@ public sealed class EditorApp
     private void AddUi(UiKind kind)
     {
         int n = _scene.All.Count(o => o.Components.OfType<UiElement>().Any()) + 1;
-        var ui = new UiElement
-        {
-            Kind = kind,
-            Label = kind switch
-            {
-                UiKind.Button => "Button",
-                UiKind.TextField => "Text Field",
-                UiKind.Checkbox => "Checkbox",
-                UiKind.Dropdown => "Dropdown",
-                _ => "Bar",
-            },
-            Y = 0.1f + 0.09f * ((n - 1) % 8),
-            H = kind == UiKind.Bar ? 0.03f : 0.07f,
-        };
+        var ui = NewUiElement(kind);
+        ui.Y = 0.1f + 0.09f * ((n - 1) % 8);
         var obj = new SceneObject { Name = $"{kind} {n}" };
         obj.Components.Add(ui);
         _scene.Add(obj);
@@ -3742,7 +3839,7 @@ public sealed class EditorApp
     {
         var g = _gui;
         string label = ui.Label;
-        if (g.InputText("Label", ref label) && editing)
+        if (g.InputText(ui.Kind == UiKind.Label ? "Text" : "Label", ref label) && editing)
             ui.Label = label;
 
         float x = ui.X, y = ui.Y, w = ui.W, h = ui.H;
@@ -3754,14 +3851,14 @@ public sealed class EditorApp
         bool visible = ui.Visible;
         if (g.Checkbox("Visible", ref visible) && editing)
             ui.Visible = visible;
-        if (ui.Kind != UiKind.Bar)
+        if (ui.Kind is not (UiKind.Bar or UiKind.Label))
         {
             bool interactable = ui.Interactable;
             if (g.Checkbox("Interactable", ref interactable) && editing)
                 ui.Interactable = interactable;
         }
 
-        if (ui.Kind is UiKind.Button or UiKind.Dropdown)
+        if (ui.Kind is UiKind.Button or UiKind.Dropdown or UiKind.Label)
         {
             bool center = ui.CenterText;
             if (g.Checkbox("Center Text", ref center) && editing)
@@ -4093,6 +4190,20 @@ public sealed class EditorApp
         _optionText.Clear();       // reload dropdown option text from the restored scene
     }
 
+    // The open scene, and what undo remembers of it, follow a file that moved. The files on disk already have.
+    private void FollowMove(ProjectFiles.Moved moved)
+    {
+        string Change(string json) => ProjectFiles.Rewrite(json, moved);
+        string scene = Path.GetRelativePath(_contentRoot, _scenePath).Replace('\\', '/');
+        if (ProjectFiles.MovedPath(scene, moved.OldPath, moved.NewPath) is { } newScene)
+            _scenePath = Path.Combine(_contentRoot, newScene);
+        string current = Change(SceneSerializer.ToJson(_scene));
+        _savedJson = Change(_savedJson);
+        _history.Rewrite(Change);
+        ApplyHistory(current, "Move");
+        _inspectedScene = null;
+    }
+
     private void TogglePlay()
     {
         if (_mode == EditorMode.Edit)
@@ -4236,7 +4347,7 @@ public sealed class EditorApp
         var cursor = window.CursorPos;
         var mouse = new float2((float)cursor.X, (float)cursor.Y);
         bool inside = mouse.X >= area.X && mouse.Y >= area.Y && mouse.X <= area.X + area.Z && mouse.Y <= area.Y + area.W;
-        UpdateSceneRightClick(window, viewProj, eye, area, mouse, inside && !uiWantsMouse);
+        UpdateSceneRightClick(window, viewProj, eye, area, mouse, inside && !uiWantsMouse && !_polygonEditor.OverHandle);
 
         if (pressed)
         {

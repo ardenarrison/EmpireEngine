@@ -106,6 +106,14 @@
   </tbody>
 </table>
 
+<h2>Models</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Member</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>static SceneObject Load(string path)</code></td><td>Adds a new object for a model (<code>.glb</code>, <code>.gltf</code>, <code>.fbx</code>, <code>.obj</code>), or a new copy of a prefab (<code>.pre</code>), to the playing scene, and returns it. The path starts at the project folder. See <a href="scenes.html">Scenes</a>.</td></tr>
+  </tbody>
+</table></div>
+
 <h2>Input</h2>
 <p><a href="input.html">Guide →</a></p>
 <table>
@@ -113,7 +121,10 @@
   <tbody>
     <tr><td><code>GetKey</code>, <code>GetKeyDown</code>, <code>GetKeyUp</code></td><td>Held / went down this frame / came up this frame. Take <code>Keys</code> or a name.</td></tr>
     <tr><td><code>GetMouseButton</code>, <code>GetMouseButtonDown</code>, <code>GetMouseButtonUp</code></td><td>Take <code>MouseButton</code>, 0–2, or "Left"/"Right"/"Middle"</td></tr>
-    <tr><td><code>float GetAxis(string)</code></td><td>"Horizontal", "Vertical", "Mouse X", "Mouse Y", "Mouse ScrollWheel"</td></tr>
+    <tr><td><code>float GetAxis(string)</code></td><td>"Horizontal", "Vertical" (keys, and the first controller's left stick and pad), "Mouse X", "Mouse Y", "Mouse ScrollWheel"</td></tr>
+    <tr><td><code>GetGamepadButton</code>, <code>GetGamepadButtonDown</code>, <code>GetGamepadButtonUp</code></td><td>Take a <code>GamepadButton</code> (South, East, West, North, bumpers, pad and so on) and a controller number, 0 by default. See <a href="input.html#controllers">Controllers</a></td></tr>
+    <tr><td><code>float GetGamepadAxis(GamepadAxis, int gamepad = 0)</code></td><td>Sticks from −1 to 1, up positive; triggers from 0 to 1</td></tr>
+    <tr><td><code>IsGamepadConnected</code>, <code>GetGamepadName</code>, <code>gamepadCount</code></td><td>Which controllers are there</td></tr>
     <tr><td><code>Vector2 mousePosition</code>, <code>mouseDelta</code>, <code>screenSize</code></td><td>Game-view points, y down</td></tr>
     <tr><td><code>float mouseScrollDelta</code></td><td>Up is positive</td></tr>
     <tr><td><code>bool cursorLocked</code>, <code>cursorVisible</code></td><td>Mouse-look and hiding the cursor</td></tr>
@@ -223,7 +234,7 @@
 <p><code>GetHeight(owner, worldPos)</code>, <code>HeightAt</code>, <code>NormalAt</code>, <code>LayerAt</code>, <code>Sculpt</code>, <code>Generate</code>, <code>Flatten</code>, <code>SmoothAll</code>, <code>GetHeight01</code>, <code>SetHeight01</code>, <code>PointAt</code>, <code>Raycast</code>, <code>Resize</code>, and the layer methods. <a href="terrain.html#from-scripts">Guide →</a></p>
 
 <h2>UI controls</h2>
-<p><code>Button</code> (<code>OnClick</code>, <code>Clicked</code>, <code>Click()</code>), <code>TextField</code> (<code>Text</code>, <code>OnChanged</code>, <code>OnSubmit</code>, <code>IsFocused</code>), <code>Checkbox</code> (<code>IsChecked</code>, <code>OnChanged</code>), <code>Dropdown</code> (<code>Selected</code>, <code>SelectedText</code>, <code>Options</code>, <code>OnChanged</code>, <code>IsOpen</code>) and <code>Bar</code> (<code>Value</code>), all with <code>Label</code>, <code>Visible</code>, <code>Interactable</code>, <code>X</code>, <code>Y</code>, <code>Width</code>, <code>Height</code>. <code>UiControl.From&lt;T&gt;(obj)</code> finds one on an object. <code>GameUi.PointerOverUi</code> and <code>GameUi.IsTyping</code> tell the rest of the game what the UI is doing. <a href="game-ui.html#using-ui-from-scripts">Guide →</a></p>
+<p><code>Button</code> (<code>OnClick</code>, <code>Clicked</code>, <code>Click()</code>), <code>TextField</code> (<code>Text</code>, <code>OnChanged</code>, <code>OnSubmit</code>, <code>IsFocused</code>), <code>Checkbox</code> (<code>IsChecked</code>, <code>OnChanged</code>), <code>Dropdown</code> (<code>Selected</code>, <code>SelectedText</code>, <code>Options</code>, <code>OnChanged</code>, <code>IsOpen</code>) and <code>Bar</code> (<code>Value</code>), <code>TextLabel</code> (<code>Text</code>), all with <code>Label</code>, <code>Visible</code>, <code>Interactable</code>, <code>X</code>, <code>Y</code>, <code>Width</code>, <code>Height</code>. <code>UiControl.From&lt;T&gt;(obj)</code> finds one on an object. <code>GameUi.PointerOverUi</code> and <code>GameUi.IsTyping</code> tell the rest of the game what the UI is doing. <a href="game-ui.html#using-ui-from-scripts">Guide →</a></p>
 
 <h2>Attributes</h2>
 <table>
@@ -245,7 +256,7 @@
     <tr><td><code>AntiAliasingMode</code></td><td>None, Msaa, Fxaa, Smaa</td></tr>
     <tr><td><code>AudioRolloffMode</code></td><td>Logarithmic, Linear</td></tr>
     <tr><td><code>TerrainBrush</code></td><td>Raise, Lower, Smooth, Flatten, Paint, Erase</td></tr>
-    <tr><td><code>UiKind</code></td><td>Button, TextField, Checkbox, Dropdown, Bar</td></tr>
+    <tr><td><code>UiKind</code></td><td>Button, TextField, Checkbox, Dropdown, Bar, Label</td></tr>
     <tr><td><code>ParticleShapeType</code></td><td>Cone, Sphere, Hemisphere, Box, Circle, Point</td></tr>
     <tr><td><code>ParticleSimulationSpace</code>, <code>ParticleBlend</code>, <code>ParticleSprite</code></td><td>Local/World; Alpha/Additive; SoftCircle/Circle/Square</td></tr>
   </tbody>

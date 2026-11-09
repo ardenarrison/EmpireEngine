@@ -1702,6 +1702,79 @@ Directory.CreateDirectory(Path.Combine(projectDir, "Scenes"));
     Check(!Physics.Raycast(new Vector3(-6f, 60f, 5f), -Vector3.UnitY, out _, 100f), "a terrain with Collide off is not hit");
 }
 
+// ---- Controllers ----------------------------------------------------------------------------------------------------------
+{
+    var padScene = new Scene();
+    ScriptRuntime.Load(padScene, (Assembly?)null);
+    var pads = new List<GamepadState>();
+    GamepadState Pad(string name, float[]? axes = null, params GamepadButton[] held)
+    {
+        var buttons = new bool[Enum.GetValues<GamepadButton>().Length];
+        foreach (var button in held) buttons[(int)button] = true;
+        return new GamepadState(name, buttons, axes ?? new float[6]);
+    }
+    Input.GamepadProvider = () => pads.ToList();
+    void Frame() => SceneUpdate.Update(padScene, 1f / 60f);
+
+    Frame();
+    Check(Input.gamepadCount == 0 && !Input.IsGamepadConnected() && Input.GetGamepadName() == "" && !Input.GetGamepadButton(GamepadButton.South) &&
+          Input.GetGamepadAxis(GamepadAxis.LeftX) == 0f, "with no controller there is nothing to read, and nothing fails");
+
+    pads.Add(Pad("Nintendo Switch Pro Controller"));
+    Frame();
+    Check(Input.gamepadCount == 1 && Input.IsGamepadConnected(0) && !Input.IsGamepadConnected(1) && Input.GetGamepadName() == "Nintendo Switch Pro Controller",
+          "a connected controller is numbered from 0, with its name");
+
+    pads[0] = Pad("Nintendo Switch Pro Controller", null, GamepadButton.East);
+    Frame();
+    Check(Input.GetGamepadButtonDown(GamepadButton.East) && Input.GetGamepadButton(GamepadButton.East) && !Input.GetGamepadButtonUp(GamepadButton.East) &&
+          !Input.GetGamepadButton(GamepadButton.South), "a button press is seen on the frame it happens, and only that button");
+    Frame();
+    Check(!Input.GetGamepadButtonDown(GamepadButton.East) && Input.GetGamepadButton(GamepadButton.East), "and is held after that");
+    pads[0] = Pad("Nintendo Switch Pro Controller");
+    Frame();
+    Check(Input.GetGamepadButtonUp(GamepadButton.East) && !Input.GetGamepadButton(GamepadButton.East), "letting go is seen too");
+
+    pads[0] = Pad("Nintendo Switch Pro Controller", [0.1f, -0.1f, 1f, -0.575f, 0.5f, 2f]);
+    Frame();
+    Check(Input.GetGamepadAxis(GamepadAxis.LeftX) == 0f && Input.GetGamepadAxis(GamepadAxis.LeftY) == 0f, "a stick resting a little off center reads 0");
+    Check(Input.GetGamepadAxis(GamepadAxis.RightX) == 1f && MathF.Abs(Input.GetGamepadAxis(GamepadAxis.RightY) + 0.5f) < 1e-5f,
+          "past the dead zone a stick grows smoothly from 0 to 1");
+    Check(Input.GetGamepadAxis(GamepadAxis.LeftTrigger) == 0.5f && Input.GetGamepadAxis(GamepadAxis.RightTrigger) == 1f, "triggers go from 0 to 1, and never past it");
+
+    pads[0] = Pad("Nintendo Switch Pro Controller", [1f, 0f, 0f, 0f, 0f, 0f], GamepadButton.DpadUp);
+    Frame();
+    Check(Input.GetAxis("Horizontal") == 1f && Input.GetAxis("Vertical") == 1f, "Horizontal and Vertical read the first controller's left stick and pad");
+    Input.Provider = key => key == Keys.D;
+    Frame();
+    Check(Input.GetAxis("Horizontal") == 1f, "and a key held with the stick doesn't go past 1");
+    Input.Provider = key => key == Keys.A;
+    Frame();
+    Check(Input.GetAxis("Horizontal") == 0f, "while a key the other way cancels it out");
+    Input.Provider = _ => false;
+
+    pads.Add(Pad("Second", null, GamepadButton.North));
+    Frame();
+    Check(Input.gamepadCount == 2 && Input.GetGamepadButton(GamepadButton.North, 1) && !Input.GetGamepadButton(GamepadButton.North, 0) && Input.GetGamepadName(1) == "Second",
+          "a second controller is read by its number");
+    pads.RemoveAt(1);
+    Frame();
+    Check(Input.gamepadCount == 1 && Input.GetGamepadButtonUp(GamepadButton.North, 1) && !Input.GetGamepadButton(GamepadButton.North, 1),
+          "a controller that goes away lets go of its buttons");
+
+    var shared = Pad("Reused");
+    pads.Clear();
+    pads.Add(shared);
+    Frame();
+    shared.Buttons[(int)GamepadButton.South] = true;   // the same arrays, changed in place
+    Frame();
+    Check(Input.GetGamepadButtonDown(GamepadButton.South), "a press is seen even when the controller's state is changed in place");
+
+    ScriptRuntime.Load(padScene, (Assembly?)null);
+    Check(Input.gamepadCount == 0, "a new game starts with nothing read yet");
+    Input.GamepadProvider = () => [];
+}
+
 // ---- Mouse input and shadow settings ---------------------------------------------------------------------
 {
     var mouseScene = new Scene();
@@ -2074,6 +2147,7 @@ Directory.CreateDirectory(Path.Combine(projectDir, "Scenes"));
             public Checkbox sound;
             public Dropdown mode;
             public Bar health;
+            public TextLabel score;
             public List<Button> extras = new();
             public Button wrongKind;
 
@@ -2092,6 +2166,7 @@ Directory.CreateDirectory(Path.Combine(projectDir, "Scenes"));
                 sound.OnChanged += on => soundOn = on;
                 mode.OnChanged += index => picked = index;
                 health.Value = 0.25f;
+                score.Text = "Score: 10";
             }
         }
         """);
@@ -2121,6 +2196,8 @@ Directory.CreateDirectory(Path.Combine(projectDir, "Scenes"));
     var healthObj = AddUiObject("Health", UiKind.Bar, 0.5f, 0.5f);
     var quitObj = AddUiObject("Quit", UiKind.Button, 0.5f, 0.7f);
     quitObj.Components.OfType<UiElement>().Single().Interactable = false;
+    var scoreObj = AddUiObject("Score", UiKind.Label, 0.1f, 0.1f);      // right over Play, and drawn on top of it
+    var captionObj = AddUiObject("Caption", UiKind.Label, 0.75f, 0.85f);
     var menuObj = new SceneObject { Name = "Menu" };
     menuObj.Components.Add(new ScriptComponent
     {
@@ -2132,6 +2209,7 @@ Directory.CreateDirectory(Path.Combine(projectDir, "Scenes"));
             ["sound"] = ScriptFields.ObjectJson(soundObj),
             ["mode"] = ScriptFields.ObjectJson(modeObj),
             ["health"] = ScriptFields.ObjectJson(healthObj),
+            ["score"] = ScriptFields.ObjectJson(scoreObj),
             ["extras"] = $"[{ScriptFields.ObjectJson(quitObj)},{ScriptFields.ObjectJson(playObj)}]",
             ["wrongKind"] = ScriptFields.ObjectJson(nameObj),   // a text field dropped on a Button slot
         },
@@ -2235,6 +2313,21 @@ Directory.CreateDirectory(Path.Combine(projectDir, "Scenes"));
     ClickAt(160, 67);
     Check(Get<int>("clicks") == 2 && !GameUi.PointerOverUi, "the UI ignores the mouse while the cursor is locked for mouse-look");
     Input.cursorLocked = false;
+
+    // A text label: the clicks above went through the one lying over Play.
+    Check(uiFields.Any(f => f.Name == "score" && f.RequiredUi == UiKind.Label) && Get<TextLabel>("score").Object == uiPlaying.Find(scoreObj.Id), "a TextLabel field is a slot for a UI text label");
+    Check(El(scoreObj).Label == "Score: 10" && Get<TextLabel>("score").Label == "Score: 10", "a script changes a label's text");
+    var caption = UiControl.From<TextLabel>(uiPlaying.Find(captionObj.Id))!;
+    caption.Text = null!;
+    Check(caption.Text == "" && UiControl.From<TextLabel>(uiPlaying.Find(playObj.Id)) is null && UiControl.IsControlType(typeof(TextLabel)) && UiControl.KindOf(typeof(TextLabel)) == UiKind.Label,
+          "a label's text is never null, and only a label is a TextLabel");
+    mouse = mouse with { Position = new Vector2(640, 400) };
+    Frame();
+    Check(GameUi.Hovered is null && !GameUi.PointerOverUi, "the mouse over a label isn't over the UI, so a click can reach the game");
+    ClickAt(160, 67);
+    Check(Get<int>("clicks") == 3 && GameUi.Pressed is null, "a button under a label still gets its clicks");
+    var labelSaved = SceneSerializer.FromJson(SceneSerializer.ToJson(uiPlaying)).Find(scoreObj.Id)!.Components.OfType<UiElement>().Single();
+    Check(labelSaved.Kind == UiKind.Label && labelSaved.Label == "Score: 10", "a label and its text survive saving");
 
     var menuSaved = ScriptFields.Capture(menu);
     Check(menuSaved["play"] == ScriptFields.ObjectJson(playObj) &&
@@ -3376,6 +3469,312 @@ if (!OperatingSystem.IsWindows())
           "functions that call each other round and round are an error");
 }
 
+// The Assets panel's commands: creating, renaming, copying and moving files, with what points at them following.
+{
+    string project = Path.Combine(Path.GetTempPath(), "empire-files-" + Guid.NewGuid().ToString("N"));
+    foreach (var folder in new[] { "Models/Trees", "ModelsOld", "Scenes", "Scripts", "Prefabs", "Packages/Water", "Empty" })
+        Directory.CreateDirectory(Path.Combine(project, folder));
+    string At(string relative) => Path.Combine(project, relative);
+    foreach (var file in new[] { "Models/Rock.glb", "Models/Trees/Oak.glb", "ModelsOld/Rock.glb", "Packages/Water/Water.cs", "Empty/.hidden" })
+        File.WriteAllText(At(file), "bytes");
+    File.WriteAllText(At("project.empire"), "{\n  \"name\": \"Files\",\n  \"startScene\": \"Scenes/Main.empirescene\"\n}");
+    File.WriteAllText(At("Scripts/Player.cs"), "public class Player : Behaviour { }\npublic class PlayerHelper { }\n");
+    File.WriteAllText(At("Scripts/Spin.visualcode"), "{}");
+    File.WriteAllText(At("Scripts/Spin.cs"), "// generated\npublic class Spin : Behaviour { }\n");
+
+    var main = new Scene { Name = "Main" };
+    var rockObject = new SceneObject { Name = "Models/Rock.glb is the label" };
+    rockObject.Components.Add(new MeshRenderer { Model = "Models/Rock.glb" });
+    rockObject.Components.Add(new ScriptComponent { ScriptName = "Player", Fields = { ["path"] = "\"Models/Rock.glb\"", ["other"] = "\"Models/RockFace.glb\"" } });
+    var oakObject = new SceneObject { Name = "Oak" };
+    oakObject.Components.Add(new MeshRenderer { Model = "Models/Trees/Oak.glb" });
+    oakObject.Components.Add(new ScriptComponent { ScriptName = "PlayerHelper" });
+    var oldObject = new SceneObject { Name = "Old" };
+    oldObject.Components.Add(new MeshRenderer { Model = "ModelsOld/Rock.glb" });
+    main.Add(rockObject);
+    main.Add(oakObject);
+    main.Add(oldObject);
+    SceneSerializer.Save(main, At("Scenes/Main.empirescene"));
+    SceneSerializer.SavePrefab(rockObject, At("Prefabs/Rock.pre"));
+    Scene Loaded() => SceneSerializer.Load(At("Scenes/Main.empirescene"));
+    string ModelOf(Scene scene, string name) => scene.FindByName(name)!.Components.OfType<MeshRenderer>().First().Model;
+
+    // Creating
+    Check(File.Exists(ProjectFiles.CreateTextFile(At("Empty"), "Notes")) && File.Exists(At("Empty/Notes.txt")) && ProjectFiles.TextFileName("data.json") == "data.json",
+          "a text file gets .txt unless it has an extension of its own");
+    Check(ProjectFiles.TextFileProblem(At("Empty"), "Notes") is not null && ProjectFiles.FolderProblem(At("Empty"), "a/b") is not null && ProjectFiles.FolderProblem(At("Empty"), ".git") is not null &&
+          ProjectFiles.FolderProblem(At("Empty"), "  ") is not null && ProjectFiles.FolderProblem(At("Empty"), "Fresh") is null, "a name that's taken, or can't be a file name, is refused");
+    Check(Directory.Exists(ProjectFiles.CreateFolder(At("Empty"), "Fresh")) && ProjectFiles.ScriptProblem(project, "Player") is not null &&
+          ProjectFiles.ScriptProblem(project, "Spin") is not null && ProjectFiles.ScriptProblem(project, "!!") is not null && ProjectFiles.ScriptProblem(project, "New One") is null,
+          "a folder is made, and a script needs a name no other script has");
+
+    // Renaming a file
+    var renamed = ProjectFiles.Rename(project, At("Models/Rock.glb"), "Boulder");
+    Check(File.Exists(At("Models/Boulder.glb")) && !File.Exists(At("Models/Rock.glb")) && renamed.NewPath == "Models/Boulder.glb", "a renamed file keeps its extension");
+    var afterRename = Loaded();
+    var rockAfter = afterRename.All.First(o => o.Components.OfType<ScriptComponent>().Any(s => s.ScriptName == "Player"));
+    Check(rockAfter.Components.OfType<MeshRenderer>().First().Model == "Models/Boulder.glb" && ModelOf(afterRename, "Old") == "ModelsOld/Rock.glb", "the scene's object follows it, and one with a similar path doesn't");
+    var script = rockAfter.Components.OfType<ScriptComponent>().First();
+    Check(script.Fields["path"] == "\"Models/Boulder.glb\"" && script.Fields["other"] == "\"Models/RockFace.glb\"", "so does a script value holding the path, exactly");
+    var prefabCopy = new Scene();
+    Check(SceneSerializer.AddPrefab(prefabCopy, At("Prefabs/Rock.pre")).Components.OfType<MeshRenderer>().First().Model == "Models/Boulder.glb", "and prefabs follow too");
+    Check(ProjectFiles.Rename(project, At("Models/Boulder.glb"), "Boulder").NewPath == "Models/Boulder.glb" && File.Exists(At("Models/Boulder.glb")), "giving a file the name it has does nothing");
+    Check(ProjectFiles.RenameProblem(project, At("Models/Boulder.glb"), "Boulder.glb") is null && ProjectFiles.RenameTarget(At("Models/Boulder.glb"), "Stone.glb") == At("Models/Stone.glb"), "typing the extension doesn't double it");
+    File.WriteAllText(At("Models/Taken.glb"), "bytes");
+    Check(ProjectFiles.RenameProblem(project, At("Models/Boulder.glb"), "Taken") is not null, "a rename can't replace another file");
+
+    // What the open scene sees. The text has to match a fresh save, or a saved scene would look edited.
+    string reloadedText = SceneSerializer.ToJson(Loaded());
+    var moveBack = new ProjectFiles.Moved("Models/Boulder.glb", "Models/Stone.glb");
+    string rewritten = ProjectFiles.Rewrite(reloadedText, moveBack);
+    Check(rewritten != reloadedText && SceneSerializer.ToJson(SceneSerializer.FromJson(rewritten)) == rewritten, "a rewritten scene matches what saving it would write");
+    Check(ProjectFiles.Rewrite(reloadedText, new ProjectFiles.Moved("Models/Nothing.glb", "Models/Else.glb")) == reloadedText, "and one that doesn't use the file isn't touched");
+    Check(ProjectFiles.Rewrite("not json", moveBack) == "not json", "and text that isn't JSON is left alone");
+
+    // Renaming a folder
+    ProjectFiles.Rename(project, At("Models/Trees"), "Forest");
+    Check(File.Exists(At("Models/Forest/Oak.glb")) && ModelOf(Loaded(), "Oak") == "Models/Forest/Oak.glb" && ModelOf(Loaded(), "Old") == "ModelsOld/Rock.glb",
+          "everything in a renamed folder follows it, and a folder with a similar name is left alone");
+
+    // Renaming a scene
+    Directory.CreateDirectory(At("Scenes/Levels"));
+    var movedScene = ProjectFiles.Rename(project, At("Scenes/Main.empirescene"), "First");
+    Check(File.ReadAllText(At("project.empire")).Contains("\"Scenes/First.empirescene\"") && ProjectFiles.MovedPath("Scenes/Main.empirescene", movedScene.OldPath, movedScene.NewPath) == "Scenes/First.empirescene",
+          "the project's start scene follows a renamed scene");
+    ProjectFiles.Rename(project, At("Scenes/First.empirescene"), "Main");
+
+    // Renaming a script
+    var script2 = ProjectFiles.Rename(project, At("Scripts/Player.cs"), "Hero One");
+    string heroText = File.ReadAllText(At("Scripts/HeroOne.cs"));
+    Check(script2.NewClass == "HeroOne" && !File.Exists(At("Scripts/Player.cs")) && heroText.Contains("class HeroOne") && heroText.Contains("class PlayerHelper"),
+          "a renamed script is a class name, and only that class changes");
+    var names = Loaded().All.SelectMany(o => o.Components.OfType<ScriptComponent>()).Select(s => s.ScriptName).ToList();
+    Check(names.Contains("HeroOne") && names.Contains("PlayerHelper") && !names.Contains("Player"), "objects that use it follow, and one with a similar name doesn't");
+    var visual = ProjectFiles.Rename(project, At("Scripts/Spin.visualcode"), "Twirl");
+    Check(File.Exists(At("Scripts/Twirl.visualcode")) && !File.Exists(At("Scripts/Spin.cs")) && visual.NewClass == "Twirl", "a renamed visual script takes its old generated file with it");
+    File.WriteAllText(At("Scripts/Twirl.cs"), "public class Twirl : Behaviour { }");
+    Check(ProjectFiles.WhyFixed(project, At("Scripts/Twirl.cs")) is not null && ProjectFiles.WhyNotCopied(project, At("Scripts/Twirl.cs")) is not null, "a generated script can't be renamed, moved or copied");
+
+    // What has to stay
+    Check(new[] { "Scripts", "Scenes", "Packages", "project.empire", "Packages/Water/Water.cs" }.All(f => ProjectFiles.WhyFixed(project, At(f)) is not null) && ProjectFiles.WhyFixed(project, At("Models")) is null,
+          "the folders and files a project needs can't be renamed or moved");
+    Check(ProjectFiles.WhyNotCopied(project, At("Scripts")) is not null && ProjectFiles.RenameProblem(project, At("Scripts"), "Code") is not null, "and the Scripts folder can't be copied or renamed");
+
+    // Copying
+    Check(ProjectFiles.Paste(project, At("Models/Boulder.glb"), At("Models"), cut: false).Path == At("Models/Boulder copy.glb"), "a copy in the same folder gets a new name");
+    var second = ProjectFiles.Paste(project, At("Models/Boulder.glb"), At("Models"), cut: false);
+    Check(second.Moved is null && second.Path == At("Models/Boulder copy 2.glb") && File.Exists(At("Models/Boulder.glb")), "and a copy never replaces anything or moves the original");
+    var scriptCopy = ProjectFiles.Paste(project, At("Scripts/HeroOne.cs"), At("Scripts"), cut: false);
+    Check(scriptCopy.Path == At("Scripts/HeroOneCopy.cs") && File.ReadAllText(scriptCopy.Path).Contains("class HeroOneCopy") && File.ReadAllText(At("Scripts/HeroOne.cs")).Contains("class HeroOne "),
+          "a copied script gets its own class, so the project still compiles");
+    var folderCopy = ProjectFiles.Paste(project, At("Models/Forest"), At("Models"), cut: false);
+    Check(File.Exists(Path.Combine(folderCopy.Path, "Oak.glb")) && folderCopy.Path == At("Models/Forest copy"), "a copied folder brings what's in it");
+    string emptyCopy = ProjectFiles.Paste(project, At("Empty"), At("Models"), cut: false).Path;
+    Check(File.Exists(Path.Combine(emptyCopy, "Notes.txt")) && !File.Exists(Path.Combine(emptyCopy, ".hidden")), "without hidden files");
+
+    // Moving
+    Check(ProjectFiles.PasteProblem(project, At("Models/Boulder.glb"), At("Models"), cut: true) is not null, "cutting and pasting in the same folder does nothing");
+    File.WriteAllText(At("Prefabs/Boulder.glb"), "someone else's");
+    Check(ProjectFiles.PasteProblem(project, At("Models/Boulder.glb"), At("Prefabs"), cut: true) is not null, "a move can't replace another file");
+    File.Delete(At("Prefabs/Boulder.glb"));
+    Check(ProjectFiles.PasteProblem(project, At("Models"), At("Models/Forest"), cut: true) is not null && ProjectFiles.PasteProblem(project, At("Models"), At("Models"), cut: false) is not null, "a folder can't go inside itself");
+    Check(ProjectFiles.PasteProblem(project, At("Scripts/HeroOne.cs"), At("Models"), cut: true) is not null && ProjectFiles.PasteProblem(project, At("Scripts/HeroOne.cs"), At("Models"), cut: false) is not null,
+          "a script can't leave the Scripts folder, the only one that's compiled");
+    Check(ProjectFiles.PasteProblem(project, At("Models/Boulder.glb"), At("Scripts"), cut: false) is not null && ProjectFiles.PasteProblem(project, At("Models/Boulder.glb"), At("Packages/Water"), cut: false) is not null,
+          "and nothing else goes in Scripts, which a built game leaves out, or Packages");
+    Check(ProjectFiles.PasteProblem(project, At("Models/Gone.glb"), At("Prefabs"), cut: false) is not null, "a file that has gone since it was copied is reported");
+    Check(ProjectFiles.PasteProblem(project, At("Models/Boulder.glb"), At("Prefabs"), cut: true) is null, "and a move that's fine goes ahead");
+    var pasted = ProjectFiles.Paste(project, At("Models/Boulder.glb"), At("Prefabs"), cut: true);
+    Check(pasted.Moved?.NewPath == "Prefabs/Boulder.glb" && !File.Exists(At("Models/Boulder.glb")) && File.Exists(At("Prefabs/Boulder.glb")) &&
+          Loaded().All.Any(o => o.Components.OfType<MeshRenderer>().Any(m => m.Model == "Prefabs/Boulder.glb")), "a moved file takes what points at it along");
+
+    // Deleting
+    string openScene = At("Scenes/Main.empirescene");
+    Check(ProjectFiles.DeleteProblem(project, openScene, openScene) is not null && ProjectFiles.DeleteProblem(project, At("Models"), At("Models/Inside.empirescene")) is not null,
+          "the scene that's open can't be deleted, nor a folder it's in");
+    Check(new[] { "Scripts", "Packages", "project.empire", "Scripts/Twirl.cs" }.All(f => ProjectFiles.DeleteProblem(project, At(f), openScene) is not null) &&
+          ProjectFiles.DeleteProblem(project, At("Models/Taken.glb"), openScene) is null, "and neither can what the project needs, but anything else can");
+    Check(ProjectFiles.UsedBy(project, At("Prefabs/Boulder.glb")).OrderBy(f => f, StringComparer.Ordinal).SequenceEqual(new[] { "Prefabs/Rock.pre", "Scenes/Main.empirescene" }),
+          "what still uses a file is found, in scenes and prefabs");
+    Check(ProjectFiles.UsedBy(project, At("Models/Forest")).SequenceEqual(new[] { "Scenes/Main.empirescene" }), "and what uses anything inside a folder");
+    Check(ProjectFiles.UsedBy(project, At("Models/Taken.glb")).Count == 0 && ProjectFiles.UsedBy(project, At("ModelsOld")).Count == 1, "and a file nothing uses has nothing, with similar paths told apart");
+    Check(ProjectFiles.UsedBy(project, At("Scripts/HeroOne.cs")).Contains("Scenes/Main.empirescene") && ProjectFiles.UsedBy(project, At("Scripts/HeroOneCopy.cs")).Count == 0, "a script is used by the objects that have it");
+    Check(ProjectFiles.UsedBy(project, openScene).SequenceEqual(new[] { "project.empire" }), "a start scene is used by the project, and a scene doesn't count as using itself");
+    Check(ProjectFiles.Uses(SceneSerializer.ToJson(Loaded()), project, At("Models/Forest/Oak.glb")) && !ProjectFiles.Uses("{ \"name\": \"Models/Forest/Oak.glb2\" }", project, At("Models/Forest/Oak.glb")),
+          "the open scene can be asked as it stands, without saving it");
+    ProjectFiles.Delete(At("Models/Taken.glb"));
+    ProjectFiles.Delete(At("Models/Forest copy"));
+    Check(!File.Exists(At("Models/Taken.glb")) && !Directory.Exists(At("Models/Forest copy")) && Directory.Exists(At("Models/Forest")), "a file or a folder and what's in it is deleted, and nothing else");
+    ProjectFiles.Delete(At("Scripts/Twirl.visualcode"));
+    Check(!File.Exists(At("Scripts/Twirl.visualcode")) && !File.Exists(At("Scripts/Twirl.cs")) && File.Exists(At("Scripts/HeroOne.cs")), "a deleted visual script takes its generated file with it");
+
+    // Undo keeps working after a move
+    var undo = new UndoHistory();
+    undo.Reset("a");
+    undo.Record("b");
+    undo.Record("c");
+    undo.Undo("c");
+    undo.Rewrite(text => text.ToUpperInvariant());
+    Check(undo.Undo("B") == "A" && undo.Redo("A") == "B" && undo.Redo("B") == "C", "what undo remembers follows a move too, in order");
+
+    Directory.Delete(project, recursive: true);
+}
+
+// Models.Load: a model or prefab from the project, into the scene that is playing, from any script.
+{
+    string project = Path.Combine(Path.GetTempPath(), "empire-models-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(Path.Combine(project, "Models"));
+    Directory.CreateDirectory(Path.Combine(project, "Scripts"));
+    File.WriteAllText(Path.Combine(project, "Models", "Tri.obj"), "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n");
+    File.WriteAllText(Path.Combine(project, "Scripts", "Spawning.cs"), """
+        public class Foe : Behaviour
+        {
+            public float Speed;
+            public SceneObject Weapon;
+            public bool Started;
+            public int Updates;
+            public override void Start() { Started = true; }
+            public override void Update() { Updates++; }
+        }
+        public class Spawner : Behaviour
+        {
+            public string What = "";
+            public SceneObject Made;
+            public bool Tried;
+            public override void Update()
+            {
+                if (Tried) return;
+                Tried = true;
+                Made = Models.Load(What);
+            }
+        }
+        public class Breeder : Behaviour
+        {
+            public static int Runs;
+            public override void Update()
+            {
+                Runs++;
+                Models.Load("Prefabs/Breeder.pre");
+            }
+        }
+        """);
+    string spawnDll = Path.Combine(project, "spawning.dll");
+    Check(Engine.Scripting.Build.ScriptBuilder.Compile(Path.Combine(project, "Scripts"), spawnDll,
+              Engine.Scripting.Build.ScriptBuilder.DefaultReferences(typeof(Behaviour).Assembly.Location), out string spawnErrors),
+          "a script that calls Models.Load compiles" + (spawnErrors.Length > 0 ? ": " + spawnErrors : ""));
+    var spawnAssembly = Assembly.LoadFrom(spawnDll);
+    object? Read(SceneObject owner, string script, string field)
+    {
+        var instance = owner.Components.OfType<ScriptComponent>().First(c => c.ScriptName == script).Instance!;
+        return instance.GetType().GetField(field)!.GetValue(instance);
+    }
+
+    // A prefab holds what was on the object and under it.
+    var enemy = new SceneObject { Name = "Enemy", Tag = "foe", Position = new(1, 2, 3), Rotation = Quaternion.CreateFromAxisAngle(Vector3.UnitY, 1f), Scale = new(2, 2, 2) };
+    var gun = new SceneObject { Name = "Gun", Position = new(0, 1, 0) };
+    var holder = new SceneObject { Name = "Holder" };
+    var drawn = new Scene();
+    drawn.Add(holder);
+    drawn.Add(enemy, holder);
+    drawn.Add(gun, enemy);
+    enemy.Components.Add(new MeshRenderer { Model = "Models/Tri.obj" });
+    enemy.Components.Add(new Rigidbody { Mass = 3f, UseGravity = false });
+    enemy.Components.Add(new ScriptComponent { ScriptName = "Foe", Fields = { ["Speed"] = "7", ["Weapon"] = ScriptFields.ObjectJson(gun) } });
+    string enemyFile = Path.Combine(project, "Prefabs", "Enemy.pre");
+    SceneSerializer.SavePrefab(enemy, enemyFile);
+    Check(File.Exists(enemyFile) && SceneSerializer.IsPrefab(enemyFile) && SceneSerializer.IsPrefab("A/B.PRE") && !SceneSerializer.IsPrefab("A/B.glb"),
+          "a prefab is a .pre file, and its folder is made for it");
+
+    var placed = new Scene();
+    var first = SceneSerializer.AddPrefab(placed, enemyFile);
+    var second = SceneSerializer.AddPrefab(placed, enemyFile);
+    Check(first.Parent is null && first.Name == "Enemy" && first.Tag == "foe" && first.Position == new Vector3(1, 2, 3) && first.Scale == new Vector3(2, 2, 2) &&
+          Quaternion.Dot(first.Rotation, enemy.Rotation) > 0.9999f, "a prefab keeps the position, rotation, scale, name and tag, and nothing of what it was under");
+    Check(first.Children.Count == 1 && first.Children[0].Name == "Gun" && first.Children[0].Position == new Vector3(0, 1, 0) && first.Children[0].Parent == first,
+          "and the objects under it");
+    var firstScript = first.Components.OfType<ScriptComponent>().First();
+    Check(first.Components.OfType<MeshRenderer>().First().Model == "Models/Tri.obj" && first.Components.OfType<Rigidbody>().First().Mass == 3f &&
+          firstScript.ScriptName == "Foe" && firstScript.Fields["Speed"] == "7", "and its components and script values");
+    Check(first.Id != second.Id && first.Id != enemy.Id && first.Children[0].Id != second.Children[0].Id && placed.All.Count() == 4, "every copy has ids of its own");
+    Check(ScriptFields.ObjectId(firstScript.Fields["Weapon"]) == first.Children[0].Id &&
+          ScriptFields.ObjectId(second.Components.OfType<ScriptComponent>().First().Fields["Weapon"]) == second.Children[0].Id,
+          "a script value that points inside the prefab points at that copy's own object");
+    File.WriteAllText(Path.Combine(project, "Broken.pre"), "{ \"objects\": [] }");
+    bool emptyRefused = false;
+    try { SceneSerializer.AddPrefab(placed, Path.Combine(project, "Broken.pre")); }
+    catch (InvalidDataException) { emptyRefused = true; }
+    Check(emptyRefused && placed.All.Count() == 4, "a prefab with nothing in it is refused");
+
+    Scene Playing(string what, out SceneObject spawner)
+    {
+        var scene = new Scene();
+        spawner = new SceneObject { Name = "Spawner" };
+        spawner.Components.Add(new ScriptComponent { ScriptName = "Spawner", Fields = { ["What"] = System.Text.Json.JsonSerializer.Serialize(what) } });
+        scene.Add(spawner);
+        SceneManager.Begin(scene, "Arena", project);
+        ScriptRuntime.Load(scene, new[] { spawnAssembly });
+        return scene;
+    }
+
+    // From a script's Update, which runs while every object is being gone through.
+    var prefabScene = Playing("Prefabs/Enemy.pre", out var prefabSpawner);
+    SceneUpdate.Update(prefabScene, 1f / 60f);
+    var spawned = (SceneObject)Read(prefabSpawner, "Spawner", "Made")!;
+    Check(prefabScene.Contains(spawned) && prefabScene.Contains(spawned.Children[0]) && prefabSpawner.Components.OfType<ScriptComponent>().First().Instance is not null,
+          "a script can load a prefab in Update, and the copy is in the scene at once");
+    Check((float)Read(spawned, "Foe", "Speed")! == 7f && (SceneObject)Read(spawned, "Foe", "Weapon")! == spawned.Children[0],
+          "the copy's script has its saved values, and points at its own objects");
+    Check(!(bool)Read(spawned, "Foe", "Started")!, "its Start waits for the next frame");
+    SceneUpdate.Update(prefabScene, 1f / 60f);
+    Check((bool)Read(spawned, "Foe", "Started")! && (int)Read(spawned, "Foe", "Updates")! == 1, "and then it runs like any other script");
+
+    var modelScene = Playing("Models\\Tri.obj", out var modelSpawner);
+    SceneUpdate.Update(modelScene, 1f / 60f);
+    var rock = (SceneObject)Read(modelSpawner, "Spawner", "Made")!;
+    Check(modelScene.Contains(rock) && rock.Name == "Tri" && rock.Components.OfType<MeshRenderer>().First().Model == "Models/Tri.obj",
+          "a model becomes an object that draws it, named after the file");
+
+    // A prefab that loads itself every frame doubles each frame instead of never finishing the first.
+    var breeder = new SceneObject { Name = "Breeder" };
+    var bred = new Scene();
+    bred.Add(breeder);
+    breeder.Components.Add(new ScriptComponent { ScriptName = "Breeder" });
+    SceneSerializer.SavePrefab(breeder, Path.Combine(project, "Prefabs", "Breeder.pre"));
+    SceneManager.Begin(bred, "Breed", project);
+    ScriptRuntime.Load(bred, new[] { spawnAssembly });
+    for (int i = 0; i < 3; i++) SceneUpdate.Update(bred, 1f / 60f);
+    Check((int)spawnAssembly.GetType("Breeder")!.GetField("Runs")!.GetValue(null)! == 7 && bred.All.Count() == 8, "objects a script adds wait for the next frame, so a script can't run away");
+
+    // The path is from the project, wherever the project is: a built game has it in GameData/Core.
+    string built = Path.Combine(project, "Built", "GameData", "Core");
+    Directory.CreateDirectory(Path.Combine(built, "Models"));
+    File.Copy(Path.Combine(project, "Models", "Tri.obj"), Path.Combine(built, "Models", "Tri.obj"));
+    var builtGame = new Scene();
+    SceneManager.Begin(builtGame, "Game", built);
+    ScriptRuntime.Load(builtGame, new[] { spawnAssembly });
+    Check(builtGame.Contains(Models.Load("Models/Tri.obj")), "the same path works in a built game, whose project files are somewhere else");
+
+    bool Refused<T>(string path) where T : Exception
+    {
+        try { Models.Load(path); return false; }
+        catch (T) { return true; }
+    }
+    Check(Refused<FileNotFoundException>("Models/Missing.glb") && Refused<ArgumentException>("Models/Tri.txt"), "a missing file, or one that isn't a model or prefab, is an error");
+    Check(Refused<ArgumentException>("../Models/Tri.obj") && Refused<ArgumentException>(Path.Combine(project, "Models", "Tri.obj")) && Refused<ArgumentException>(""),
+          "and so is a file outside the project, which a built game wouldn't have");
+    var modelReader = Animator.ModelLoader;
+    Animator.ModelLoader = _ => throw new InvalidDataException("not a model");
+    Check(Refused<InvalidDataException>("Models/Tri.obj") && builtGame.All.Count() == 1, "a model that can't be read is the script's error, and adds nothing");
+    Animator.ModelLoader = modelReader;
+
+    var failing = Playing("Models/Missing.glb", out var failingSpawner);
+    SceneUpdate.Update(failing, 1f / 60f);
+    Check(failingSpawner.Components.OfType<ScriptComponent>().First().Instance is null && failing.Contains(failingSpawner), "the error stops that script, and the game carries on");
+
+    SceneManager.ContentRoot = "";
+    Directory.Delete(project, recursive: true);
+}
+
 // Destroy: any script can destroy any object it has a reference to, at the end of the frame or after a delay.
 {
     string destroyDir = Path.Combine(Path.GetTempPath(), "empire-destroy-" + Guid.NewGuid().ToString("N"));
@@ -3813,6 +4212,112 @@ if (!OperatingSystem.IsWindows())
           MathF.Abs(hit2D.Point.Y - 1f) < 0.05f, "raycasts hit 2D colliders");
     var rb2 = new Rigidbody2D { Velocity2D = new Vector2(1, 2), AngularVelocity2D = 3f };
     Check(rb2.Velocity == new Vector3(1, 2, 0) && rb2.AngularVelocity == new Vector3(0, 0, 3), "Velocity2D and AngularVelocity2D read and write the plane");
+}
+
+// ---- polygon colliders ----
+{
+    Vector2[] square = [new(0, 0), new(2, 0), new(2, 2), new(0, 2)];
+    Vector2[] ell = [new(0, 0), new(2, 0), new(2, 1), new(1, 1), new(1, 2), new(0, 2)];
+    float AreaOf(IEnumerable<Vector2[]> pieces) => pieces.Sum(p => Engine.Core.Physics.Polygon2D.SignedArea(p));
+    bool AllConvex(IEnumerable<Vector2[]> pieces) => pieces.All(p => Enumerable.Range(0, p.Length).All(i =>
+    {
+        Vector2 a = p[i], b = p[(i + 1) % p.Length], c = p[(i + 2) % p.Length];
+        return (b - a).X * (c - b).Y - (b - a).Y * (c - b).X >= -1e-5f;
+    }));
+    var cut = Engine.Core.Physics.Polygon2D.ConvexPieces;
+    Check(cut(square).Count == 1 && cut(square)[0].Length == 4, "a convex outline stays one piece");
+    Check(cut(ell).Count == 2 && MathF.Abs(AreaOf(cut(ell)) - 3f) < 1e-4f && AllConvex(cut(ell)), "an outline with a dent is cut into convex pieces that cover it");
+    Check(MathF.Abs(AreaOf(cut(ell.Reverse().ToArray())) - 3f) < 1e-4f, "going round the other way makes no difference");
+    var star = Enumerable.Range(0, 10).Select(i => new Vector2(MathF.Cos(i * MathF.Tau / 10f), MathF.Sin(i * MathF.Tau / 10f)) * (i % 2 == 0 ? 2f : 0.8f)).ToArray();
+    Check(MathF.Abs(AreaOf(cut(star)) - Engine.Core.Physics.Polygon2D.SignedArea(star)) < 1e-3f && AllConvex(cut(star)) && cut(star).Count < 8, "a star is cut up too, into fewer pieces than triangles");
+    Vector2[] untidy = [new(0, 0), new(0, 0), new(1, 0), new(2, 0), new(2, 2), new(0, 2), new(0, 0)];
+    Check(cut(untidy).Count == 1 && cut(untidy)[0].Length == 4, "repeated points and points along a straight edge add nothing");
+    Vector2[] bowtie = [new(0, 0), new(2, 2), new(2, 0), new(0, 2)];
+    Check(Engine.Core.Physics.Polygon2D.Problem(bowtie)!.Contains("cross") && cut(bowtie).Count == 0, "edges that cross are a problem, with no pieces");
+    Check(Engine.Core.Physics.Polygon2D.Problem([new(0, 0), new(1, 1)]) is not null && Engine.Core.Physics.Polygon2D.Problem([new(0, 0), new(1, 1), new(2, 2)]) is not null &&
+          Engine.Core.Physics.Polygon2D.Problem(square) is null && Engine.Core.Physics.Polygon2D.Problem(ell) is null, "too few points, or none with any area, are problems too");
+
+    // A cup: open at the top, with a floor at y = 0.5 and walls up to y = 2.
+    Vector2[] cupShape = [new(-2, 0), new(2, 0), new(2, 2), new(1, 2), new(1, 0.5f), new(-1, 0.5f), new(-1, 2), new(-2, 2)];
+    SceneObject Place(Scene scene, Vector3 at, params Component[] components)
+    {
+        var obj = new SceneObject { Position = at };
+        foreach (var component in components) obj.Components.Add(component);
+        scene.Add(obj);
+        return obj;
+    }
+    void Settle(Scene scene, int steps = 240)
+    {
+        for (int i = 0; i < steps; i++) scene.Physics.Step(scene, 1f / 60f);
+    }
+    var cupScene = new Scene();
+    var cup = Place(cupScene, Vector3.Zero, new PolygonCollider2D { Points = cupShape.ToList() });
+    var ball = Place(cupScene, new(0, 4, 0), new Rigidbody2D(), new CircleCollider2D { Radius = 0.4f });
+    Settle(cupScene);
+    Check(MathF.Abs(ball.Position.Y - 0.9f) < 0.05f && MathF.Abs(ball.Position.X) < 0.05f, "a ball falls into a dent, so the collider isn't filled in");
+
+    var crateScene = new Scene();
+    Place(crateScene, Vector3.Zero, new PolygonCollider2D { Points = cupShape.ToList() });
+    var boxInCup = Place(crateScene, new(0, 4, 0), new Rigidbody2D(), new BoxCollider2D());
+    Settle(crateScene);
+    Check(MathF.Abs(boxInCup.Position.Y - 1f) < 0.05f, "a box lands in it the same way");
+
+    var floorScene = new Scene();
+    Place(floorScene, new(0, -0.5f, 0), new BoxCollider2D { Size = new(20, 1) });
+    var wedge = Place(floorScene, new(0, 3, 0), new Rigidbody2D { FreezeRotation = true }, new PolygonCollider2D { Points = [new(-1, -0.5f), new(1, -0.5f), new(0, 1)] });
+    var moving = Place(floorScene, new(5, 3, 0), new Rigidbody2D { FreezeRotation = true }, new PolygonCollider2D { Points = ell.Select(p => p - new Vector2(1, 1)).ToList() });
+    var turning = Place(floorScene, new(-5, 3, 0), new Rigidbody2D(), new PolygonCollider2D { Points = ell.Select(p => p - new Vector2(1, 1)).ToList() });
+    Settle(floorScene, 360);
+    Check(MathF.Abs(wedge.Position.Y - 0.5f) < 0.05f && MathF.Abs(moving.Position.Y - 1f) < 0.05f, "a moving polygon rests on the ground, with or without a dent");
+    Check(turning.Position.Y > 0f && turning.Position.Y < 2f && MathF.Abs(turning.Rotation.X) < 1e-4f && MathF.Abs(turning.Rotation.Y) < 1e-4f && turning.Position.Z == 0f, "and one free to turn settles on the plane");
+
+    var mirrored = new Scene();
+    var flipped = Place(mirrored, Vector3.Zero, new PolygonCollider2D { Points = cupShape.ToList() });
+    flipped.Scale = new Vector3(-1, 1, 1);
+    var falling = Place(mirrored, new(0, 4, 0), new Rigidbody2D(), new CircleCollider2D { Radius = 0.4f });
+    Settle(mirrored);
+    Check(MathF.Abs(falling.Position.Y - 0.9f) < 0.05f, "a mirrored object collides the same");
+
+    var zone = new Scene();
+    Place(zone, Vector3.Zero, new PolygonCollider2D { Points = square.ToList(), IsTrigger = true });
+    var through = Place(zone, new(1, 4, 0), new Rigidbody2D(), new CircleCollider2D { Radius = 0.4f });
+    Settle(zone, 120);
+    Check(through.Position.Y < -2f, "a trigger stops nothing");
+
+    var broken = new Scene();
+    Place(broken, Vector3.Zero, new PolygonCollider2D { Points = bowtie.ToList() });
+    var past = Place(broken, new(1, 4, 0), new Rigidbody2D(), new CircleCollider2D { Radius = 0.4f });
+    Settle(broken, 120);
+    Check(past.Position.Y < -2f, "an outline with crossed edges collides with nothing, and nothing goes wrong");
+
+    // Rays
+    var rays = new Scene();
+    var target = Place(rays, Vector3.Zero, new PolygonCollider2D { Points = cupShape.ToList() });
+    ScriptRuntime.Load(rays, Array.Empty<System.Reflection.Assembly>());
+    bool Down(float x, out RaycastHit hit) => Engine.Core.Scripting.Physics.Raycast(new Vector3(x, 5, 0), -Vector3.UnitY, out hit, 20f);
+    Check(Down(0, out var inDent) && MathF.Abs(inDent.Point.Y - 0.5f) < 1e-3f && Vector3.Distance(inDent.Normal, Vector3.UnitY) < 1e-3f, "a ray goes down into a dent and hits its floor");
+    Check(Down(1.5f, out var onWall) && MathF.Abs(onWall.Point.Y - 2f) < 1e-3f && onWall.Object == target && onWall.Collider is PolygonCollider2D, "and hits the top of a wall");
+    Check(!Down(3f, out _) && !Engine.Core.Scripting.Physics.Raycast(new Vector3(0, 5, 0), -Vector3.UnitY, out _, 2f), "and misses beside it, or when it's too short");
+    target.Rotation = Quaternion.CreateFromAxisAngle(Vector3.UnitZ, MathF.PI);
+    target.Position = new Vector3(0, 3, 0);
+    target.Components.OfType<PolygonCollider2D>().Single().Center = new Vector3(1, 0, 0);
+    Check(Down(-1f, out var turned) && MathF.Abs(turned.Point.Y - 3f) < 1e-3f, "the object's position and rotation and the collider's Center all count");
+    target.Rotation = Quaternion.Identity;
+    target.Position = Vector3.Zero;
+    target.Components.OfType<PolygonCollider2D>().Single().Center = Vector3.Zero;
+    target.Components.OfType<PolygonCollider2D>().Single().Points[4] = new Vector2(1, 1.5f);
+    target.Components.OfType<PolygonCollider2D>().Single().Points[5] = new Vector2(-1, 1.5f);
+    Check(Down(0, out var raised) && MathF.Abs(raised.Point.Y - 1.5f) < 1e-3f, "changing the points while the game plays takes effect");
+
+    // Saving
+    var shapes = new Scene();
+    var shaped = Place(shapes, new(1, 2, 0), new PolygonCollider2D { Points = ell.ToList(), Center = new(0.5f, 0.25f, 0), Depth = 3f, Friction = 0.2f, Bounciness = 0.7f, IsTrigger = true });
+    var back = SceneSerializer.FromJson(SceneSerializer.ToJson(shapes)).Find(shaped.Id)!.Components.OfType<PolygonCollider2D>().Single();
+    Check(back.Points.SequenceEqual(ell) && back.Center == new Vector3(0.5f, 0.25f, 0) && back.Depth == 3f && back.Friction == 0.2f && back.Bounciness == 0.7f && back.IsTrigger, "a polygon collider survives saving and loading");
+    string prefabFile = Path.Combine(Path.GetTempPath(), "empire-polygon-" + Guid.NewGuid().ToString("N") + ".pre");
+    SceneSerializer.SavePrefab(shaped, prefabFile);
+    Check(SceneSerializer.AddPrefab(new Scene(), prefabFile).Components.OfType<PolygonCollider2D>().Single().Points.SequenceEqual(ell), "and a prefab");
+    File.Delete(prefabFile);
 }
 
 // ---- double positions ----
