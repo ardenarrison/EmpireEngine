@@ -9,25 +9,135 @@ namespace Editor;
 
 public enum BuildPlatform { Windows, Mac, Linux }
 
-// The platforms Build Project can make a game for. Building for this computer's platform uses its own processor type. Building
-// for another uses the one most of that platform's computers have: x64 for Windows and Linux, Apple Silicon for the Mac.
+// The processor a game is built for.
+public enum BuildArchitecture { X64, Arm64, X86, Arm32 }
+
+// How well games built for a platform and processor run.
+public enum ArchitectureSupport
+{
+    Works,              // the engine's native libraries exist for it and games have been run there
+    Experimental,       // the native libraries exist, but games have hardly been tried there
+    NoNativeLibraries,  // .NET runs there, but BRUTAL has no window, Vulkan or shader libraries for it, so games stop at start
+}
+
+// One processor type a platform can be built for. Released means the GitHub releases carry an editor for it, which is where a released
+// editor gets the player from; without one, only an editor run from source can build it.
+public sealed record ArchitectureOption(BuildArchitecture Architecture, string Rid, ArchitectureSupport Support, bool Released, string Label);
+
+// The platforms and processor types Build Project can make a game for. Building for this computer's own platform and processor
+// uses its own runtime. Each platform otherwise starts on the processor most of its computers have: x64 for Windows and Linux,
+// Apple Silicon for the Mac.
 public static class BuildTargets
 {
     public static BuildPlatform ThisPlatform =>
         OperatingSystem.IsWindows() ? BuildPlatform.Windows : OperatingSystem.IsLinux() ? BuildPlatform.Linux : BuildPlatform.Mac;
 
-    public static string Rid(BuildPlatform platform) =>
-        platform == ThisPlatform ? RuntimeInformation.RuntimeIdentifier : platform switch
-        {
-            BuildPlatform.Windows => "win-x64",
-            BuildPlatform.Mac => "osx-arm64",
-            _ => "linux-x64",
-        };
+    public static BuildArchitecture ThisArchitecture => RuntimeInformation.ProcessArchitecture switch
+    {
+        Architecture.Arm64 => BuildArchitecture.Arm64,
+        Architecture.X86 => BuildArchitecture.X86,
+        Architecture.Arm or Architecture.Armv6 => BuildArchitecture.Arm32,
+        _ => BuildArchitecture.X64,
+    };
 
-    // The game's folder. A build for another platform gets a folder of its own: building it over this platform's game would mix
-    // two sets of runtime files that don't work together.
-    public static string FolderName(string name, BuildPlatform platform) =>
-        platform == ThisPlatform ? name : $"{name}-{platform}";
+    public static bool IsThisComputer(BuildPlatform platform, BuildArchitecture architecture) =>
+        platform == ThisPlatform && architecture == ThisArchitecture;
+
+    // Every processor type .NET can run games on for a platform, in the order the Build window lists them. Windows on 32-bit ARM
+    // and 32-bit Macs aren't there: .NET doesn't run on them.
+    public static IReadOnlyList<ArchitectureOption> Architectures(BuildPlatform platform) => platform switch
+    {
+        BuildPlatform.Windows =>
+        [
+            Option(platform, BuildArchitecture.X64, ArchitectureSupport.Works, released: true, "x64 (Intel and AMD)"),
+            Option(platform, BuildArchitecture.Arm64, ArchitectureSupport.NoNativeLibraries, released: true, "arm64 (Windows on ARM)"),
+            Option(platform, BuildArchitecture.X86, ArchitectureSupport.NoNativeLibraries, released: false, "x86 (32-bit)"),
+        ],
+        BuildPlatform.Mac =>
+        [
+            Option(platform, BuildArchitecture.Arm64, ArchitectureSupport.Works, released: true, "arm64 (Apple Silicon)"),
+            Option(platform, BuildArchitecture.X64, ArchitectureSupport.Experimental, released: true, "x64 (Intel Mac)"),
+        ],
+        _ =>
+        [
+            Option(platform, BuildArchitecture.X64, ArchitectureSupport.Works, released: true, "x64 (Intel and AMD)"),
+            Option(platform, BuildArchitecture.Arm64, ArchitectureSupport.Experimental, released: true, "arm64"),
+            Option(platform, BuildArchitecture.Arm32, ArchitectureSupport.NoNativeLibraries, released: false, "arm32 (32-bit, such as older Raspberry Pi)"),
+        ],
+    };
+
+    private static ArchitectureOption Option(BuildPlatform platform, BuildArchitecture architecture, ArchitectureSupport support,
+        bool released, string label) =>
+        new(architecture, Rid(platform, architecture), support, released, label);
+
+    public static ArchitectureOption? Find(BuildPlatform platform, BuildArchitecture architecture) =>
+        Architectures(platform).FirstOrDefault(o => o.Architecture == architecture);
+
+    // The processor a platform's builds start on: this computer's for its own platform, otherwise the usual one.
+    public static BuildArchitecture DefaultArchitecture(BuildPlatform platform) =>
+        platform == ThisPlatform && Find(platform, ThisArchitecture) is not null ? ThisArchitecture
+        : platform == BuildPlatform.Mac ? BuildArchitecture.Arm64 : BuildArchitecture.X64;
+
+    // The .NET runtime identifier, such as win-x64. This computer's own is used as it is (it may say more, like linux-musl-x64).
+    public static string Rid(BuildPlatform platform, BuildArchitecture architecture)
+    {
+        if (IsThisComputer(platform, architecture)) return RuntimeInformation.RuntimeIdentifier;
+        string os = platform switch { BuildPlatform.Windows => "win", BuildPlatform.Mac => "osx", _ => "linux" };
+        string cpu = architecture switch
+        {
+            BuildArchitecture.Arm64 => "arm64",
+            BuildArchitecture.X86 => "x86",
+            BuildArchitecture.Arm32 => "arm",
+            _ => "x64",
+        };
+        return $"{os}-{cpu}";
+    }
+
+    public static string ArchitectureName(BuildArchitecture architecture) => architecture switch
+    {
+        BuildArchitecture.Arm64 => "arm64",
+        BuildArchitecture.X86 => "x86",
+        BuildArchitecture.Arm32 => "arm32",
+        _ => "x64",
+    };
+
+    // The game's folder. Each platform and processor gets a folder of its own: building one over another would mix two sets of
+    // runtime files that don't work together. This computer's own build is just the name, another platform's usual processor adds
+    // the platform (MyGame-Windows), and any other processor adds that too (MyGame-Windows-arm64, MyGame-arm64 on this platform).
+    public static string FolderName(string name, BuildPlatform platform, BuildArchitecture architecture)
+    {
+        if (IsThisComputer(platform, architecture)) return name;
+        if (platform == ThisPlatform) return $"{name}-{ArchitectureName(architecture)}";
+        bool usual = architecture == (platform == BuildPlatform.Mac ? BuildArchitecture.Arm64 : BuildArchitecture.X64);
+        return usual ? $"{name}-{platform}" : $"{name}-{platform}-{ArchitectureName(architecture)}";
+    }
+
+    // Why this editor can't build a platform and processor, or null when it can. fromSource: the editor runs from a checkout of
+    // the repository, so it publishes the player itself instead of taking it from a release.
+    public static string? CannotBuild(BuildPlatform platform, BuildArchitecture architecture, bool fromSource)
+    {
+        if (Find(platform, architecture) is not { } option)
+            return $".NET doesn't run on {platform} {ArchitectureName(architecture)}.";
+        if (platform == BuildPlatform.Mac && fromSource && !OperatingSystem.IsMacOS())
+            return "An editor run from source can only build a Mac game on a Mac, because the game has to be signed there. " +
+                   "A released editor can build one on any computer.";
+        if (!fromSource && !option.Released && !IsThisComputer(platform, architecture))
+            return $"There is no {option.Rid} release to take the player from, so only an editor run from a checkout of the " +
+                   "repository can build it (it runs dotnet publish).";
+        return null;
+    }
+
+    // A warning to show before and after building, or null. Games for a processor without the native libraries are still built,
+    // so they are ready if those libraries come, but they won't start yet.
+    public static string? Warning(BuildPlatform platform, BuildArchitecture architecture) => Find(platform, architecture)?.Support switch
+    {
+        ArchitectureSupport.NoNativeLibraries =>
+            $"Games for {platform} {ArchitectureName(architecture)} won't start yet: BRUTAL, the library the engine draws with, has " +
+            "no window, Vulkan or shader libraries for it. The game is built, but it stops as soon as it opens.",
+        ArchitectureSupport.Experimental =>
+            $"{platform} {ArchitectureName(architecture)} is experimental: games have hardly been tried there. Try yours on that kind of computer before you ship it.",
+        _ => null,
+    };
 }
 
 // A released editor keeps one copy of what it has in common with the player. Player/ holds only the player's own files and a list

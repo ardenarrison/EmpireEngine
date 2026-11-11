@@ -97,6 +97,28 @@
     <Copy SourceFiles="@(_EmpireIntelNative)" DestinationFolder="$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(PublishDir)'))" SkipUnchangedFiles="true" />
   </Target>
 
+  <!--
+    Linux on arm64: BRUTAL's packages have no linux-arm64 native libraries either, so the ones in ThirdParty/LinuxArm64 (GLFW,
+    Dear ImGui, libVulkanEx; see Tools/IntelNatives) go next to the program. Games have no shader compiler, and the editor isn't built
+    for this processor, so there is no shaderc. Vulkan itself comes from the computer's own libvulkan.so.1.
+  -->
+  <PropertyGroup>
+    <_EmpireTargetsLinuxArm64 Condition="'$(RuntimeIdentifier)' == 'linux-arm64'">true</_EmpireTargetsLinuxArm64>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(_EmpireTargetsLinuxArm64)' == 'true'">
+    <_EmpireLinuxArm64Native Include="$(MSBuildThisFileDirectory)ThirdParty/LinuxArm64/*.so*" />
+  </ItemGroup>
+
+  <Target Name="EmpireLinuxArm64NativesBuild" AfterTargets="Build"
+          Condition="'$(_EmpireTargetsLinuxArm64)' == 'true' And '@(_EmpireLinuxArm64Native)' != ''">
+    <Copy SourceFiles="@(_EmpireLinuxArm64Native)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="EmpireLinuxArm64NativesPublish" AfterTargets="Publish"
+          Condition="'$(_EmpireTargetsLinuxArm64)' == 'true' And '@(_EmpireLinuxArm64Native)' != ''">
+    <Copy SourceFiles="@(_EmpireLinuxArm64Native)" DestinationFolder="$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(PublishDir)'))" SkipUnchangedFiles="true" />
+  </Target>
+
   <!-- (These come before the Vulkan targets below: on Intel the loader goes beside libVulkanEx, one of the copied files.) -->
 
   <Target Name="EmpireBundleVulkanBuild" AfterTargets="Build"

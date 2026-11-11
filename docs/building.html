@@ -17,7 +17,7 @@
 <h2>Building a game</h2>
 <ol class="steps">
   <li><strong>Save.</strong> The build uses the files on disk; unsaved edits are not included.</li>
-  <li>Choose <strong>File &gt; Build Project…</strong>, pick a folder <em>outside</em> the project, enter a name for the game, and choose its <strong>Platform</strong>: Windows, Mac or Linux. It starts on the platform you're on.</li>
+  <li>Choose <strong>File &gt; Build Project…</strong>, pick a folder <em>outside</em> the project, enter a name for the game, and choose its <strong>Platform</strong> (Windows, Mac or Linux) and <strong>Architecture</strong> (the kind of processor). Both start on the computer you're on.</li>
   <li>Wait while it builds (it can take a minute). When it's done, <em>Open Folder</em> shows the game. If it fails, <em>Copy Errors</em> copies the full error report, and the whole log is in <code>empire-build.log</code> in your temp folder.</li>
 </ol>
 <p>The scene open in the editor is the scene the game starts with.</p>
@@ -50,9 +50,11 @@ GameData/
 <p>If neither is found, the build stops with <em>Could not find Player/Player.csproj in a folder above the Editor, or a built Player folder next to it</em>.</p>
 
 <h3 id="building-for-another-platform">Building for another platform</h3>
-<p>You can build for Windows, Mac or Linux from any of them. A game for another platform goes in a folder of its own, <code>&lt;name&gt;-&lt;Platform&gt;</code> such as <code>MyGame-Windows</code>, so builds for different platforms never mix.</p>
+<p>You can build for Windows, Mac or Linux from any of them. A game for another platform or processor goes in a folder of its own, <code>&lt;name&gt;-&lt;Platform&gt;</code> such as <code>MyGame-Windows</code>, or <code>&lt;name&gt;-&lt;arch&gt;</code> such as <code>MyGame-x64</code> for another processor on your own platform, so different builds never mix.</p>
 <ul>
-  <li><strong>What it runs on</strong>: games built for another platform are for 64-bit Intel or AMD processors on Windows and Linux, and Apple Silicon on the Mac. A build for your own platform uses your own processor type.</li>
+  <li><strong>Architecture</strong>: the dropdown lists the processors .NET runs on for the chosen platform. Windows: x64, arm64 and x86. Mac: arm64 (Apple Silicon) and x64 (Intel). Linux: x64, arm64 and arm32. There is no 32-bit Mac build and no 32-bit ARM build for Windows, because .NET doesn't support them.</li>
+  <li><strong>Which ones start</strong>: BRUTAL, the library the engine draws with, only ships its native libraries for x64 Windows and Linux and for Apple Silicon. Empire Engine carries its own for Intel Macs and Linux arm64 (see <code>Tools/IntelNatives</code>), so those games are experimental: they build and have started under emulation (Intel Mac under Rosetta, Linux arm64 on a simulated Raspberry Pi-style Debian system), but haven't been tried on real hardware. Windows arm64, x86 and Linux arm32 games are built but won't start yet. The editor warns you when you pick one of these.</li>
+  <li><strong>Without a release</strong>: the releases carry players for x64 and arm64 on all three platforms, plus Intel Mac. A released editor can't build x86 or arm32, since there is no player to take, and says so. An editor run from a checkout can.</li>
   <li><strong>A released editor</strong> needs the player for that platform, so the first build for it downloads the matching editor zip (around 50 MB) from the same version's GitHub release. The player is kept in <code>&lt;application data&gt;/EmpireEditor/Players/</code>, so later builds need no internet connection.</li>
   <li><strong>An editor run from a checkout of this repository</strong> runs <code>dotnet publish</code> for that platform instead, which downloads what it needs the first time. It can only build a Mac game on a Mac, because the game has to be signed there.</li>
   <li><strong>Built on Windows for Mac or Linux</strong>: Windows can't mark the file as a program, so run <code>chmod +x "&lt;name&gt;"</code> in the game's folder on that computer first. The editor reminds you when the build finishes.</li>
