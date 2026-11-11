@@ -12,7 +12,8 @@ namespace Editor;
 // Log holds the full output of every command the build ran, so errors can be copied in full.
 public sealed record BuildResult(bool Success, string Message, string? OutputFolder, string Log = "");
 
-// Builds a standalone game for a platform into <parent>/<buildName>/, or <parent>/<buildName>-<Platform>/ for another platform:
+// Builds a standalone game for a platform and processor into <parent>/<buildName>/, or a folder named for the platform and processor
+// when they aren't this computer's (BuildTargets.FolderName):
 //   <buildName>(.exe) and its runtime libraries: published from Player/ for the platform when the source is here, or copied from
 //                     the built Player/ folder that a released editor carries next to it (for another platform, PlayerDownloads)
 //   GameData/Core/...   a copy of the project's content; Models/... keeps its folder structure
@@ -37,11 +38,11 @@ public static class ProjectBuilder
 
     // status is told what is happening during a long step, from the thread the build runs on or another one.
     public static BuildResult Build(string scenePath, string contentRoot, string parentFolder, string buildName,
-        BuildPlatform platform, Action<string> status)
+        BuildPlatform platform, BuildArchitecture architecture, Action<string> status)
     {
         try
         {
-            return BuildCore(scenePath, contentRoot, parentFolder, buildName, platform, status);
+            return BuildCore(scenePath, contentRoot, parentFolder, buildName, platform, architecture, status);
         }
         catch (Exception ex)
         {
@@ -66,15 +67,19 @@ public static class ProjectBuilder
                "\n\nFull log:\n" + result.Log;
     }
 
+    // True when this editor runs from a checkout of the repository, so it publishes the player itself with dotnet.
+    public static bool RunsFromSource => FindPlayerProject() is not null;
+
     private static BuildResult BuildCore(string scenePath, string contentRoot, string parentFolder, string buildName,
-        BuildPlatform platform, Action<string> status)
+        BuildPlatform platform, BuildArchitecture architecture, Action<string> status)
     {
         string name = SanitizeName(buildName);
         if (name.Length == 0)
             return Fail("The build name is empty.");
 
-        string rid = BuildTargets.Rid(platform);
-        bool otherPlatform = platform != BuildTargets.ThisPlatform;
+        string rid = BuildTargets.Rid(platform, architecture);
+        // Another platform or processor can't use this editor's own player and native libraries.
+        bool otherPlatform = !BuildTargets.IsThisComputer(platform, architecture);
 
         // A build from source has Player/Player.csproj above the editor. A released editor has no source, but carries the
         // player already built (Player/ next to empire.dll), which is used as it is. For another platform it downloads one, below.
@@ -82,13 +87,12 @@ public static class ProjectBuilder
         string? prebuiltPlayer = playerProject is null && !otherPlatform ? FindPrebuiltPlayer() : null;
         if (playerProject is null && prebuiltPlayer is null && !otherPlatform)
             return Fail("Could not find Player/Player.csproj in a folder above the Editor, or a built Player folder next to it.");
-        if (playerProject is not null && otherPlatform && platform == BuildPlatform.Mac)
-            return Fail("An editor run from source can only build a Mac game on a Mac, because the game has to be signed there. " +
-                        "A released editor can build one on any computer.");
+        if (BuildTargets.CannotBuild(platform, architecture, fromSource: playerProject is not null) is { } reason)
+            return Fail(reason);
 
         string content = Path.GetFullPath(contentRoot);
         string scene = Path.GetFullPath(scenePath);
-        string outDir = Path.GetFullPath(Path.Combine(parentFolder, BuildTargets.FolderName(name, platform)));
+        string outDir = Path.GetFullPath(Path.Combine(parentFolder, BuildTargets.FolderName(name, platform, architecture)));
 
         if (!IsInside(scene, content))
             return Fail("The scene must be inside the project's content folder.");
@@ -103,7 +107,7 @@ public static class ProjectBuilder
             }
             catch (Exception ex) when (ex is InstallException or HttpRequestException or IOException or UnauthorizedAccessException or InvalidDataException)
             {
-                return Fail($"Could not get the player for {platform}: {ex.Message}");
+                return Fail($"Could not get the player for {platform} {BuildTargets.ArchitectureName(architecture)} ({rid}): {ex.Message}");
             }
             status("Building...");
         }
@@ -212,8 +216,9 @@ public static class ProjectBuilder
             JsonSerializer.Serialize(new GameManifest(name, startScene, ProjectSettings.Load(content).PositionType), Options));
 
         File.WriteAllText(LogPath, log);
-        string message = $"Built \"{name}\" to:\n{outDir}";
+        string message = $"Built \"{name}\" for {platform} {BuildTargets.ArchitectureName(architecture)} ({rid}) to:\n{outDir}";
         if (vulkanWarning is not null) message += "\n\nWarning: " + vulkanWarning;
+        if (BuildTargets.Warning(platform, architecture) is { } targetWarning) message += "\n\nWarning: " + targetWarning;
         if (OperatingSystem.IsWindows() && otherPlatform)
             message += $"\n\nWindows can't mark a file as a program for {platform}. On that computer, run this in the game's folder first:\nchmod +x \"{name}\"";
         return new BuildResult(true, message, outDir, log);

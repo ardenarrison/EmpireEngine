@@ -102,6 +102,8 @@ public sealed class EditorApp
     private BuildStage _buildStage = BuildStage.Off;
     private string _buildFolder = "";
     private BuildPlatform _buildPlatform = BuildTargets.ThisPlatform;
+    private BuildArchitecture _buildArchitecture = BuildTargets.DefaultArchitecture(BuildTargets.ThisPlatform);
+    private readonly Lazy<bool> _runsFromSource = new(() => ProjectBuilder.RunsFromSource);
     private volatile string _buildStatus = "";
     private Task<BuildResult>? _buildTask;
     private BuildResult? _buildResult;
@@ -3294,8 +3296,9 @@ public sealed class EditorApp
         string contentRoot = _contentRoot;
         string folder = _buildFolder;
         var platform = _buildPlatform;
+        var architecture = _buildArchitecture;
         _buildStatus = "Building... this can take a minute.";
-        _buildTask = Task.Run(() => ProjectBuilder.Build(scenePath, contentRoot, folder, name, platform, status => _buildStatus = status));
+        _buildTask = Task.Run(() => ProjectBuilder.Build(scenePath, contentRoot, folder, name, platform, architecture, status => _buildStatus = status));
     }
 
     private void DrawBuildWindow()
@@ -3331,14 +3334,40 @@ public sealed class EditorApp
                 g.InputText("Build name", ref _buildName, 128);
                 if (_buildName.Trim().Length == 0)
                     g.TextDisabled("Enter a build name.");
+                var previousPlatform = _buildPlatform;
                 g.Combo("Platform", ref _buildPlatform);
-                if (_buildPlatform != BuildTargets.ThisPlatform)
-                    g.TextWrapped($"Builds for {BuildTargets.Rid(_buildPlatform)}, in the folder " +
-                                  $"{BuildTargets.FolderName(ProjectBuilder.SanitizeName(_buildName), _buildPlatform)}.", Gui.DimColor);
+                if (_buildPlatform != previousPlatform)
+                    _buildArchitecture = BuildTargets.DefaultArchitecture(_buildPlatform);
+
+                // The processor: every one .NET runs on for this platform, marked by how well games run there.
+                var architectures = BuildTargets.Architectures(_buildPlatform);
+                if (architectures.All(o => o.Architecture != _buildArchitecture))
+                    _buildArchitecture = BuildTargets.DefaultArchitecture(_buildPlatform);
+                var labels = architectures.Select(o => o.Label +
+                    (BuildTargets.IsThisComputer(_buildPlatform, o.Architecture) ? " - this computer" : "") +
+                    o.Support switch
+                    {
+                        ArchitectureSupport.Experimental => " - experimental",
+                        ArchitectureSupport.NoNativeLibraries => " - won't start yet",
+                        _ => "",
+                    }).ToArray();
+                int currentArchitecture = architectures.ToList().FindIndex(o => o.Architecture == _buildArchitecture);
+                if (g.Combo("Architecture", currentArchitecture, labels, out int pickedArchitecture))
+                    _buildArchitecture = architectures[pickedArchitecture].Architecture;
+
+                if (!BuildTargets.IsThisComputer(_buildPlatform, _buildArchitecture))
+                    g.TextWrapped($"Builds for {BuildTargets.Rid(_buildPlatform, _buildArchitecture)}, in the folder " +
+                                  $"{BuildTargets.FolderName(ProjectBuilder.SanitizeName(_buildName), _buildPlatform, _buildArchitecture)}.", Gui.DimColor);
+                if (BuildTargets.Warning(_buildPlatform, _buildArchitecture) is { } targetWarning)
+                    g.TextWrapped(targetWarning, BuildTargets.Find(_buildPlatform, _buildArchitecture)?.Support == ArchitectureSupport.NoNativeLibraries
+                        ? Gui.ErrorColor : Gui.DimColor);
+                string? cannotBuild = BuildTargets.CannotBuild(_buildPlatform, _buildArchitecture, _runsFromSource.Value);
+                if (cannotBuild is not null)
+                    g.TextWrapped(cannotBuild, Gui.ErrorColor);
                 if (_unsaved)
                     g.TextWrapped("Unsaved changes are not included. Save first with Cmd/Ctrl+S.", Gui.ErrorColor);
                 g.Separator();
-                if (g.Button("Build", highlighted: true))
+                if (g.Button("Build", enabled: cannotBuild is null, highlighted: cannotBuild is null) && cannotBuild is null)
                     BeginBuild();
                 g.SameLine();
                 if (g.Button("Back"))

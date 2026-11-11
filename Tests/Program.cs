@@ -1547,15 +1547,46 @@ Directory.CreateDirectory(Path.Combine(projectDir, "Scenes"));
     Check(Editor.Modeling.ModelEdit.Problem(twice) is not null, "so is one mesh placed twice, where a move couldn't apply to both");
     Directory.Delete(modelDir, true);
 
-    // Building for another platform.
+    // Building for another platform and processor.
     var expectedRids = new Dictionary<Editor.BuildPlatform, string> { [Editor.BuildPlatform.Windows] = "win-x64", [Editor.BuildPlatform.Mac] = "osx-arm64", [Editor.BuildPlatform.Linux] = "linux-x64" };
     var thisPlatform = Editor.BuildTargets.ThisPlatform;
-    Check(expectedRids.Where(p => p.Key != thisPlatform).All(p => Editor.BuildTargets.Rid(p.Key) == p.Value) &&
-          Editor.BuildTargets.Rid(thisPlatform) == System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier,
-          "a build for another platform uses its usual processor type, and one for this computer uses this computer's");
+    var thisArchitecture = Editor.BuildTargets.ThisArchitecture;
+    Check(expectedRids.Where(p => p.Key != thisPlatform)
+              .All(p => Editor.BuildTargets.Rid(p.Key, Editor.BuildTargets.DefaultArchitecture(p.Key)) == p.Value) &&
+          Editor.BuildTargets.DefaultArchitecture(thisPlatform) == thisArchitecture &&
+          Editor.BuildTargets.Rid(thisPlatform, thisArchitecture) == System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier,
+          "a build for another platform starts on its usual processor type, and one for this computer on this computer's");
     var otherBuild = expectedRids.Keys.First(p => p != thisPlatform);
-    Check(Editor.BuildTargets.FolderName("Game", thisPlatform) == "Game" && Editor.BuildTargets.FolderName("Game", otherBuild) == $"Game-{otherBuild}",
+    var otherUsual = Editor.BuildTargets.DefaultArchitecture(otherBuild);
+    Check(Editor.BuildTargets.FolderName("Game", thisPlatform, thisArchitecture) == "Game" &&
+          Editor.BuildTargets.FolderName("Game", otherBuild, otherUsual) == $"Game-{otherBuild}",
           "a build for another platform gets its own folder, so two platforms' files never mix");
+    Check(Editor.BuildTargets.FolderName("Game", Editor.BuildPlatform.Windows, Editor.BuildArchitecture.Arm64) ==
+              (thisPlatform == Editor.BuildPlatform.Windows ? (thisArchitecture == Editor.BuildArchitecture.Arm64 ? "Game" : "Game-arm64") : "Game-Windows-arm64") &&
+          (thisPlatform == Editor.BuildPlatform.Linux && thisArchitecture == Editor.BuildArchitecture.Arm32 ||
+           Editor.BuildTargets.Rid(Editor.BuildPlatform.Linux, Editor.BuildArchitecture.Arm32) == "linux-arm") &&
+          (thisPlatform == Editor.BuildPlatform.Windows && thisArchitecture == Editor.BuildArchitecture.X86 ||
+           Editor.BuildTargets.Rid(Editor.BuildPlatform.Windows, Editor.BuildArchitecture.X86) == "win-x86"),
+          "other processors get their own runtime and folder: win-x86, linux-arm, Game-Windows-arm64");
+    Check(Editor.BuildTargets.Architectures(Editor.BuildPlatform.Windows).Select(o => o.Architecture)
+              .SequenceEqual(new[] { Editor.BuildArchitecture.X64, Editor.BuildArchitecture.Arm64, Editor.BuildArchitecture.X86 }) &&
+          Editor.BuildTargets.Architectures(Editor.BuildPlatform.Mac).Select(o => o.Architecture)
+              .SequenceEqual(new[] { Editor.BuildArchitecture.Arm64, Editor.BuildArchitecture.X64 }) &&
+          Editor.BuildTargets.Architectures(Editor.BuildPlatform.Linux).Select(o => o.Architecture)
+              .SequenceEqual(new[] { Editor.BuildArchitecture.X64, Editor.BuildArchitecture.Arm64, Editor.BuildArchitecture.Arm32 }),
+          "each platform lists the processors .NET runs on: no 32-bit Mac, and no 32-bit ARM on Windows");
+    Check(Editor.BuildTargets.Find(Editor.BuildPlatform.Windows, Editor.BuildArchitecture.Arm64)!.Support == Editor.ArchitectureSupport.NoNativeLibraries &&
+          Editor.BuildTargets.Warning(Editor.BuildPlatform.Windows, Editor.BuildArchitecture.Arm64)!.Contains("won't start") &&
+          Editor.BuildTargets.Warning(Editor.BuildPlatform.Mac, Editor.BuildArchitecture.X64)!.Contains("experimental") &&
+          Editor.BuildTargets.Warning(Editor.BuildPlatform.Linux, Editor.BuildArchitecture.Arm64)!.Contains("experimental") &&
+          Editor.BuildTargets.Warning(Editor.BuildPlatform.Linux, Editor.BuildArchitecture.X64) is null,
+          "processors without the engine's native libraries say games won't start yet, and Intel Macs are marked experimental");
+    Check(Editor.BuildTargets.CannotBuild(Editor.BuildPlatform.Linux, Editor.BuildArchitecture.Arm32, fromSource: false) is { } noRelease &&
+          noRelease.Contains("checkout") &&
+          Editor.BuildTargets.CannotBuild(Editor.BuildPlatform.Linux, Editor.BuildArchitecture.Arm32, fromSource: true) is null &&
+          Editor.BuildTargets.CannotBuild(Editor.BuildPlatform.Windows, Editor.BuildArchitecture.Arm64, fromSource: false) is null &&
+          Editor.BuildTargets.CannotBuild(Editor.BuildPlatform.Mac, Editor.BuildArchitecture.Arm32, fromSource: true) is not null,
+          "a released editor can only build what a release has a player for; an editor run from source can build any of them");
 
     string playerZips = Path.Combine(Path.GetTempPath(), "empire-player-" + Guid.NewGuid().ToString("N"));
     Directory.CreateDirectory(playerZips);
