@@ -227,7 +227,7 @@ public sealed unsafe class TouchWindow(EditorView view) : IAppWindow, IUiInput
     public bool PointerOverScene { get; set; }
 
     public void BeginFrame() { }
-    public void Render(CommandBuffer cmd) { }
+    public void Render(UiPass pass) { }
     public bool IsKeyPressed(ImGuiKey key, bool repeat = true) => _pressed.Contains(key) || (repeat && _repeated.Contains(key));
     public bool IsMouseClicked(ImGuiMouseButton button) => _clicked[(int)button];
     public bool IsMouseDoubleClicked(ImGuiMouseButton button) => _doubleClicked[(int)button];

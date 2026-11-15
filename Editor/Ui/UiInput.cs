@@ -1,7 +1,7 @@
 using System.Numerics;
 using Brutal.ImGuiApi;
 using Brutal.Numerics;
-using Brutal.VulkanApi;
+using Engine.Brutal.Gfx;
 
 namespace Editor.Ui;
 
@@ -21,7 +21,7 @@ public interface IUiInput : IDisposable
     bool WantsMouse { get; }
 
     void BeginFrame();
-    void Render(CommandBuffer cmd);
+    void Render(UiPass pass);
     bool IsKeyPressed(ImGuiKey key, bool repeat = true);
     bool IsMouseClicked(ImGuiMouseButton button);
     bool IsMouseDoubleClicked(ImGuiMouseButton button);

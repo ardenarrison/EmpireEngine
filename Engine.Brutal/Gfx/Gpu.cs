@@ -111,6 +111,15 @@ public static class VulkanScripts
         Failed.Clear();
     }
 
+    // Says once which scripts won't draw, when the game draws with Metal: IVulkanRender only runs with Vulkan.
+    public static void WarnUnavailable(Scene scene)
+    {
+        var names = Scripts(scene).Select(s => s.GetType().Name).Distinct().ToList();
+        if (names.Count > 0)
+            Console.WriteLine($"{string.Join(", ", names)} draw with Vulkan (IVulkanRender), which doesn't run while the game uses Metal. " +
+                              "Switch the project to Vulkan to see what they draw.");
+    }
+
     // A list, not a query over the scene, because a script can add objects while it runs.
     private static List<IVulkanRender> Scripts(Scene scene) =>
         scene.All

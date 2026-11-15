@@ -26,8 +26,9 @@
 <pre data-label="&lt;folder&gt;/&lt;name&gt;/"><code>&lt;name&gt;  (or &lt;name&gt;.exe)     the game: run this
 ...                          the .NET runtime and native libraries (Vulkan, GLFW, audio)
 libvulkan.1.dylib, vulkan/   macOS only: the bundled Vulkan loader and MoltenVK
+libspirv-cross-c-shared...   macOS only: SPIRV-Cross, for drawing with Metal
 GameData/
-  game.json                  the game's name and start scene
+  game.json                  the game's name, start scene and graphics API
   Scripts.dll                your scripts, compiled
   EmpirePackage.*.dll        the project's installed packages
   Core/                      a copy of the project: Scenes/, Models/, Audio/ ...</code></pre>

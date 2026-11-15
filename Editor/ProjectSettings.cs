@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Engine.Core.Rendering;
 using Engine.Core.Scene;
 
 namespace Editor;
@@ -40,6 +41,9 @@ public sealed class ProjectSettings
 
     public static float ClampSnap(float value, float fallback) =>
         float.IsNaN(value) || float.IsInfinity(value) ? fallback : Math.Clamp(value, MinSnap, MaxSnap);
+
+    // The graphics API the editor and Mac games draw with on a Mac. Vulkan (through MoltenVK) everywhere else, whatever this says.
+    public GraphicsApi MacGraphics { get; set; } = GraphicsApi.Vulkan;
 
     // Whether the scene view shows frames per second in its top-right corner (Window > FPS Counter).
     public bool ShowFpsCounter { get; set; }
@@ -89,6 +93,8 @@ public sealed class ProjectSettings
                     settings.MoveSnap = (float)moveSnapValue;
                 if (root["scaleSnap"] is JsonValue scaleSnap && scaleSnap.TryGetValue(out double scaleSnapValue))
                     settings.ScaleSnap = (float)scaleSnapValue;
+                if (root["macGraphics"] is JsonValue graphics && graphics.TryGetValue(out string? graphicsName))
+                    settings.MacGraphics = GraphicsApis.Parse(graphicsName);
                 if (root["showFpsCounter"] is JsonValue fps && fps.TryGetValue(out bool showFps))
                     settings.ShowFpsCounter = showFps;
                 if (root["editorFarClipPlane"] is JsonValue far && far.TryGetValue(out double farValue))
@@ -116,6 +122,7 @@ public sealed class ProjectSettings
         root["positionType"] = PositionType.ToString().ToLowerInvariant();
         root["moveSnap"] = MoveSnap;
         root["scaleSnap"] = ScaleSnap;
+        root["macGraphics"] = MacGraphics.ToString().ToLowerInvariant();
         root["showFpsCounter"] = ShowFpsCounter;
         root["editorFarClipPlane"] = EditorFarClipPlane;
         root["editorNearClipPlane"] = EditorNearClipPlane;

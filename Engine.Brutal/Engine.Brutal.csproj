@@ -5,6 +5,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The Metal renderer's off-screen checks (MetalTests) use its internals. -->
+    <InternalsVisibleTo Include="MetalTests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Ahwoo.BRUTAL.Core" Version="2026.10.1" />
     <PackageReference Include="Ahwoo.BRUTAL.Glfw" Version="2026.10.4" />
     <PackageReference Include="Ahwoo.BRUTAL.Gltf" Version="2026.10.2" />

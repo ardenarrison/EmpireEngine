@@ -12,7 +12,7 @@ public sealed class SpriteDrawer(Func<string, ImageData> loadImage)
     private readonly Dictionary<string, GlbModel> _models = new();
 
     // Makes sure every sprite's mesh is on the GPU. Call before BeginFrame, because uploading waits for the GPU.
-    public void Sync(BrutalRenderer renderer, Scene scene)
+    public void Sync(ISceneRenderer renderer, Scene scene)
     {
         foreach (var obj in scene.All)
             foreach (var sprite in obj.Components.OfType<SpriteRenderer>())
@@ -21,7 +21,7 @@ public sealed class SpriteDrawer(Func<string, ImageData> loadImage)
     }
 
     // Queues the sprites for this frame. Call between BeginFrame and EndFrame, after Sync.
-    public void Draw(BrutalRenderer renderer, Scene scene)
+    public void Draw(ISceneRenderer renderer, Scene scene)
     {
         foreach (var obj in scene.All)
             foreach (var sprite in obj.Components.OfType<SpriteRenderer>())

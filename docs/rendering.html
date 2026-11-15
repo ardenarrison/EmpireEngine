@@ -12,7 +12,7 @@
 
 <p class="eyebrow">Systems</p>
 <h1>Rendering and lighting</h1>
-<p class="lead">Empire Engine draws with Vulkan using physically based shading. A scene's look comes from its models' materials, its lights, its Environment (sky and ambient light) and its camera.</p>
+<p class="lead">Empire Engine draws with Vulkan using physically based shading (on a Mac it can draw with Metal instead: see <a href="#metal">Metal on a Mac</a>). A scene's look comes from its models' materials, its lights, its Environment (sky and ambient light) and its camera.</p>
 
 <h2>How surfaces are shaded</h2>
 <p>Every model is shaded with the Cook-Torrance model (GGX distribution, Smith geometry, Schlick Fresnel), the same family of shading that glTF and most modern engines use. From each material it reads:</p>
@@ -137,8 +137,17 @@
 <p>The main camera's anti-aliasing also applies to the editor's view. In the editor, cameras are drawn as a small body with lines showing what they see: yellow when selected, green for the camera play mode uses, gray otherwise.</p>
 <p>The game view is 16:9. In a built game, <kbd>F11</kbd> switches between a window and fullscreen.</p>
 
+<h2 id="metal">Metal on a Mac</h2>
+<p>On a Mac the engine can draw with Metal, Apple's own graphics API, instead of Vulkan. Choose it in <strong>File &gt; Project Settings &gt; Graphics on Mac</strong>. It is experimental. The editor switches the next time the project is opened, and Build Project gives the project's Mac games the same choice (in <code>game.json</code>). Games for Windows and Linux always draw with Vulkan.</p>
+<ul>
+  <li><strong>The same picture.</strong> The Metal renderer draws everything the Vulkan one does, the same way: models with their materials and textures, the sky, every kind of light, the sun's shadows, fog, see-through surfaces, particles, MSAA, FXAA, SMAA, the color effects and the UI. It uses the same shaders: SPIRV-Cross, which every Mac build carries, turns them into Metal's shading language when the editor or game starts.</li>
+  <li><strong>What only Vulkan has.</strong> Scripts that draw with Vulkan themselves (<code>IVulkanRender</code>, below) don't run with Metal; the console names them when the game starts. <code>Gpu.IsAvailable</code> is false.</li>
+  <li><strong>Vulkan on a Mac</strong> goes through MoltenVK, which turns Vulkan into Metal as the game runs. Metal skips that step.</li>
+  <li>To try one without changing the project, set the environment variable <code>EMPIRE_GRAPHICS</code> to <code>metal</code> or <code>vulkan</code> before starting the editor or a game. <code>MTL_DEBUG_LAYER=1</code> turns on Apple's checks of every Metal call, which helps when tracking down a problem.</li>
+</ul>
+
 <h2>Drawing with Vulkan yourself</h2>
-<p>For effects the engine doesn't provide, a Behaviour can record its own Vulkan commands every frame. Scripts are compiled with <code>unsafe</code> allowed and with the engine's Vulkan bindings referenced. Add <code>using Engine.Brutal;</code> (and <code>using Brutal.VulkanApi;</code> for the raw Vulkan types) and implement <code>IVulkanRender</code>:</p>
+<p>For effects the engine doesn't provide, a Behaviour can record its own Vulkan commands every frame (not when the project draws with <a href="#metal">Metal</a>). Scripts are compiled with <code>unsafe</code> allowed and with the engine's Vulkan bindings referenced. Add <code>using Engine.Brutal;</code> (and <code>using Brutal.VulkanApi;</code> for the raw Vulkan types) and implement <code>IVulkanRender</code>:</p>
 <pre><code class="language-cs">using Engine.Brutal;
 using Brutal.VulkanApi;
 

@@ -78,6 +78,23 @@
   </Target>
 
   <!--
+    Metal: every Mac build carries SPIRV-Cross (ThirdParty/SpirvCross, Apache 2.0), which turns the engine's SPIR-V shaders into
+    Metal's shading language when a project draws with Metal. Set EmpireBundleMetal to true to get it without bundling Vulkan
+    (the tests do).
+  -->
+  <ItemGroup Condition="'$(_EmpireVulkanArch)' != '' And ('$(EmpireBundleVulkan)' == 'true' Or '$(EmpireBundleMetal)' == 'true')">
+    <_EmpireMetalNative Include="$(MSBuildThisFileDirectory)ThirdParty/SpirvCross/$(_EmpireVulkanArch)/*.dylib" />
+  </ItemGroup>
+
+  <Target Name="EmpireMetalNativesBuild" AfterTargets="Build" Condition="'@(_EmpireMetalNative)' != ''">
+    <Copy SourceFiles="@(_EmpireMetalNative)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="EmpireMetalNativesPublish" AfterTargets="Publish" Condition="'@(_EmpireMetalNative)' != ''">
+    <Copy SourceFiles="@(_EmpireMetalNative)" DestinationFolder="$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(PublishDir)'))" SkipUnchangedFiles="true" />
+  </Target>
+
+  <!--
     Intel Macs: BRUTAL's packages have no osx-x64 native libraries, so the ones in ThirdParty/IntelMac (GLFW, Dear ImGui,
     libVulkanEx, shaderc; see Tools/IntelNatives) go next to the program, beside the bundled Vulkan loader.
   -->

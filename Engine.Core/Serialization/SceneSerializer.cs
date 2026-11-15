@@ -7,7 +7,8 @@ using Engine.Core.Scripting;
 
 namespace Engine.Core.Serialization;
 
-public sealed record GameManifest(string Name, string StartScene, PositionType PositionType = PositionType.Float);
+// Graphics is the graphics API the project chose ("Vulkan" or "Metal"); a game for another platform than the Mac always uses Vulkan.
+public sealed record GameManifest(string Name, string StartScene, PositionType PositionType = PositionType.Float, string Graphics = "Vulkan");
 
 public static class SceneSerializer
 {

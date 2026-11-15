@@ -13,7 +13,7 @@ public sealed class TerrainDrawer(Func<string, ImageData>? loadImage = null)
     private readonly HashSet<string> _failed = new();
 
     // Makes sure each terrain's mesh is on the GPU. Call before BeginFrame, because replacing a mesh waits for the GPU.
-    public void Sync(BrutalRenderer renderer, Scene scene)
+    public void Sync(ISceneRenderer renderer, Scene scene)
     {
         foreach (var obj in scene.All)
             foreach (var terrain in obj.Components.OfType<Terrain>())
@@ -27,7 +27,7 @@ public sealed class TerrainDrawer(Func<string, ImageData>? loadImage = null)
     }
 
     // Queues the terrains for this frame. Call between BeginFrame and EndFrame, after Sync.
-    public void Draw(BrutalRenderer renderer, Scene scene)
+    public void Draw(ISceneRenderer renderer, Scene scene)
     {
         foreach (var obj in scene.All)
             foreach (var terrain in obj.Components.OfType<Terrain>())

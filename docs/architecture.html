@@ -53,12 +53,13 @@
   <thead><tr><th>Project</th><th>Role</th><th>Built on</th></tr></thead>
   <tbody>
     <tr><td><code>Engine.Core</code></td><td>Everything that isn't drawing or windows: scenes, components, serialization, scripting runtime, physics, audio mixing, animation, particles, terrain, asset loaders. Defines <code>IRenderer</code>, so it never depends on Vulkan.</td><td>.NET only</td></tr>
-    <tr><td><code>Engine.Brutal</code></td><td><code>BrutalRenderer</code> (Vulkan), shaders, window and input (GLFW), audio output (miniaudio), the <code>Gpu</code> API for scripts, <code>Canvas2D</code> (the 2D renderer the editor's panels and the game's UI share, with its font embedded), <code>UiRenderer</code>, and <code>BrutalPlayer</code>, which runs a scene in a window.</td><td>BRUTAL Vulkan, GLFW, glTF and ShaderC packages; Hexa.NET.MiniAudio; StbTrueTypeSharp</td></tr>
+    <tr><td><code>Engine.Brutal</code></td><td><code>BrutalRenderer</code> (Vulkan) and <code>MetalRenderer</code> (Metal, on a Mac, in <code>Metal/</code>), shaders, window and input (GLFW), audio output (miniaudio), the <code>Gpu</code> API for scripts, <code>Canvas2D</code> (the 2D renderer the editor's panels and the game's UI share, with its font embedded), <code>UiRenderer</code>, and <code>BrutalPlayer</code>, which runs a scene in a window.</td><td>BRUTAL Vulkan, GLFW, glTF and ShaderC packages; Hexa.NET.MiniAudio; StbTrueTypeSharp</td></tr>
     <tr><td><code>ScriptCompiler</code></td><td>Compiles <code>Scripts/</code> and packages with Roslyn; checks code for the code view; builds and tracks package DLLs.</td><td>Roslyn</td></tr>
     <tr><td><code>Editor</code></td><td>The editor (<code>empire</code>): panels, gizmos, code view, visual scripting, Package Manager, Build Project.</td><td>BRUTAL ImGui (for keyboard and clipboard input only; everything is drawn with Canvas2D)</td></tr>
     <tr><td><code>Player</code></td><td>The built game's program. Reads <code>GameData/game.json</code>, loads <code>Scripts.dll</code> and packages, runs <code>BrutalPlayer</code>.</td><td></td></tr>
     <tr><td><code>Hub</code></td><td>Empire Engine Hub. Builds and bundles the editor, but doesn't reference its code.</td><td>Avalonia</td></tr>
     <tr><td><code>Tests</code></td><td>A console test program: <code>dotnet run --project Tests</code>.</td><td></td></tr>
+    <tr><td><code>MetalTests</code></td><td>Checks of the Metal renderer that draw off screen on a Mac's GPU: <code>dotnet run --project MetalTests</code> (add <code>MTL_DEBUG_LAYER=1</code> for Apple's checks of every call).</td><td></td></tr>
     <tr><td><code>Probe</code></td><td>Opens a scene in a game window without the editor: <code>dotnet run --project Probe -- &lt;scene&gt; [contentRoot]</code>.</td><td></td></tr>
   </tbody>
 </table></div>

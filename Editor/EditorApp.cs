@@ -96,6 +96,7 @@ public sealed class EditorApp
     private readonly Editor.Assistant.AssistantWindow _assistant = new();
     private ProjectSettingsWindow _projectSettings = null!;
     private ProjectSettings _settings = null!;
+    private GraphicsApi _graphics = GraphicsApi.Vulkan;   // what this session draws with: the project's choice, read when the editor opens
     private readonly FrameRateCounter _frameRate = new();
     private Editor.Terminal.TerminalWindow _terminal = null!;
     private string _buildName = "";
@@ -201,7 +202,7 @@ public sealed class EditorApp
         SceneObject.PositionPrecision = projectSettings.PositionType;   // before any scene loads
         _camera.Far = projectSettings.EditorFarClipPlane;
         _camera.Near = projectSettings.EditorNearClipPlane;
-        _projectSettings = new ProjectSettingsWindow(projectSettings, _camera, contentRoot, SetPositionType);
+        _projectSettings = new ProjectSettingsWindow(projectSettings, _camera, contentRoot, SetPositionType, () => _graphics);
         _settings = projectSettings;
         _packages.Changed += _scriptFields.Invalidate;
         // The code view checks scripts against the enabled packages too, so using their classes isn't an error.
@@ -217,7 +218,8 @@ public sealed class EditorApp
 
     public void Run()
     {
-        BundledVulkan.Prepare();
+        _graphics = GraphicsApis.Resolve(_settings.MacGraphics);
+        if (_graphics == GraphicsApi.Vulkan) BundledVulkan.Prepare();
         if (!Glfw.Init())
             throw new InvalidOperationException("GLFW failed to initialize");
         try
@@ -245,7 +247,7 @@ public sealed class EditorApp
     }
 
     // Runs the editor in a window that already exists, with its input (see IUiInput).
-    public void Run(IAppWindow window, Func<VulkanContext, IUiInput> makeInput)
+    public void Run(IAppWindow window, Func<IGraphicsContext, IUiInput> makeInput)
     {
         void Pinched(double scale)
         {
@@ -265,16 +267,19 @@ public sealed class EditorApp
     // The project to open next, after Run returns because File > Change Project picked one. Null when the editor simply closed.
     public string? NextProject => _exitRequested ? _nextProject : null;
 
-    private void RenderLoop(IAppWindow window, Func<VulkanContext, IUiInput> makeInput)
+    private void RenderLoop(IAppWindow window, Func<IGraphicsContext, IUiInput> makeInput)
     {
         _window = window;
-        using var ctx = new VulkanContext(window, 1280, 720);
-        using var shaders = new ShaderLibrary(ctx.Device);
-        using var renderer = new BrutalRenderer(ctx, shaders);
-        renderer.AfterSceneDraws = cmd =>
-        {
-            if (_mode == EditorMode.Play) VulkanScripts.Render(_scene, cmd);
-        };
+        using IGraphicsContext ctx = _graphics == GraphicsApi.Metal && window.Glfw is not null
+            ? new Engine.Brutal.Metal.MetalContext(window)
+            : new VulkanContext(window, 1280, 720);
+        using var shaders = new ShaderLibrary((ctx as VulkanContext)?.Device);
+        using var renderer = SceneRenderers.Create(ctx, shaders);
+        if (renderer is BrutalRenderer vulkan)
+            vulkan.AfterSceneDraws = cmd =>
+            {
+                if (_mode == EditorMode.Play) VulkanScripts.Render(_scene, cmd);
+            };
         using var ui = makeInput(ctx);
         UiInput.Current = ui;
         using var audio = new AudioOutput();   // the sound device; the editor runs silent if there is none
@@ -617,15 +622,15 @@ public sealed class EditorApp
             if (showCode && _code.TakeExit())
                 _codeMode = false;
             _gui.End();
-            ctx.EndFrame(cmd =>
+            ctx.EndFrame(pass =>
             {
                 if (showVc)
-                    canvas.Render(cmd, canvasSize.X, canvasSize.Y, canvasScale);
+                    canvas.Render(pass, canvasSize.X, canvasSize.Y, canvasScale);
                 if (showCode)
-                    codeCanvas.Render(cmd, canvasSize.X, canvasSize.Y, canvasScale);
-                ui.Render(cmd);   // ImGui only supplies keyboard input now, so this ends its frame and draws nothing
-                gameCanvas.Render(cmd, canvasSize.X, canvasSize.Y, canvasScale);   // the game's UI
-                uiCanvas.Render(cmd, canvasSize.X, canvasSize.Y, canvasScale);     // the editor's own UI, on top
+                    codeCanvas.Render(pass, canvasSize.X, canvasSize.Y, canvasScale);
+                ui.Render(pass);   // ImGui only supplies keyboard input now, so this ends its frame and draws nothing
+                gameCanvas.Render(pass, canvasSize.X, canvasSize.Y, canvasScale);   // the game's UI
+                uiCanvas.Render(pass, canvasSize.X, canvasSize.Y, canvasScale);     // the editor's own UI, on top
             });
         }
 
@@ -636,7 +641,7 @@ public sealed class EditorApp
 
     // ---- panels ----------------------------------------------------------------------
 
-    private void DrawPanels(BrutalRenderer renderer, IAppWindow window)
+    private void DrawPanels(ISceneRenderer renderer, IAppWindow window)
     {
         DrawHierarchy(window);
         DrawToolButtons();
@@ -2849,7 +2854,7 @@ public sealed class EditorApp
 
     // Uploads a model the first time it is drawn, so models added at runtime show up too.
     // Returns false when the model can't be loaded, so the caller skips drawing it.
-    private bool EnsureUploaded(BrutalRenderer renderer, string relPath)
+    private bool EnsureUploaded(ISceneRenderer renderer, string relPath)
     {
         if (string.IsNullOrEmpty(relPath) || _badModels.Contains(relPath)) return false;
         if (_uploaded.Contains(relPath)) return true;
@@ -3816,7 +3821,7 @@ public sealed class EditorApp
 
     // Places a model dragged from the asset panel where the mouse was released over the scene.
     // Released anywhere else, nothing happens.
-    private void DropModelIntoScene(BrutalRenderer renderer, string relPath, float2 cursor, float4 viewport,
+    private void DropModelIntoScene(ISceneRenderer renderer, string relPath, float2 cursor, float4 viewport,
         Matrix4x4 viewProj)
     {
         if (DropPoint(cursor, viewport, viewProj) is not { } spawn)
@@ -3844,7 +3849,7 @@ public sealed class EditorApp
     }
 
     // The scene area in ImGui pixels: x, y, width, height. Game UI is placed inside it.
-    private float4 SceneArea(VulkanContext ctx)
+    private float4 SceneArea(IGraphicsContext ctx)
     {
         var vp = ctx.SceneViewport;
         var display = UiInput.Current.DisplaySize;
@@ -4261,6 +4266,7 @@ public sealed class EditorApp
             _uiMode = false;
             _mode = EditorMode.Play;
             Console.WriteLine("Play mode. P to stop and restore the scene.");
+            if (_graphics == GraphicsApi.Metal) VulkanScripts.WarnUnavailable(_scene);
         }
         else
         {

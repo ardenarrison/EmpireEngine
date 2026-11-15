@@ -1,11 +1,14 @@
 using Editor.Ui;
+using Engine.Core.Rendering;
 using Engine.Core.Scene;
 
 namespace Editor;
 
 // File > Project Settings: settings that belong to the project and are kept in its project-settings.json.
-// That is the position type (float or double), the snapping steps and the editor's near and far clip planes.
-public sealed class ProjectSettingsWindow(ProjectSettings settings, EditorCamera camera, string projectFolder, Action<PositionType> positionTypeChanged)
+// That is the position type (float or double), the graphics API on a Mac, the snapping steps and the editor's near and far clip planes.
+// drawingWith is the graphics API this editor session draws with, which only changes when the project is opened again.
+public sealed class ProjectSettingsWindow(ProjectSettings settings, EditorCamera camera, string projectFolder, Action<PositionType> positionTypeChanged,
+    Func<GraphicsApi> drawingWith)
 {
     private bool _open;
     private bool _dirty;          // changed but not saved yet: saved when the mouse is let go (not on every step of a drag) and when the window closes
@@ -44,6 +47,20 @@ public sealed class ProjectSettingsWindow(ProjectSettings settings, EditorCamera
         g.TextWrapped("Float keeps about 7 digits of precision, which is plenty for most games. Double keeps about 16, for very large worlds: far from the " +
                       "origin an object can still move in tiny steps, and small movements added up over time stay exact. Double positions are edited in the Inspector " +
                       "and read in scripts as transform.positionD. Physics, rendering and audio still work in floats. Going back to Float rounds every position now in the scene.", Gui.DimColor);
+        g.Spacing();
+
+        var graphics = settings.MacGraphics;
+        if (g.Combo("Graphics on Mac", ref graphics))
+        {
+            settings.MacGraphics = graphics;
+            _dirty = true;
+        }
+        g.TextWrapped("How the editor and the project's Mac games draw on a Mac. Vulkan goes through MoltenVK, which turns it into Metal, and is the " +
+                      "same renderer as on Windows and Linux. Metal draws with Apple's own API directly (experimental). Both draw the same picture; " +
+                      "scripts that draw with Vulkan themselves (IVulkanRender) only run with Vulkan. Games for Windows and Linux always use Vulkan.", Gui.DimColor);
+        if (OperatingSystem.IsMacOS() && GraphicsApis.Resolve(settings.MacGraphics) != drawingWith())
+            g.TextWrapped($"The editor is drawing with {drawingWith()} until you open the project again (File > Change Project, or close and " +
+                          "reopen it). Builds use the new choice right away.", Gui.AccentColor);
         g.Spacing();
 
         g.Text("Move Snap");
