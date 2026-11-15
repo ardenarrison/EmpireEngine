@@ -21,17 +21,20 @@ public sealed class BrutalPlayer
 
     private readonly AssetCache _assets;
     private readonly string? _compiledShaders;
+    private readonly GraphicsApi _graphics;
 
-    // compiledShaders is a game's shaders file, which a game needs because it has no shader compiler.
-    public BrutalPlayer(AssetCache assets, string? compiledShaders = null)
+    // compiledShaders is a game's shaders file, which a game needs because it has no shader compiler. graphics is the API the project
+    // chose; Metal falls back to Vulkan away from a Mac (see GraphicsApis.Resolve).
+    public BrutalPlayer(AssetCache assets, string? compiledShaders = null, GraphicsApi graphics = GraphicsApi.Vulkan)
     {
         _assets = assets;
         _compiledShaders = compiledShaders;
+        _graphics = GraphicsApis.Resolve(graphics);
     }
 
     public void Run(Scene scene, string title = "Empire Engine")
     {
-        BundledVulkan.Prepare();
+        if (_graphics == GraphicsApi.Vulkan) BundledVulkan.Prepare();
         if (!Glfw.Init())
             throw new InvalidOperationException("GLFW failed to initialize");
         try
@@ -61,9 +64,10 @@ public sealed class BrutalPlayer
     private void RenderLoop(GlfwWindow window, Scene scene)
     {
         // Declaration order matters: renderer, then shaders, then context (disposed in reverse).
-        using var ctx = new VulkanContext(window, 1280, 720);
-        using var shaders = new ShaderLibrary(ctx.Device, _compiledShaders);
-        using var renderer = new BrutalRenderer(ctx, shaders);
+        var appWindow = new GlfwAppWindow(window);
+        using IGraphicsContext ctx = _graphics == GraphicsApi.Metal ? new Metal.MetalContext(appWindow) : new VulkanContext(appWindow, 1280, 720);
+        using var shaders = new ShaderLibrary((ctx as VulkanContext)?.Device, _compiledShaders);
+        using var renderer = SceneRenderers.Create(ctx, shaders);
         using var uiCanvas = new Canvas2D(ctx, shaders, Canvas2D.DefaultFont(), UiFontSize, window.ContentScale.X);
 
         // Every game opens with the Empire Engine and BRUTAL logos, before anything else loads or runs (the BRUTAL
@@ -99,7 +103,10 @@ public sealed class BrutalPlayer
         }
         foreach (var key in models)
             Upload(key);
-        renderer.AfterSceneDraws = cmd => VulkanScripts.Render(scene, cmd);
+        if (renderer is BrutalRenderer vulkan)
+            vulkan.AfterSceneDraws = cmd => VulkanScripts.Render(scene, cmd);
+        else
+            VulkanScripts.WarnUnavailable(scene);
 
         Engine.Core.Physics.PhysicsWorld.ModelLoader = _assets.GetModel;   // for mesh colliders
         Animator.ModelLoader = _assets.GetModel;                           // and for animations
@@ -109,7 +116,6 @@ public sealed class BrutalPlayer
         var (center, radius) = FitCamera(scene);
         var clock = Stopwatch.StartNew();
         double lastTime = 0;
-        var appWindow = new GlfwAppWindow(window);
         KeyboardInput.Bind(appWindow);
         GamepadInput.Bind();
         TextInput.Bind(window);
@@ -194,7 +200,7 @@ public sealed class BrutalPlayer
             UiRenderer.Draw(scene, uiCanvas, gameArea);
             var points = new float2(Math.Max(window.Size.X, 1), Math.Max(window.Size.Y, 1));
             var pixelScale = new float2(window.FramebufferSize.X / points.X, window.FramebufferSize.Y / points.Y);
-            renderer.EndFrame(cmd => uiCanvas.Render(cmd, points.X, points.Y, pixelScale));
+            renderer.EndFrame(pass => uiCanvas.Render(pass, points.X, points.Y, pixelScale));
         }
 
         ctx.WaitIdle();
@@ -202,7 +208,7 @@ public sealed class BrutalPlayer
     }
 
     // The 16:9 game view in the window's screen points: x, y, width, height.
-    private static float4 GameArea(VulkanContext ctx, GlfwWindow window)
+    private static float4 GameArea(IGraphicsContext ctx, GlfwWindow window)
     {
         var vp = ctx.SceneViewport;
         return new float4(vp.X * window.Size.X, vp.Y * window.Size.Y, vp.Z * window.Size.X, vp.W * window.Size.Y);

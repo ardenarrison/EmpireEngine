@@ -33,10 +33,10 @@ public static class SplashScreen
 
     // Shows the splash and returns when it is over, or when the window is closed (check window.ShouldClose afterwards).
     // small is a canvas with a small font (the game's UI one) for the captions.
-    public static void Run(VulkanContext ctx, ShaderLibrary shaders, GlfwWindow window, Canvas2D small) =>
+    public static void Run(IGraphicsContext ctx, ShaderLibrary shaders, GlfwWindow window, Canvas2D small) =>
         Run(ctx, shaders, new GlfwAppWindow(window), small);
 
-    public static void Run(VulkanContext ctx, ShaderLibrary shaders, IAppWindow window, Canvas2D small)
+    public static void Run(IGraphicsContext ctx, ShaderLibrary shaders, IAppWindow window, Canvas2D small)
     {
         float unit = Math.Clamp(Math.Min(window.Size.X / 1280f, window.Size.Y / 720f), 0.5f, 3f);
         using var big = new Canvas2D(ctx, shaders, Canvas2D.DefaultFont(), TitleSize * unit, window.ContentScale);
@@ -92,10 +92,10 @@ public static class SplashScreen
             small.Text(NoticeLine2, (w - small.MeasureText(NoticeLine2)) / 2f, y + captionH + 2f, dim);
 
             ctx.BeginFrame();
-            ctx.EndFrame(cmd =>
+            ctx.EndFrame(pass =>
             {
-                big.Render(cmd, w, h, pixelScale);
-                small.Render(cmd, w, h, pixelScale);
+                big.Render(pass, w, h, pixelScale);
+                small.Render(pass, w, h, pixelScale);
             });
         }
     }

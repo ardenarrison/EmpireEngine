@@ -156,7 +156,7 @@ internal sealed class ParticleRenderer : IDisposable
 
     // The camera's right and up directions in the world, read back from the view-projection: two points one step
     // apart in screen x (or y) at the same depth differ exactly along that axis.
-    private static void CameraAxes(Matrix4x4 viewProjection, out Vector3 right, out Vector3 up)
+    internal static void CameraAxes(Matrix4x4 viewProjection, out Vector3 right, out Vector3 up)
     {
         right = Vector3.UnitX;
         up = Vector3.UnitY;

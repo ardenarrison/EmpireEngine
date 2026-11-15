@@ -5,6 +5,7 @@ using Brutal.Numerics;
 using Brutal.Pointers;
 using Brutal.VulkanApi;
 using Brutal.VulkanApi.Abstractions;
+using Engine.Core.Rendering;
 
 namespace Engine.Brutal.Gfx;
 
@@ -19,7 +20,7 @@ public readonly record struct PostEffects(float Exposure = 0f, float Contrast = 
 }
 
 // Owns instance, device, swapchain, depth buffer, a UI render pass, command buffers and per-frame sync.
-public sealed unsafe class VulkanContext : IDisposable
+public sealed unsafe class VulkanContext : IGraphicsContext
 {
     public const int FramesInFlight = 2;
     public const int DepthFormat = 126;                 // VK_FORMAT_D32_SFLOAT
@@ -161,14 +162,7 @@ public sealed unsafe class VulkanContext : IDisposable
     public Action<CommandBuffer>? AfterScenePass { get; set; }
 
     // The 16:9 rectangle the scene fills, in pixels.
-    public (int X, int Y, int Width, int Height) SceneRectPixels
-    {
-        get
-        {
-            var rect = SceneViewport;
-            return ((int)(rect.X * _extent.Width), (int)(rect.Y * _extent.Height), (int)(rect.Z * _extent.Width), (int)(rect.W * _extent.Height));
-        }
-    }
+    public (int X, int Y, int Width, int Height) SceneRectPixels => SceneLayout.Pixels(SceneViewport, _extent.Width, _extent.Height);
 
     // Sets FXAA or SMAA and the color effects. When either is on the scene is drawn into its own image first; making or freeing
     // that image waits for the GPU, so call this between frames. Only does work when something changed, and keeps everything off
@@ -256,38 +250,16 @@ public sealed unsafe class VulkanContext : IDisposable
     }
     public int Width => _extent.Width;
     public int Height => _extent.Height;
+    public GraphicsApi Api => GraphicsApi.Vulkan;
 
     // The scene is always drawn at 16:9. Any leftover space is left black, so the picture is never stretched.
-    public const float SceneAspect = 16f / 9f;
+    public const float SceneAspect = SceneLayout.Aspect;
 
     // Share of the window height kept free at the bottom for editor panels. The scene is fitted above it.
     public float BottomReservedFraction { get; set; }
 
     // The part of the window the scene fills, as fractions: x, y, width, height.
-    public float4 SceneViewport
-    {
-        get
-        {
-            float areaW = _extent.Width;
-            float areaH = _extent.Height * (1f - Math.Clamp(BottomReservedFraction, 0f, 0.9f));
-            float w, h;
-            if (areaW / areaH > SceneAspect)
-            {
-                h = areaH;
-                w = h * SceneAspect;
-            }
-            else
-            {
-                w = areaW;
-                h = w / SceneAspect;
-            }
-            return new float4(
-                (areaW - w) / 2f / _extent.Width,
-                (areaH - h) / 2f / _extent.Height,
-                w / _extent.Width,
-                h / _extent.Height);
-        }
-    }
+    public float4 SceneViewport => SceneLayout.Viewport(_extent.Width, _extent.Height, BottomReservedFraction);
 
     public bool IsMinimized => _host.FramebufferSize.X == 0 || _host.FramebufferSize.Y == 0;
     public CommandBuffer CurrentCommandBuffer => _cmds[_frame];
@@ -625,6 +597,11 @@ public sealed unsafe class VulkanContext : IDisposable
     // shadow pass and the scene draws once every draw for the frame is known.
     public Action? BeforeEndFrame { get; set; }
     private bool _scenePassOpen;
+
+    void IGraphicsContext.BeginFrame() => BeginFrame();
+
+    void IGraphicsContext.EndFrame(Action<UiPass>? drawUi) =>
+        EndFrame(drawUi is null ? null : cmd => drawUi(new UiPass(cmd)));
 
     public void BeginFrame(bool deferScenePass = false)
     {

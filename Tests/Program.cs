@@ -1588,6 +1588,29 @@ Directory.CreateDirectory(Path.Combine(projectDir, "Scenes"));
           Editor.BuildTargets.CannotBuild(Editor.BuildPlatform.Mac, Editor.BuildArchitecture.Arm32, fromSource: true) is not null,
           "a released editor can only build what a release has a player for; an editor run from source can build any of them");
 
+    // Which graphics API a game draws with: the project's Mac choice only in a Mac game; Metal only where there is Metal.
+    {
+        var metal = Engine.Core.Rendering.GraphicsApi.Metal;
+        var vulkan = Engine.Core.Rendering.GraphicsApi.Vulkan;
+        Check(Editor.BuildTargets.Graphics(Editor.BuildPlatform.Mac, metal) == metal &&
+              Editor.BuildTargets.Graphics(Editor.BuildPlatform.Windows, metal) == vulkan &&
+              Editor.BuildTargets.Graphics(Editor.BuildPlatform.Linux, metal) == vulkan &&
+              Editor.BuildTargets.Graphics(Editor.BuildPlatform.Mac, vulkan) == vulkan,
+            "a Mac game draws with the project's Mac choice, and Windows and Linux games always with Vulkan");
+        var macOnly = OperatingSystem.IsMacOS() ? metal : vulkan;
+        Check(Engine.Core.Rendering.GraphicsApis.Resolve(metal, overrideValue: "") == macOnly &&
+              Engine.Core.Rendering.GraphicsApis.Resolve(vulkan, overrideValue: "metal") == macOnly &&
+              Engine.Core.Rendering.GraphicsApis.Resolve(metal, overrideValue: "Vulkan") == vulkan &&
+              Engine.Core.Rendering.GraphicsApis.Resolve(vulkan, overrideValue: "something else") == vulkan,
+            "EMPIRE_GRAPHICS overrides the project's choice, and Metal falls back to Vulkan where there is no Metal");
+        Check(Engine.Core.Rendering.GraphicsApis.Parse("Metal") == metal && Engine.Core.Rendering.GraphicsApis.Parse(" metal ") == metal &&
+              Engine.Core.Rendering.GraphicsApis.Parse(null) == vulkan && Engine.Core.Rendering.GraphicsApis.Parse("7") == vulkan,
+            "game.json's graphics name is read leniently, and anything unknown is Vulkan");
+        var manifest = System.Text.Json.JsonSerializer.Deserialize<Engine.Core.Serialization.GameManifest>("{\"name\":\"Old\",\"startScene\":\"Scenes/Main.empirescene\"}",
+            new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
+        Check(manifest.Graphics == "Vulkan", "a game.json from before the graphics choice draws with Vulkan");
+    }
+
     string playerZips = Path.Combine(Path.GetTempPath(), "empire-player-" + Guid.NewGuid().ToString("N"));
     Directory.CreateDirectory(playerZips);
     string sharedList = "";
@@ -3260,6 +3283,15 @@ if (!OperatingSystem.IsWindows())
     File.WriteAllText(psFile, "{ broken");
     new ProjectSettings { EditorFarClipPlane = 800f }.Save(psDir);
     Check(ProjectSettings.Load(psDir).EditorFarClipPlane == 800f, "saving replaces a broken settings file with a good one");
+
+    // Graphics on Mac: Vulkan unless the project chose Metal, saved by name; anything unknown reads as Vulkan.
+    File.Delete(psFile);
+    Check(ProjectSettings.Load(psDir).MacGraphics == Engine.Core.Rendering.GraphicsApi.Vulkan, "a project draws with Vulkan on a Mac unless it chooses Metal");
+    new ProjectSettings { MacGraphics = Engine.Core.Rendering.GraphicsApi.Metal }.Save(psDir);
+    Check(ProjectSettings.Load(psDir).MacGraphics == Engine.Core.Rendering.GraphicsApi.Metal && File.ReadAllText(psFile).Contains("\"macGraphics\": \"metal\""),
+        "choosing Metal is saved in project-settings.json and read back");
+    File.WriteAllText(psFile, "{ \"macGraphics\": \"directx\" }");
+    Check(ProjectSettings.Load(psDir).MacGraphics == Engine.Core.Rendering.GraphicsApi.Vulkan, "an unknown graphics name reads as Vulkan");
 
     // the near clip plane
     Check(new ProjectSettings().EditorNearClipPlane == 0.1f && ProjectSettings.DefaultNearClipPlane == 0.1f, "the editor's near clip plane is 0.1 unless set");

@@ -4,6 +4,7 @@ using System.Reflection.PortableExecutable;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using EmpireHub;
+using Engine.Core.Rendering;
 
 namespace Editor;
 
@@ -127,7 +128,11 @@ public static class BuildTargets
         return null;
     }
 
-    // A warning to show before and after building, or null. Games for a processor without the native libraries are still built,
+    // The graphics API a game for a platform draws with: the project's Mac choice for a Mac game, Vulkan everywhere else.
+    public static GraphicsApi Graphics(BuildPlatform platform, GraphicsApi macChoice) =>
+        platform == BuildPlatform.Mac ? macChoice : GraphicsApi.Vulkan;
+
+        // A warning to show before and after building, or null. Games for a processor without the native libraries are still built,
     // so they are ready if those libraries come, but they won't start yet.
     public static string? Warning(BuildPlatform platform, BuildArchitecture architecture) => Find(platform, architecture)?.Support switch
     {

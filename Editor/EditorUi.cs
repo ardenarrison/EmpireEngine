@@ -8,18 +8,24 @@ using Engine.Brutal.Gfx;
 
 namespace Editor;
 
-// Wraps BRUTAL's ImGui: one context, the GLFW input backend, and the Vulkan renderer backend. It only supplies input now
-// (see IUiInput): the editor draws itself with Gui.
+// Wraps BRUTAL's ImGui: one context, the GLFW input backend, and (with Vulkan) the Vulkan renderer backend. It only supplies input
+// now (see IUiInput): the editor draws itself with Gui, so with Metal there is no ImGui renderer at all.
 public sealed class EditorUi : IUiInput
 {
     private readonly GlfwBackend _platform;
-    private readonly VulkanBackend _renderer;
+    private readonly VulkanBackend? _renderer;
 
-    public EditorUi(GlfwWindow window, VulkanContext ctx)
+    public EditorUi(GlfwWindow window, IGraphicsContext graphics)
     {
         ImGui.CreateContext();
         ImGui.GetIO().IniFilename = default;     // ImGui only draws game UI now, so there is no window layout to save
         _platform = new GlfwBackend(window, GlfwBackend.ClientApi.Vulkan);
+        if (graphics is not VulkanContext ctx)
+        {
+            // No renderer: ImGui is told one handles its textures, or NewFrame crashes for want of a built font atlas.
+            ImGui.GetIO().BackendFlags |= ImGuiBackendFlags.RendererHasTextures;
+            return;
+        }
 
         var info = new VulkanBackend.CreateInfo
         {
@@ -73,15 +79,15 @@ public sealed class EditorUi : IUiInput
         ImGui.NewFrame();
     }
 
-    public void Render(CommandBuffer cmd)
+    public void Render(UiPass pass)
     {
         ImGui.Render();
-        _renderer.RenderDrawData(ImGui.GetDrawData(), cmd);
+        _renderer?.RenderDrawData(ImGui.GetDrawData(), pass.Vulkan);
     }
 
     public void Dispose()
     {
-        _renderer.Dispose();
+        _renderer?.Dispose();
         _platform.Dispose();
         ImGui.DestroyContext();
     }

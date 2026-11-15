@@ -8,6 +8,7 @@
   <Project Path="Player/Player.csproj" />
   <Folder Name="/Tools/">
     <Project Path="Tests/Tests.csproj" />
+    <Project Path="MetalTests/MetalTests.csproj" />
     <Project Path="Probe/Probe.csproj" />
   </Folder>
 </Solution>

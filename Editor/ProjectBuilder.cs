@@ -2,6 +2,8 @@ using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using Engine.Brutal.Gfx;
+using Engine.Core.Rendering;
 using Engine.Core.Serialization;
 using Engine.Core.Scripting;
 using Engine.Scripting.Build;
@@ -213,7 +215,7 @@ public static class ProjectBuilder
         // 5. Record which scene starts the game.
         string startScene = Path.GetRelativePath(content, scene).Replace('\\', '/');
         File.WriteAllText(Path.Combine(gameData, "game.json"),
-            JsonSerializer.Serialize(new GameManifest(name, startScene, ProjectSettings.Load(content).PositionType), Options));
+            JsonSerializer.Serialize(Manifest(name, startScene, ProjectSettings.Load(content), platform), Options));
 
         File.WriteAllText(LogPath, log);
         string message = $"Built \"{name}\" for {platform} {BuildTargets.ArchitectureName(architecture)} ({rid}) to:\n{outDir}";
@@ -222,6 +224,12 @@ public static class ProjectBuilder
         if (OperatingSystem.IsWindows() && otherPlatform)
             message += $"\n\nWindows can't mark a file as a program for {platform}. On that computer, run this in the game's folder first:\nchmod +x \"{name}\"";
         return new BuildResult(true, message, outDir, log);
+    }
+
+    // What game.json says.
+    public static GameManifest Manifest(string name, string startScene, ProjectSettings settings, BuildPlatform platform)
+    {
+        return new GameManifest(name, startScene, settings.PositionType, BuildTargets.Graphics(platform, settings.MacGraphics).ToString());
     }
 
     // This editor's version, whose release a downloaded player comes from: the scripts are compiled against the same engine.

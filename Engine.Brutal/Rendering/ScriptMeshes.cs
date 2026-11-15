@@ -13,7 +13,7 @@ public sealed class ScriptMeshes
     private int _framesUntilSweep;
 
     // The renderer key for a mesh, uploading it if this is the first time it is drawn.
-    public string KeyFor(BrutalRenderer renderer, GlbModel mesh)
+    public string KeyFor(ISceneRenderer renderer, GlbModel mesh)
     {
         if (_keys.TryGetValue(mesh, out var key)) return key;
         key = $"script-mesh:{++_next}";
@@ -24,7 +24,7 @@ public sealed class ScriptMeshes
     }
 
     // Frees meshes no script holds any more. Call before BeginFrame: freeing waits for the GPU. Checks about once a second.
-    public void Sweep(BrutalRenderer renderer)
+    public void Sweep(ISceneRenderer renderer)
     {
         if (--_framesUntilSweep > 0) return;
         _framesUntilSweep = 60;
