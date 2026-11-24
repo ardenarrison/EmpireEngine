@@ -24,6 +24,15 @@ public sealed class AssetCache(string contentRoot)
         }
     }
 
+    // Forgets a decoded picture, so the next GetImage reads the file again (after the sprite editor saved over it).
+    public void ForgetImage(string relativePath)
+    {
+        string wanted = relativePath.Replace('\\', '/');
+        lock (_gate)
+            foreach (var key in _images.Keys.Where(k => string.Equals(k.Replace('\\', '/'), wanted, StringComparison.OrdinalIgnoreCase)).ToList())
+                _images.Remove(key);
+    }
+
     // A sound in the project (.mp3 or .wav), decoded once.
     public AudioClip GetAudio(string relativePath)
     {

@@ -5,6 +5,7 @@ using Brutal.Numerics;
 using Editor.Ui;
 using Engine.Core.Animation;
 using Engine.Core.Assets;
+using Engine.Core.Rendering;
 using Engine.Core.Scene;
 
 namespace Editor.Modeling;
@@ -1089,8 +1090,8 @@ public sealed class ModelingView(string contentRoot, AssetCache assets)
         if (!Matrix4x4.Invert(_viewProj, out var inverse)) return null;
         float x = (mouse.X - _area.X) / _area.Z * 2f - 1f;
         float y = (mouse.Y - _area.Y) / _area.W * 2f - 1f;
-        var near = Vector4.Transform(new Vector4(x, y, 0f, 1f), inverse);
-        var far = Vector4.Transform(new Vector4(x, y, 1f, 1f), inverse);
+        var near = Vector4.Transform(new Vector4(x, y, ClipDepth.Near, 1f), inverse);
+        var far = Vector4.Transform(new Vector4(x, y, ClipDepth.Ahead, 1f), inverse);
         var origin = new Vector3(near.X, near.Y, near.Z) / near.W;
         var direction = new Vector3(far.X, far.Y, far.Z) / far.W - origin;
         return direction.LengthSquared() < 1e-12f ? null : (origin, Vector3.Normalize(direction));

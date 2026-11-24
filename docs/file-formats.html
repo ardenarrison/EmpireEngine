@@ -41,7 +41,7 @@
   "editorFarClipPlane": 500,
   "editorNearClipPlane": 0.1
 }</code></pre>
-<p>Written by the editor (File &gt; Project Settings), not the Hub, and only once you change a setting. <code>macGraphics</code> is <code>"vulkan"</code> (the default) or <code>"metal"</code>: what the editor and the project's Mac games draw with on a Mac. <code>editorFarClipPlane</code> is how far the editor's own camera draws, from 10 to 100000 (default 500), and <code>editorNearClipPlane</code> is how close things can be and still be drawn, from 0.01 to 100 and never more than half the far plane (default 0.1). A value outside its range is brought into it. A missing or unreadable file means the defaults. Fields the editor doesn't know about are kept when it saves.</p>
+<p>Written by the editor (File &gt; Project Settings), not the Hub, and only once you change a setting. <code>macGraphics</code> is <code>"vulkan"</code> (the default) or <code>"metal"</code>: what the editor and the project's Mac games draw with on a Mac. <code>editorFarClipPlane</code> is how far back the editor's own camera draws in a 2D project, from 10 to 100000 (default 500; the 3D view has no far limit), and <code>editorNearClipPlane</code> is how close things can be and still be drawn, from 0.01 to 100 and never more than half the far plane (default 0.1). A value outside its range is brought into it. A missing or unreadable file means the defaults. Fields the editor doesn't know about are kept when it saves.</p>
 
 <h2>Scene files (.empirescene)</h2>
 <pre><code class="language-json">{

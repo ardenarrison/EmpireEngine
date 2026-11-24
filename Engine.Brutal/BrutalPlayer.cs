@@ -160,7 +160,7 @@ public sealed class BrutalPlayer
                 float angle = (float)clock.Elapsed.TotalSeconds * 0.4f;
                 eye = center + new Vector3(MathF.Cos(angle) * radius, radius * 0.35f, MathF.Sin(angle) * radius);
                 var view = Matrix4x4.CreateLookAt(eye, center, Vector3.UnitY);
-                viewProj = view * VulkanMath.Projection(MathF.PI / 3f, aspect, 0.1f, radius * 10f + 100f);
+                viewProj = view * VulkanMath.Projection(MathF.PI / 3f, aspect, 0.1f);
             }
 
             var gameArea = GameArea(ctx, window);

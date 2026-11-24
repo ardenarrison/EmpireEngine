@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Engine.Core.Rendering;
 
 namespace Engine.Brutal.Metal;
 
@@ -85,12 +86,14 @@ internal static unsafe class MetalGpu
         }
     }
 
-    public static nint DepthState(nint device, bool test, bool write)
+    // A depth test and whether it writes. Scene depth is reversed (see ClipDepth), so its test keeps what is greater; the shadow
+    // map keeps ordinary depth and tests for less.
+    public static nint DepthState(nint device, bool test, bool write, bool reversed = true)
     {
         nint desc = ObjC.New("MTLDepthStencilDescriptor");
         try
         {
-            ObjC.CallU(desc, "setDepthCompareFunction:", test ? 1u : 7u);   // less, or always
+            ObjC.CallU(desc, "setDepthCompareFunction:", !test ? 7u : reversed ? 4u : 1u);   // always, greater or less
             ObjC.CallBool(desc, "setDepthWriteEnabled:", write);
             return ObjC.Send(device, "newDepthStencilStateWithDescriptor:", desc);
         }
@@ -206,7 +209,8 @@ internal static unsafe class MetalGpu
             (nuint)indexCount, IndexUInt32, indexBuffer, 0);
 
     // A render pass descriptor (autoreleased) drawing into one color texture and, optionally, a depth texture.
-    public static nint PassDescriptor(nint color, nuint load, MTLClearColor clear, nint resolve = 0, nint depth = 0, bool keepDepth = false)
+    public static nint PassDescriptor(nint color, nuint load, MTLClearColor clear, nint resolve = 0, nint depth = 0, bool keepDepth = false,
+        double clearDepth = ClipDepth.Far)
     {
         nint pass = ObjC.Send(ObjC.Class("MTLRenderPassDescriptor"), "renderPassDescriptor");
         if (color != 0)
@@ -230,7 +234,7 @@ internal static unsafe class MetalGpu
             nint attachment = ObjC.Send(pass, "depthAttachment");
             ObjC.Call(attachment, "setTexture:", depth);
             ObjC.CallU(attachment, "setLoadAction:", LoadClear);
-            ObjC.CallDouble(attachment, "setClearDepth:", 1.0);
+            ObjC.CallDouble(attachment, "setClearDepth:", clearDepth);
             ObjC.CallU(attachment, "setStoreAction:", keepDepth ? StoreStore : StoreDontCare);
         }
         return pass;

@@ -327,53 +327,5 @@ public static class GlbWriter
     }
 
     // An RGBA picture as a PNG.
-    private static byte[] Png(ImageData image)
-    {
-        int row = image.Width * 4;
-        var raw = new byte[(row + 1) * image.Height];   // each row starts with its filter type, 0 for none
-        for (int y = 0; y < image.Height; y++)
-            Buffer.BlockCopy(image.Pixels!, y * row, raw, y * (row + 1) + 1, row);
-
-        using var compressed = new MemoryStream();
-        using (var zlib = new ZLibStream(compressed, CompressionLevel.Optimal, leaveOpen: true))
-            zlib.Write(raw);
-
-        var header = new byte[13];
-        BinaryPrimitives.WriteInt32BigEndian(header, image.Width);
-        BinaryPrimitives.WriteInt32BigEndian(header.AsSpan(4), image.Height);
-        header[8] = 8;   // bits per channel
-        header[9] = 6;   // red, green, blue, alpha
-
-        using var png = new MemoryStream();
-        png.Write([0x89, (byte)'P', (byte)'N', (byte)'G', 0x0D, 0x0A, 0x1A, 0x0A]);
-        WritePngChunk(png, "IHDR", header);
-        WritePngChunk(png, "IDAT", compressed.ToArray());
-        WritePngChunk(png, "IEND", []);
-        return png.ToArray();
-    }
-
-    private static void WritePngChunk(Stream png, string type, byte[] data)
-    {
-        Span<byte> number = stackalloc byte[4];
-        BinaryPrimitives.WriteInt32BigEndian(number, data.Length);
-        png.Write(number);
-        var body = new byte[4 + data.Length];
-        Encoding.ASCII.GetBytes(type, body);
-        data.CopyTo(body, 4);
-        png.Write(body);
-        BinaryPrimitives.WriteUInt32BigEndian(number, Crc(body));
-        png.Write(number);
-    }
-
-    private static uint Crc(byte[] data)
-    {
-        uint crc = 0xFFFFFFFF;
-        foreach (byte b in data)
-        {
-            crc ^= b;
-            for (int i = 0; i < 8; i++)
-                crc = (crc & 1) != 0 ? 0xEDB88320 ^ (crc >> 1) : crc >> 1;
-        }
-        return ~crc;
-    }
+    private static byte[] Png(ImageData image) => ImageEncoder.Png(image.Width, image.Height, image.Pixels!);
 }

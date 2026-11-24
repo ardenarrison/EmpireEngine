@@ -304,10 +304,11 @@ public sealed class MetalRenderer : ISceneRenderer
     // Renders this frame's queued solid models into its shadow map, from the sun. With shadows off the map is only cleared.
     private void RenderShadowMap(int slot)
     {
-        nint pass = MetalGpu.PassDescriptor(0, MetalGpu.LoadClear, default, depth: _shadowMaps[slot], keepDepth: true);
+        // The shadow map keeps ordinary depth (0 nearest the sun), unlike the reversed scene depth.
+        nint pass = MetalGpu.PassDescriptor(0, MetalGpu.LoadClear, default, depth: _shadowMaps[slot], keepDepth: true, clearDepth: 1.0);
         nint encoder = MetalGpu.Encoder(_ctx.CommandBuffer, pass, "Shadow map");
         MetalGpu.SetPipeline(encoder, _shadowPipeline);
-        MetalGpu.SetDepth(encoder, _ctx.DepthState(test: true, write: true));
+        MetalGpu.SetDepth(encoder, _ctx.DepthState(test: true, write: true, reversed: false));
         MetalGpu.Viewport(encoder, 0, 0, _shadowSize, _shadowSize);
         foreach (var draw in _shadowsOn ? _draws : [])
         {

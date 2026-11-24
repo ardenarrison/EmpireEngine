@@ -19,6 +19,7 @@ using Engine.Core.Scripting;
 using Engine.Core.Serialization;
 using Engine.Scripting.Build;
 using Editor.Code;
+using Editor.Sprites;
 using Editor.Ui;
 
 namespace Editor;
@@ -49,7 +50,9 @@ public sealed class EditorApp
     private bool _vcMode;   // the visual scripting view replaces the 3D view while on
     private readonly CodeEditorView _code;
     private bool _codeMode;   // the C# code view replaces the 3D view while on
-    private bool FullView => _vcMode || _codeMode;
+    private readonly SpriteEditorView _sprite;
+    private bool _spriteMode;   // the sprite editor replaces the 3D view while on
+    private bool FullView => _vcMode || _codeMode || _spriteMode;
     private bool _modelMode;   // the Modeling section: its own panel, and no scene tools
     private bool SceneTools => !FullView && !_modelMode;
     private readonly ModelingView _modeling;
@@ -177,6 +180,9 @@ public sealed class EditorApp
         _assetPanel = new AssetPanel(contentRoot);
         _assetPanel.Moved += FollowMove;
         _assetPanel.Deleted += () => _inspectedScene = null;
+        _assetPanel.EditSprite += OpenSpriteEditor;
+        _sprite = new SpriteEditorView(contentRoot);
+        _sprite.Saved += OnSpriteSaved;
         string sceneViewName = _is2D ? "2D view" : "3D view";
         _vc = new VisualScriptView(Path.Combine(contentRoot, "Scripts"))
         {
@@ -362,7 +368,7 @@ public sealed class EditorApp
             _gui.Begin(window, uiCanvas, UiInput.Current.DisplaySize, now);
             // Editor panels, or the game's UI while playing.
             bool uiWantsMouse = _gui.WantsMouse || (_mode == EditorMode.Play && GameUi.PointerOverUi);
-            ui.PointerOverScene = !uiWantsMouse && _mode == EditorMode.Edit && !_vcMode && !_codeMode;
+            ui.PointerOverScene = !uiWantsMouse && _mode == EditorMode.Edit && !_vcMode && !_codeMode && !_spriteMode;
             window.WantsTextInput = _gui.IsTyping || _vc.IsTyping || (_mode == EditorMode.Edit && _codeMode && _code.WantsKeyboard);
 
             // Escape stops play mode when playing, cancels the exit prompt, closes the open dialog, and otherwise
@@ -374,6 +380,7 @@ public sealed class EditorApp
                 else if (_gui.IsTyping) { }   // the field being typed in uses Escape to stop typing
                 else if (CloseTopDialog()) { }
                 else if (_polygonEditor.Active) _polygonEditor.End();
+                else if (_spriteMode) _sprite.Escape();   // closes its dialog, drops the stroke being drawn, or leaves
                 else if (_vcMode) { if (!_vc.IsTyping) _vcMode = false; }
                 else if (_codeMode) { }   // the code view uses Escape itself; leave with its 3D view button
                 else if (_modelMode) { if (!_gui.IsTyping && !_modeling.CancelTool()) LeaveModeling(); }
@@ -393,6 +400,7 @@ public sealed class EditorApp
             if (saveDown && !prevSave)
             {
                 if (_codeMode && _mode == EditorMode.Edit) _code.SaveCurrent();
+                else if (_spriteMode && _mode == EditorMode.Edit) _sprite.Save();
                 else if (_modeling.Editing) _modeling.Save();
                 else SaveScene();
             }
@@ -454,6 +462,11 @@ public sealed class EditorApp
                 if (!_gui.IsTyping) _code.Update(window, uiWantsMouse, now);
                 _pinch = 0f;
             }
+            else if (_mode == EditorMode.Edit && _spriteMode)
+            {
+                _sprite.Pinch(_pinch);   // pinching zooms the picture
+                _pinch = 0f;
+            }
             else if (_mode == EditorMode.Edit)
             {
                 _camera.ViewHeightPixels = SceneArea(ctx).W;
@@ -476,6 +489,8 @@ public sealed class EditorApp
             {
                 if (_modelMode && _modeling.DrawPanel(_gui, _scene, _selected, obj => ClickHierarchyRow(obj, shift: false, toggle: false)))
                     LeaveModeling();
+                if (_spriteMode)
+                    _sprite.Draw(_gui, window, Gui.MenuBarHeight);
                 DrawMenuBar();
                 DrawBuildWindow();
                 DrawExitPrompt();
@@ -513,7 +528,7 @@ public sealed class EditorApp
                 eye = _camera.Position;
                 viewProj = _camera.View * (_is2D
                     ? VulkanMath.Orthographic(_camera.OrthoSize, aspect, _camera.Near, _camera.Far)
-                    : VulkanMath.Projection(MathF.PI / 3f, aspect, _camera.Near, _camera.Far));
+                    : VulkanMath.Projection(MathF.PI / 3f, aspect, _camera.Near));
             }
             var sceneArea = SceneArea(ctx);
             Input.SetView(new Vector2(sceneArea.Z, sceneArea.W), viewProj);   // for Input.GetMouseRay in scripts
@@ -621,6 +636,8 @@ public sealed class EditorApp
                 _code.Build(codeCanvas, canvasSize);
             if (showCode && _code.TakeExit())
                 _codeMode = false;
+            if (_spriteMode && _sprite.TakeExit())
+                _spriteMode = false;
             _gui.End();
             ctx.EndFrame(pass =>
             {
@@ -1339,8 +1356,8 @@ public sealed class EditorApp
 
         float ndcX = (mouse.X - area.X) / area.Z * 2f - 1f;
         float ndcY = (mouse.Y - area.Y) / area.W * 2f - 1f;
-        var nearH = Vector4.Transform(new Vector4(ndcX, ndcY, 0f, 1f), inverse);
-        var farH = Vector4.Transform(new Vector4(ndcX, ndcY, 1f, 1f), inverse);
+        var nearH = Vector4.Transform(new Vector4(ndcX, ndcY, ClipDepth.Near, 1f), inverse);
+        var farH = Vector4.Transform(new Vector4(ndcX, ndcY, ClipDepth.Ahead, 1f), inverse);
         var rayStart = new Vector3(nearH.X, nearH.Y, nearH.Z) / nearH.W;
         var rayEnd = new Vector3(farH.X, farH.Y, farH.Z) / farH.W;
         var localStart = Vector3.Transform(rayStart, toLocal);
@@ -2560,9 +2577,17 @@ public sealed class EditorApp
         float near = cam.Near;
         if (g.DragFloat("Near", ref near, 0.01f, 0.01f, 100f) && editing)
             cam.Near = near;
-        float far = cam.Far;
-        if (g.DragFloat("Far", ref far, 1f, 1f, 10000f) && editing)
-            cam.Far = far;
+        if (cam.Orthographic)
+        {
+            // A perspective camera sees forever; an orthographic one spreads its depth evenly up to its far plane, so it keeps one.
+            float far = cam.Far;
+            if (g.DragFloat("Far", ref far, 1f, 1f, 10000f) && editing)
+                cam.Far = far;
+        }
+        else
+        {
+            g.TextWrapped("It sees things however far away they are.", Gui.DimColor);
+        }
 
         // Anti-aliasing smooths jagged edges. MSAA draws several samples per pixel and averages them; FXAA and SMAA smooth the
         // finished picture instead (SMAA is cleaner, FXAA a little cheaper).
@@ -3117,7 +3142,7 @@ public sealed class EditorApp
     }
 
     // The width of the bar with UI, Play, VC and Code (Stop while playing), centered along the top.
-    private float ToolbarWidth => _mode != EditorMode.Edit ? 260f : _is2D ? 4 * 92f + 3 * 6f + 16f : 5 * 92f + 4 * 6f + 16f;
+    private float ToolbarWidth => _mode != EditorMode.Edit ? 260f : _is2D ? 5 * 92f + 4 * 6f + 16f : 6 * 92f + 5 * 6f + 16f;
 
     private void DrawToolbar()
     {
@@ -3146,6 +3171,9 @@ public sealed class EditorApp
                 _codeMode = !_codeMode;
                 _vcMode = false;
             }
+            g.SameLine();
+            if (g.Button("Sprite", 92f, height - 16f))
+                ShowSpriteEditor();
             if (!_is2D)
             {
                 g.SameLine();
@@ -3451,7 +3479,8 @@ public sealed class EditorApp
                 if (g.MenuItem("Save and Exit", enabled: _mode == EditorMode.Edit))
                 {
                     SaveProject();
-                    _exitRequested = true;
+                    if (_sprite.Dirty) ShowSpriteEditor();   // it couldn't be saved: its panel says why
+                    else _exitRequested = true;
                 }
                 if (g.MenuItem("Exit"))
                     RequestExit();
@@ -3463,6 +3492,8 @@ public sealed class EditorApp
             // The terminal covers the asset browser, so this switches between the two and is named after the one it shows.
             if (!OperatingSystem.IsIOS() && g.MenuItem(_terminal.IsOpen ? "Asset Browser" : "Terminal", "Ctrl+`", enabled: !InVisualCode))
                 _terminal.Toggle();
+            if (g.MenuItem("Sprite Editor", enabled: _mode == EditorMode.Edit))
+                ShowSpriteEditor();
             if (g.MenuItem(_settings.ShowFpsCounter ? "Hide FPS Counter" : "Show FPS Counter"))
             {
                 _settings.ShowFpsCounter = !_settings.ShowFpsCounter;
@@ -3548,7 +3579,7 @@ public sealed class EditorApp
         if (_mode == EditorMode.Play)
             TogglePlay();
 
-        if (SceneSerializer.ToJson(_scene) == _savedJson && !_code.HasUnsavedChanges && !_modeling.Dirty)
+        if (SceneSerializer.ToJson(_scene) == _savedJson && !_code.HasUnsavedChanges && !_modeling.Dirty && !_sprite.Dirty)
             _exitRequested = true;
         else
             _confirmingExit = true;
@@ -3580,20 +3611,25 @@ public sealed class EditorApp
         if (SceneSerializer.ToJson(_scene) != _savedJson) parts.Add(_scene.Name);
         if (_code.HasUnsavedChanges) parts.Add("your scripts");
         if (_modeling.Dirty) parts.Add("your model");
+        if (_sprite.Dirty) parts.Add("your sprite");
         string unsaved = string.Join(" and ", parts);
         bool changing = _nextProject is not null;
         g.TextWrapped($"Save changes to {unsaved} before {(changing ? "changing project" : "exiting")}?");
         g.Spacing();
         if (g.Button(changing ? "Save and Change" : "Save and Exit", highlighted: true))
         {
-            if (_modeling.Save())
+            bool spriteSaved = !_sprite.Dirty || _sprite.Save();
+            if (_modeling.Save() && spriteSaved)
             {
                 SaveScene();
                 _code.SaveAll();
                 _exitRequested = true;
             }
             else
+            {
                 CancelExit();   // the panel says why, and the changes are still there
+                if (!spriteSaved) _spriteMode = true;
+            }
         }
         g.SameLine();
         if (g.Button(changing ? "Change Without Saving" : "Exit Without Saving"))
@@ -3636,12 +3672,38 @@ public sealed class EditorApp
         Console.WriteLine($"Saved {_scenePath}");
     }
 
-    // The scene and every script open in the code view.
+    // The scene, every script open in the code view, and the sprite being edited.
     private void SaveProject()
     {
         _modeling.Save();
         SaveScene();
         _code.SaveAll();
+        if (_sprite.Dirty) _sprite.Save();
+    }
+
+    // ---- sprite editor ---------------------------------------------------------------
+
+    private void ShowSpriteEditor()
+    {
+        _spriteMode = true;
+        _vcMode = false;
+        _codeMode = false;
+        _uiMode = false;
+    }
+
+    // Opens a picture from the project in the sprite editor.
+    private void OpenSpriteEditor(string relativePath)
+    {
+        _sprite.Edit(relativePath);
+        ShowSpriteEditor();
+    }
+
+    // A picture was written: sprites showing it must read it again, and the asset panel lists it.
+    private void OnSpriteSaved(string relativePath)
+    {
+        _assets.ForgetImage(relativePath);
+        _sprites.Invalidate(relativePath);
+        _assetPanel.Reload();
     }
 
     private static bool IsSaveShortcutHeld(IAppWindow window)
@@ -3685,8 +3747,8 @@ public sealed class EditorApp
         // Screen point to a world ray. Uses the same mapping the camera gizmos use.
         float ndcX = (cursor.X - left) / width * 2f - 1f;
         float ndcY = (cursor.Y - top) / height * 2f - 1f;
-        var nearH = Vector4.Transform(new Vector4(ndcX, ndcY, 0f, 1f), inverse);
-        var farH = Vector4.Transform(new Vector4(ndcX, ndcY, 1f, 1f), inverse);
+        var nearH = Vector4.Transform(new Vector4(ndcX, ndcY, ClipDepth.Near, 1f), inverse);
+        var farH = Vector4.Transform(new Vector4(ndcX, ndcY, ClipDepth.Ahead, 1f), inverse);
         var rayStart = new Vector3(nearH.X, nearH.Y, nearH.Z) / nearH.W;
         var rayEnd = new Vector3(farH.X, farH.Y, farH.Z) / farH.W;
         var dir = Vector3.Normalize(rayEnd - rayStart);
@@ -4475,8 +4537,8 @@ public sealed class EditorApp
         if (!Matrix4x4.Invert(viewProj, out var inverse)) return null;
         float ndcX = (mouse.X - area.X) / area.Z * 2f - 1f;
         float ndcY = (mouse.Y - area.Y) / area.W * 2f - 1f;
-        var nearH = Vector4.Transform(new Vector4(ndcX, ndcY, 0f, 1f), inverse);
-        var farH = Vector4.Transform(new Vector4(ndcX, ndcY, 1f, 1f), inverse);
+        var nearH = Vector4.Transform(new Vector4(ndcX, ndcY, ClipDepth.Near, 1f), inverse);
+        var farH = Vector4.Transform(new Vector4(ndcX, ndcY, ClipDepth.Ahead, 1f), inverse);
         var origin = new Vector3(nearH.X, nearH.Y, nearH.Z) / nearH.W;
         var direction = new Vector3(farH.X, farH.Y, farH.Z) / farH.W - origin;
         if (direction.LengthSquared() < 1e-12f) return null;

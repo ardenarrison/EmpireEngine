@@ -10,14 +10,35 @@ public sealed class SpriteDrawer(Func<string, ImageData> loadImage)
     private readonly HashSet<string> _uploaded = new();
     private readonly HashSet<string> _failed = new();
     private readonly Dictionary<string, GlbModel> _models = new();
+    private readonly HashSet<string> _reload = new();   // uploaded meshes whose picture changed: rebuilt the next time a sprite uses them
+
+    // Call when a picture's file was written again, so sprites showing it show the new picture. The image cache must forget it too.
+    public void Invalidate(string spritePath)
+    {
+        string prefix = "sprite:" + spritePath.Replace('\\', '/') + "|";
+        bool Stale(string key) => key.Replace('\\', '/').StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
+        foreach (var key in _uploaded.Where(Stale).ToList())
+            _reload.Add(key);
+        foreach (var key in _models.Keys.Where(Stale).ToList())
+            _models.Remove(key);
+        _failed.RemoveWhere(Stale);
+    }
 
     // Makes sure every sprite's mesh is on the GPU. Call before BeginFrame, because uploading waits for the GPU.
     public void Sync(ISceneRenderer renderer, Scene scene)
     {
         foreach (var obj in scene.All)
             foreach (var sprite in obj.Components.OfType<SpriteRenderer>())
-                if (Model(sprite) is { } model && _uploaded.Add(Key(sprite)))
-                    renderer.UploadModel(Key(sprite), model);
+            {
+                string key = Key(sprite);
+                if (_reload.Remove(key))
+                {
+                    if (Model(sprite) is { } fresh) renderer.ReloadModel(key, fresh);
+                    else _uploaded.Remove(key);   // the new picture can't be read: draw nothing rather than the old one
+                }
+                else if (Model(sprite) is { } model && _uploaded.Add(key))
+                    renderer.UploadModel(key, model);
+            }
     }
 
     // Queues the sprites for this frame. Call between BeginFrame and EndFrame, after Sync.

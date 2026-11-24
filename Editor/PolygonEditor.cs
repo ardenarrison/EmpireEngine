@@ -1,6 +1,7 @@
 using System.Numerics;
 using Brutal.GlfwApi;
 using Brutal.Numerics;
+using Engine.Core.Rendering;
 using Engine.Core.Scene;
 
 namespace Editor;
@@ -116,8 +117,8 @@ public sealed class PolygonEditor
         if (!Matrix4x4.Invert(viewProj, out var fromClip) || !Matrix4x4.Invert(toWorld, out var toLocal)) return null;
         float x = (mouse.X - area.X) / area.Z * 2f - 1f;
         float y = (mouse.Y - area.Y) / area.W * 2f - 1f;
-        var nearH = Vector4.Transform(new Vector4(x, y, 0f, 1f), fromClip);
-        var farH = Vector4.Transform(new Vector4(x, y, 1f, 1f), fromClip);
+        var nearH = Vector4.Transform(new Vector4(x, y, ClipDepth.Near, 1f), fromClip);
+        var farH = Vector4.Transform(new Vector4(x, y, ClipDepth.Ahead, 1f), fromClip);
         var near = Vector3.Transform(new Vector3(nearH.X, nearH.Y, nearH.Z) / nearH.W, toLocal);
         var far = Vector3.Transform(new Vector3(farH.X, farH.Y, farH.Z) / farH.W, toLocal);
         var along = far - near;

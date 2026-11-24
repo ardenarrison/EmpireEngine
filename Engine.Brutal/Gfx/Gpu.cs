@@ -29,6 +29,10 @@ public static class Gpu
     public static VkFormat ColorFormat => Context.ColorFormat;
     public static VkFormat DepthFormat => (VkFormat)VulkanContext.DepthFormat;
 
+    // The depth test to use in those pipelines. Scene depth is reversed: 1 at the camera's near plane and 0 at its far plane, so
+    // nearer things have greater depth and the test is VK_COMPARE_OP_GREATER. ViewProjection already gives depth this way.
+    public static VkCompareOp DepthCompareOp => (VkCompareOp)VulkanContext.DepthCompare;
+
     // Samples per pixel of the scene pass: 1 normally, or 2, 4 or 8 when the camera uses MSAA. A pipeline for
     // RenderVulkan must set MultisampleState.RasterizationSamples to this, and be rebuilt when it changes.
     public static int SampleCount => Context.SampleCount;

@@ -265,7 +265,7 @@ internal sealed class ParticleRenderer : IDisposable
                 {
                     DepthTestEnable = true,
                     DepthWriteEnable = false,      // sprites never hide each other through the depth buffer
-                    DepthCompareOp = (VkCompareOp)1,
+                    DepthCompareOp = (VkCompareOp)VulkanContext.DepthCompare,
                 };
                 var colorBlend = new VkPipelineColorBlendStateCreateInfo { AttachmentCount = 1, Attachments = &blend };
                 var dynamicState = new VkPipelineDynamicStateCreateInfo { DynamicStateCount = 2, DynamicStates = dynamicStatesPtr };

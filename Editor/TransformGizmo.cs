@@ -1,6 +1,7 @@
 using System.Numerics;
 using Brutal.GlfwApi;
 using Brutal.Numerics;
+using Engine.Core.Rendering;
 using Engine.Core.Scene;
 
 namespace Editor;
@@ -175,8 +176,8 @@ public sealed class TransformGizmo
         if (!Matrix4x4.Invert(viewProj, out var inverse)) return null;
         float ndcX = (mouse.X - area.X) / area.Z * 2f - 1f;
         float ndcY = (mouse.Y - area.Y) / area.W * 2f - 1f;
-        var nearH = Vector4.Transform(new Vector4(ndcX, ndcY, 0f, 1f), inverse);
-        var farH = Vector4.Transform(new Vector4(ndcX, ndcY, 1f, 1f), inverse);
+        var nearH = Vector4.Transform(new Vector4(ndcX, ndcY, ClipDepth.Near, 1f), inverse);
+        var farH = Vector4.Transform(new Vector4(ndcX, ndcY, ClipDepth.Ahead, 1f), inverse);
         var rayStart = new Vector3(nearH.X, nearH.Y, nearH.Z) / nearH.W;
         var rayDir = Vector3.Normalize(new Vector3(farH.X, farH.Y, farH.Z) / farH.W - rayStart);
 
