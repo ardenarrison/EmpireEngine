@@ -123,6 +123,9 @@ public sealed class AssetPanel
     // Raised after a file or folder has been deleted.
     public event Action? Deleted;
 
+    // Raised with a picture's path (relative to the project) when the user asks to edit it in the sprite editor.
+    public event Action<string>? EditSprite;
+
     public void Draw(Gui g)
     {
         g.BeginWindow("Assets", new Box(0f, g.Size.Y - Height, g.Size.X, Height), "Assets");
@@ -154,6 +157,12 @@ public sealed class AssetPanel
     {
         string entry = _menuEntry!;
         bool canMove = CanChange && ProjectFiles.WhyFixed(_root, entry) is null;
+        if (File.Exists(entry) && Engine.Core.Scene.SpriteRenderer.IsSpriteImage(entry))
+        {
+            if (g.MenuItem("Edit in Sprite Editor"))
+                EditSprite?.Invoke(RelativePath(entry));
+            g.Separator();
+        }
         if (g.MenuItem("Copy", enabled: ProjectFiles.WhyNotCopied(_root, entry) is null))
             Hold(entry, cut: false);
         if (g.MenuItem("Cut", enabled: canMove))
@@ -479,6 +488,8 @@ public sealed class AssetPanel
             var box = g.Reserve(TileSize, TileSize + NameHeight);
             var tile = new Box(box.X, box.Y, TileSize, TileSize);
             bool clicked = g.Behavior($"tile:{entry.FullName}", tile, out bool hovered, out _);
+            if (isSprite && hovered && g.LastItemDoubleClicked && CanChange)
+                EditSprite?.Invoke(RelativePath(entry.FullName));   // a double click opens a picture in the sprite editor
 
             // The arrow comes after the tile, so a press on it belongs to the arrow and not to a drag of the model.
             bool overArrow = false;

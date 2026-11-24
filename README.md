@@ -14,7 +14,7 @@ other people.
   skies, distance fog, see-through surfaces, MSAA, FXAA and SMAA, and camera effects (exposure, contrast, vignette,
   sharpen)
 - **Editor**: Hierarchy, Inspector, asset browser, move and scale handles, undo, a built-in C# code editor with live error
-  checking, and a block-based visual scripting editor
+  checking, a block-based visual scripting editor, and a sprite editor for drawing pictures to save as PNG, JPEG or BMP
 - **Scripting**: C# classes in your project, compiled with Roslyn. Public fields show up in the Inspector, with coroutines,
   collision events and a Unity-style API
 - **Systems**: rigidbody physics and raycasts, 3D audio, skeletal animation from glTF, sculptable and paintable terrain,

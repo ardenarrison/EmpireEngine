@@ -23,7 +23,7 @@ public sealed unsafe class MetalContext : IGraphicsContext
     private readonly nint _nsWindow;
     private readonly nint _layer;
     private readonly Dictionary<string, (nint Library, nint Function)> _functions = new();
-    private readonly Dictionary<(bool Test, bool Write), nint> _depthStates = new();
+    private readonly Dictionary<(bool Test, bool Write, bool Reversed), nint> _depthStates = new();
 
     private int _width, _height;
     private nint _depth, _msaa, _sceneColor, _spare;
@@ -194,10 +194,10 @@ public sealed unsafe class MetalContext : IGraphicsContext
         return function;
     }
 
-    internal nint DepthState(bool test, bool write)
+    internal nint DepthState(bool test, bool write, bool reversed = true)
     {
-        if (!_depthStates.TryGetValue((test, write), out nint state))
-            _depthStates[(test, write)] = state = MetalGpu.DepthState(Device, test, write);
+        if (!_depthStates.TryGetValue((test, write, reversed), out nint state))
+            _depthStates[(test, write, reversed)] = state = MetalGpu.DepthState(Device, test, write, reversed);
         return state;
     }
 

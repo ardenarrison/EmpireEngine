@@ -47,6 +47,17 @@ internal sealed class MetalCanvasGpu : ICanvasGpu
         _sizes[ImagesIndex] = (uint)(pixels.Length * sizeof(uint));
     }
 
+    // Rewrites the pictures where they are: a frame being drawn may read some old and some new pixels.
+    public void UpdateImages(uint[] pixels)
+    {
+        if (_images == 0 || _sizes[ImagesIndex] != (uint)(pixels.Length * sizeof(uint)))
+        {
+            SetImages(pixels);
+            return;
+        }
+        MetalGpu.Write<uint>(_images, pixels);
+    }
+
     public void Draw(UiPass pass, ReadOnlySpan<float> vertices, int vertexCount, float[] push, float pixelWidth, float pixelHeight)
     {
         nint encoder = pass.MetalEncoder;

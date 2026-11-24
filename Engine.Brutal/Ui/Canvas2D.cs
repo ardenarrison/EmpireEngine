@@ -39,8 +39,8 @@ public sealed class Canvas2D : IDisposable
         """;
 
     // A uv of exactly (-1, -1) means a solid rectangle. A uv.x of -2 or less is an image: its x is -(2 + x) and its y is y,
-    // where (x, y) is a position in the image buffer's pixels. Otherwise the uv is a position in atlas pixels and the glyph
-    // coverage is read from the buffer.
+    // where (x, y) is a position in the image buffer's pixels, smoothed between pixels. An image drawn without smoothing sends -1 - y
+    // instead, so its y is below zero. Otherwise the uv is a position in atlas pixels and the glyph coverage is read from the buffer.
     private const string FragmentGlsl = """
         #version 450
         layout(push_constant) uniform PC { vec2 screen; float atlasWidth; float imageWidth; } pc;
@@ -68,6 +68,11 @@ public sealed class Canvas2D : IDisposable
                 return;
             }
             if (inUv.x <= -1.5) {
+                if (inUv.y < 0.0) {
+                    // Nearest: each image pixel is a sharp block, for pixel art blown up on the screen.
+                    outColor = pixel(ivec2(floor(vec2(-inUv.x - 2.0, -1.0 - inUv.y)))) * inColor;
+                    return;
+                }
                 // Bilinear, blending premultiplied colors so a transparent pixel's color never leaks into an edge.
                 vec2 t = vec2(-inUv.x - 2.0, inUv.y) - 0.5;
                 ivec2 i = ivec2(floor(t));
@@ -258,11 +263,30 @@ public sealed class Canvas2D : IDisposable
         return _imageSources.Count - 1;
     }
 
-    // Draws a picture from AddImage stretched to the box. tint multiplies its colors and alpha, so (1, 1, 1, a) fades it.
-    public void Image(int image, float x, float y, float width, float height, float4 tint)
+    // Draws a picture from AddImage stretched to the box. tint multiplies its colors and alpha, so (1, 1, 1, a) fades it. A picture is
+    // smoothed between its pixels unless smooth is false, which shows every pixel as a sharp block (for pixel art).
+    public void Image(int image, float x, float y, float width, float height, float4 tint, bool smooth = true)
     {
         var r = _imageRects[image];
-        ImageQuad(x, y, x + width, y + height, r.X, r.Y, r.X + r.Width, r.Y + r.Height, tint);
+        if (smooth)
+            ImageQuad(x, y, x + width, y + height, r.X, r.Y, r.X + r.Width, r.Y + r.Height, tint);
+        else
+            ImageQuad(x, y, x + width, y + height, r.X, -1f - r.Y, r.X + r.Width, -1f - (r.Y + r.Height), tint);
+    }
+
+    // Changes a picture from AddImage. One of the same size is rewritten where it is, at no cost to the GPU's frames in flight (one
+    // being drawn may show the old and new pixels mixed, for a frame), so it can change every frame, like a picture being painted. A
+    // different size takes a pause like AddImage.
+    public void ReplaceImage(int image, byte[] rgba, int width, int height)
+    {
+        if (width <= 0 || height <= 0 || rgba.Length < width * height * 4)
+            throw new ArgumentException("The picture's pixels do not match its size.");
+        var old = _imageSources[image];
+        _imageSources[image] = (rgba, width, height);
+        if (old.Width == width && old.Height == height)
+            _gpu.UpdateImages(PackImages(out _));
+        else
+            UploadImages();
     }
 
     public float MeasureText(string text)
@@ -435,7 +459,15 @@ public sealed class Canvas2D : IDisposable
     // rows between pictures so smoothing at an edge never reads the next one. Replaces the old buffer.
     private void UploadImages()
     {
-        int stride = Math.Max(1, _imageSources.Select(i => i.Width).DefaultIfEmpty(1).Max());
+        var pixels = PackImages(out int stride);
+        _gpu.SetImages(pixels);
+        _imageStride = stride;
+    }
+
+    // The pictures laid out as UploadImages describes, and where each one is (in _imageRects).
+    private uint[] PackImages(out int stride)
+    {
+        stride = Math.Max(1, _imageSources.Select(i => i.Width).DefaultIfEmpty(1).Max());
         _imageRects.Clear();
         int rows = 0;
         foreach (var (_, w, h) in _imageSources)
@@ -453,9 +485,7 @@ public sealed class Canvas2D : IDisposable
             for (int y = 0; y < h; y++)
                 System.Buffer.BlockCopy(rgba, y * w * 4, pixels, ((rect.Y + y) * stride) * 4, w * 4);
         }
-
-        _gpu.SetImages(pixels);
-        _imageStride = stride;
+        return pixels;
     }
 
     public void Dispose() => _gpu.Dispose();
@@ -467,6 +497,9 @@ internal interface ICanvasGpu : IDisposable
 {
     void SetAtlas(float[] coverage);
     void SetImages(uint[] pixels);
+
+    // Writes new pixels into the pictures buffer where it is, when they fill it exactly as it is now (the same size).
+    void UpdateImages(uint[] pixels);
 
     // vertices holds vertexCount vertices of Canvas2D.FloatsPerVertex floats; push is the shaders' four push constants.
     void Draw(UiPass pass, ReadOnlySpan<float> vertices, int vertexCount, float[] push, float pixelWidth, float pixelHeight);

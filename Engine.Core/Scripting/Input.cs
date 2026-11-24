@@ -1,4 +1,5 @@
 using System.Numerics;
+using Engine.Core.Rendering;
 
 namespace Engine.Core.Scripting;
 
@@ -196,8 +197,8 @@ public static class Input
             return new Ray(Vector3.Zero, -Vector3.UnitZ);
         float x = point.X / MathF.Max(_viewSize.X, 1f) * 2f - 1f;
         float y = point.Y / MathF.Max(_viewSize.Y, 1f) * 2f - 1f;
-        var near = Vector4.Transform(new Vector4(x, y, 0f, 1f), inverse);
-        var far = Vector4.Transform(new Vector4(x, y, 1f, 1f), inverse);
+        var near = Vector4.Transform(new Vector4(x, y, ClipDepth.Near, 1f), inverse);
+        var far = Vector4.Transform(new Vector4(x, y, ClipDepth.Ahead, 1f), inverse);
         var start = new Vector3(near.X, near.Y, near.Z) / near.W;
         var end = new Vector3(far.X, far.Y, far.Z) / far.W;
         var direction = end - start;

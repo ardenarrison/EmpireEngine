@@ -325,8 +325,10 @@ public sealed class BrutalRenderer : ISceneRenderer
         FRAME_BLOCK
         layout(location = 0) out vec4 outColor;
         void main() {
-            vec4 nearPoint = pc.invViewProj * vec4(inNdc, 0.0, 1.0);
-            vec4 farPoint = pc.invViewProj * vec4(inNdc, 1.0, 1.0);
+            // Depth is reversed (see ClipDepth): 1 is the near plane, and 0 is infinitely far for a perspective camera, so the
+            // second point is taken at depth 0.5, which is always a real point along the pixel's ray.
+            vec4 nearPoint = pc.invViewProj * vec4(inNdc, 1.0, 1.0);
+            vec4 farPoint = pc.invViewProj * vec4(inNdc, 0.5, 1.0);
             vec3 dir = normalize(farPoint.xyz / farPoint.w - nearPoint.xyz / nearPoint.w);
             outColor = vec4(skyEnv(dir, 0.0), 1.0);
         }
@@ -536,7 +538,7 @@ public sealed class BrutalRenderer : ISceneRenderer
                 {
                     DepthTestEnable = true,
                     DepthWriteEnable = !transparent,
-                    DepthCompareOp = (VkCompareOp)1,
+                    DepthCompareOp = (VkCompareOp)VulkanContext.DepthCompare,
                 };
                 var colorBlend = new VkPipelineColorBlendStateCreateInfo { AttachmentCount = 1, Attachments = &blend };
                 var dynamicState = new VkPipelineDynamicStateCreateInfo { DynamicStateCount = 2, DynamicStates = dynamicStatesPtr };
@@ -667,7 +669,7 @@ public sealed class BrutalRenderer : ISceneRenderer
             {
                 DepthTestEnable = true,
                 DepthWriteEnable = true,
-                DepthCompareOp = (VkCompareOp)1,
+                DepthCompareOp = (VkCompareOp)1,   // less: the shadow map keeps ordinary depth, 0 nearest the sun
             };
             var dynamicState = new VkPipelineDynamicStateCreateInfo { DynamicStateCount = 2, DynamicStates = dynamicStatesPtr };
             var rendering = new VkPipelineRenderingCreateInfo

@@ -1,4 +1,5 @@
 using Editor.Assistant;
+using Editor.Sprites;
 using Editor;
 using Editor.Ui;
 using Editor.Terminal;
@@ -11,6 +12,7 @@ using System.Numerics;
 using System.Text;
 using Engine.Core.Assets;
 using Engine.Core.Audio;
+using Engine.Core.Rendering;
 using Engine.Core.Scene;
 using Engine.Core.Scripting;
 using Engine.Core.Serialization;
@@ -1866,9 +1868,10 @@ Directory.CreateDirectory(Path.Combine(projectDir, "Scenes"));
     try { Input.GetMouseButton(7); } catch (ArgumentException) { threw = true; }
     Check(threw, "an unknown mouse button is a clear error");
 
-    // A camera at the origin looking down -Z: the middle of the view points straight ahead and hits the box.
+    // A camera at the origin looking down -Z, with the engine's projection (reversed depth, see ClipDepth): the middle of the
+    // view points straight ahead and hits the box.
     var view = Matrix4x4.CreateLookAt(Vector3.Zero, -Vector3.UnitZ, Vector3.UnitY);
-    var projection = Matrix4x4.CreatePerspectiveFieldOfView(MathF.PI / 3f, 2f, 0.1f, 100f);
+    var projection = ClipDepth.Perspective(MathF.PI / 3f, 2f, 0.1f);
     Input.SetView(new Vector2(800, 400), view * projection);
     var middle = Input.ScreenPointToRay(new Vector2(400, 200));
     Check(Vector3.Distance(middle.Direction, -Vector3.UnitZ) < 1e-4f && middle.Origin.Length() < 0.2f, "the ray through the middle of the view points where the camera looks");
@@ -4437,6 +4440,251 @@ if (!OperatingSystem.IsWindows())
         Check(aaBack.AntiAliasing == mode, $"the camera's {mode} anti-aliasing survives saving and loading");
         Check(aaJson.Contains("msaaSamples") == (mode == AntiAliasingMode.Msaa), $"{mode}: the MSAA sample count is saved only for MSAA");
         Check(new CameraComponent { AntiAliasing = mode, MsaaSamples = 8 }.RequestedSamples == (mode == AntiAliasingMode.Msaa ? 8 : 1), $"{mode}: only MSAA asks for extra samples");
+    }
+}
+
+// ---- sprite editor: saving pictures ----
+{
+    // A 13 x 7 picture with a gradient, a checker in blue and, when asked, clear and half-clear pixels.
+    byte[] Pattern(int w, int h, bool see_through)
+    {
+        var px = new byte[w * h * 4];
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+            {
+                int i = (y * w + x) * 4;
+                px[i] = (byte)(x * 255 / Math.Max(1, w - 1));
+                px[i + 1] = (byte)(y * 255 / Math.Max(1, h - 1));
+                px[i + 2] = (byte)((x + y) % 2 == 0 ? 200 : 50);
+                px[i + 3] = (byte)(!see_through ? 255 : x % 3 == 0 ? 0 : x % 3 == 1 ? 100 : 255);
+            }
+        return px;
+    }
+    bool Same(ImageData image, int w, int h, byte[] expected) =>
+        image.Width == w && image.Height == h && image.Pixels!.AsSpan(0, w * h * 4).SequenceEqual(expected);
+
+    var opaque = Pattern(13, 7, false);
+    var seeThrough = Pattern(13, 7, true);
+    Check(Same(ImageData.Decode(ImageEncoder.Encode(ImageFormat.Png, 13, 7, opaque), "a.png"), 13, 7, opaque), "a PNG written by the sprite editor reads back exactly");
+    Check(Same(ImageData.Decode(ImageEncoder.Encode(ImageFormat.Png, 13, 7, seeThrough), "a.png"), 13, 7, seeThrough), "and so does one with clear and half-clear pixels");
+    Check(Same(ImageData.Decode(ImageEncoder.Encode(ImageFormat.Bmp, 13, 7, opaque), "a.bmp"), 13, 7, opaque), "an opaque BMP (24-bit, rows padded to 4 bytes) reads back exactly");
+    var bmpWithAlpha = ImageEncoder.Encode(ImageFormat.Bmp, 13, 7, seeThrough);
+    Check(bmpWithAlpha[28] == 32 && Same(ImageData.Decode(bmpWithAlpha, "a.bmp"), 13, 7, seeThrough), "a BMP with see-through pixels is 32-bit and keeps its alpha");
+    Check(ImageEncoder.Encode(ImageFormat.Bmp, 13, 7, opaque)[28] == 24, "an opaque BMP is 24-bit, which every program reads");
+
+    // JPEG loses a little, so compare with a tolerance. A smooth gradient comes back close; a flat color very close.
+    var smooth = new byte[32 * 24 * 4];
+    for (int y = 0; y < 24; y++)
+        for (int x = 0; x < 32; x++)
+        {
+            int i = (y * 32 + x) * 4;
+            (smooth[i], smooth[i + 1], smooth[i + 2], smooth[i + 3]) = ((byte)(x * 8), (byte)(y * 10), 128, 255);
+        }
+    var jpeg = ImageEncoder.Encode(ImageFormat.Jpeg, 32, 24, smooth, 95);
+    var jpegBack = ImageData.Decode(jpeg, "a.jpg");
+    double error = 0;
+    for (int i = 0; i < smooth.Length; i += 4)
+        for (int c = 0; c < 3; c++) error += Math.Abs(smooth[i + c] - jpegBack.Pixels![i + c]);
+    error /= 32 * 24 * 3;
+    Check(jpeg[0] == 0xFF && jpeg[1] == 0xD8 && jpeg[^2] == 0xFF && jpeg[^1] == 0xD9, "a JPEG starts and ends with its markers");
+    Check(jpegBack.Width == 32 && jpegBack.Height == 24 && error < 4.0, $"a JPEG of a gradient reads back close to it (average error {error:0.0} out of 255)");
+
+    var flat = new byte[20 * 20 * 4];
+    for (int i = 0; i < flat.Length; i += 4) (flat[i], flat[i + 1], flat[i + 2], flat[i + 3]) = (200, 100, 50, 255);
+    var flatBack = ImageData.Decode(ImageEncoder.Encode(ImageFormat.Jpeg, 20, 20, flat), "a.jpg");
+    Check(Math.Abs(flatBack.Pixels![840] - 200) <= 3 && Math.Abs(flatBack.Pixels[841] - 100) <= 3 && Math.Abs(flatBack.Pixels[842] - 50) <= 3,
+        $"a flat color stays that color in a JPEG ({flatBack.Pixels[840]}, {flatBack.Pixels[841]}, {flatBack.Pixels[842]})");
+
+    var clear = new byte[8 * 8 * 4];   // all clear: JPEG has no alpha, so it becomes white
+    var clearBack = ImageData.Decode(ImageEncoder.Encode(ImageFormat.Jpeg, 8, 8, clear), "a.jpg");
+    Check(clearBack.Pixels!.Where((_, i) => i % 4 < 3).All(v => v >= 250), "clear pixels become white in a JPEG");
+
+    var sizesOk = true;
+    foreach (var (w, h) in new[] { (1, 1), (7, 9), (17, 5), (64, 3), (9, 64) })
+    {
+        var back = ImageData.Decode(ImageEncoder.Encode(ImageFormat.Jpeg, w, h, Pattern(w, h, true), 80), "a.jpg");
+        sizesOk &= back.Width == w && back.Height == h;
+    }
+    Check(sizesOk, "JPEGs of sizes that aren't a multiple of 8 (1 x 1, 7 x 9, 17 x 5...) read back at the right size");
+
+    var noisy = new byte[64 * 64 * 4];
+    new Random(5).NextBytes(noisy);
+    Check(ImageEncoder.Encode(ImageFormat.Jpeg, 64, 64, noisy, 10).Length < ImageEncoder.Encode(ImageFormat.Jpeg, 64, 64, noisy, 95).Length,
+        "a lower JPEG quality makes a smaller file");
+    Check(ImageData.Decode(ImageEncoder.Encode(ImageFormat.Jpeg, 64, 64, noisy, 100), "n.jpg").Width == 64, "even noise at the best quality is a valid JPEG");
+
+    Check(ImageEncoder.FromPath("x/Hero.PNG") == ImageFormat.Png && ImageEncoder.FromPath("a.jpeg") == ImageFormat.Jpeg && ImageEncoder.FromPath("a.jpg") == ImageFormat.Jpeg &&
+          ImageEncoder.FromPath("a.bmp") == ImageFormat.Bmp && ImageEncoder.FromPath("a.gif") is null, "the picture format of a file comes from its extension");
+    Check(ImageEncoder.Extension(ImageFormat.Png) == ".png" && ImageEncoder.Extension(ImageFormat.Jpeg) == ".jpg" && ImageEncoder.Extension(ImageFormat.Bmp) == ".bmp", "each format has its extension");
+    bool badSize = false;
+    try { ImageEncoder.Encode(ImageFormat.Png, 10, 10, new byte[16]); } catch (ArgumentException) { badSize = true; }
+    Check(badSize, "pixels that don't fit the size are refused");
+}
+
+// ---- sprite editor: the picture and its tools ----
+{
+    int Painted(SpriteCanvas c) { int n = 0; for (int i = 3; i < c.Pixels.Length; i += 4) if (c.Pixels[i] > 0) n++; return n; }
+    var red = new Rgba(255, 0, 0, 255);
+
+    var canvas = new SpriteCanvas(8, 8);
+    canvas.Stamp(3, 3, 1, true, red);
+    Check(Painted(canvas) == 1 && canvas.Get(3, 3) == red, "a brush of size 1 paints one pixel");
+    canvas = new SpriteCanvas(8, 8);
+    canvas.Stamp(3, 3, 3, false, red);
+    Check(Painted(canvas) == 9 && canvas.Get(2, 2) == red && canvas.Get(4, 4) == red, "a square brush of size 3 paints 3 x 3, around the middle");
+    canvas = new SpriteCanvas(8, 8);
+    canvas.Stamp(3, 3, 3, true, red);
+    Check(Painted(canvas) == 5 && canvas.Get(3, 2).A > 0 && canvas.Get(2, 2).A == 0, "a round brush of size 3 is a plus");
+    canvas = new SpriteCanvas(8, 8);
+    canvas.Stamp(3, 3, 2, true, red);
+    Check(Painted(canvas) == 4, "a brush of size 2 is a 2 x 2 square");
+    canvas = new SpriteCanvas(8, 8);
+    canvas.Stamp(0, 0, 5, false, red);
+    canvas.Stamp(99, 99, 5, false, red);
+    Check(Painted(canvas) == 9, "a brush at the edge only paints what is on the picture");
+
+    canvas = new SpriteCanvas(12, 12);
+    canvas.Line(1, 1, 10, 5, 1, true, red);
+    bool everyColumn = Enumerable.Range(1, 10).All(x => Enumerable.Range(0, 12).Any(y => canvas.Get(x, y).A > 0));
+    Check(everyColumn && canvas.Get(1, 1) == red && canvas.Get(10, 5) == red, "a line has no gaps and includes both ends");
+    canvas = new SpriteCanvas(12, 12);
+    canvas.Line(3, 0, 3, 9, 1, false, red);
+    Check(Painted(canvas) == 10, "a straight line down is one pixel per row");
+    canvas = new SpriteCanvas(12, 12);
+    canvas.Line(0, 0, 7, 7, 1, false, red);
+    Check(Painted(canvas) == 8 && canvas.Get(5, 5) == red, "a 45 degree line is one pixel per step");
+    canvas = new SpriteCanvas(12, 12);
+    canvas.Line(7, 7, 0, 0, 1, false, red);
+    Check(Painted(canvas) == 8, "a line drawn backwards is the same");
+
+    canvas = new SpriteCanvas(12, 12);
+    canvas.Rectangle(2, 2, 7, 6, 1, false, red);
+    Check(Painted(canvas) == 18 && canvas.Get(2, 2) == red && canvas.Get(4, 4).A == 0, "a rectangle outline (6 x 5) is its 18 edge pixels");
+    canvas = new SpriteCanvas(12, 12);
+    canvas.Rectangle(7, 6, 2, 2, 1, true, red);
+    Check(Painted(canvas) == 30, "a filled rectangle, dragged from the far corner, is 30 pixels");
+    canvas = new SpriteCanvas(12, 12);
+    canvas.Rectangle(2, 2, 7, 6, 2, false, red);
+    Check(Painted(canvas) == 28, "an outline of thickness 2 is thicker, inside the corners");
+
+    canvas = new SpriteCanvas(12, 12);
+    canvas.Ellipse(0, 0, 9, 9, 1, true, red);
+    bool symmetric = true;
+    for (int y = 0; y < 10; y++)
+        for (int x = 0; x < 10; x++)
+            symmetric &= canvas.Get(x, y).A == canvas.Get(9 - x, y).A && canvas.Get(x, y).A == canvas.Get(x, 9 - y).A;
+    Check(Math.Abs(Painted(canvas) - 78) <= 6 && symmetric && canvas.Get(5, 5) == red && canvas.Get(0, 0).A == 0, $"a filled circle of 10 is round and even ({Painted(canvas)} pixels)");
+    canvas = new SpriteCanvas(12, 12);
+    canvas.Ellipse(0, 0, 9, 9, 1, false, red);
+    Check(canvas.Get(5, 5).A == 0 && canvas.Get(5, 0).A > 0 && Painted(canvas) < 40, "an ellipse outline is hollow");
+    canvas = new SpriteCanvas(12, 12);
+    canvas.Ellipse(1, 3, 10, 6, 1, true, red);
+    Check(canvas.Get(5, 4) == red && canvas.Get(1, 3).A == 0 && canvas.Get(5, 2).A == 0, "an ellipse fills a wide rectangle in an oval");
+
+    // The fill bucket stops at walls.
+    canvas = new SpriteCanvas(8, 8);
+    canvas.Line(4, 0, 4, 7, 1, false, new Rgba(0, 0, 0, 255));
+    int filled = canvas.Flood(0, 0, red);
+    Check(filled == 32 && canvas.Get(3, 7) == red && canvas.Get(5, 0).A == 0 && canvas.Get(4, 3).R == 0, $"the fill bucket fills the area up to a wall ({filled} pixels)");
+    Check(canvas.Flood(0, 0, red) == 0, "filling with the color already there does nothing");
+    Check(canvas.Flood(-1, 3, red) == 0 && canvas.Flood(3, 99, red) == 0, "filling outside the picture does nothing");
+    var grey = new SpriteCanvas(8, 8);
+    grey.Fill(new Rgba(10, 10, 10, 255));
+    grey.Set(3, 3, new Rgba(14, 10, 10, 255));
+    var green = new Rgba(0, 255, 0, 255);
+    grey.Flood(0, 0, green, 0);
+    Check(grey.Get(3, 3).R == 14 && grey.Get(0, 0) == green, "with no tolerance a slightly different pixel is a wall");
+    grey.Fill(new Rgba(10, 10, 10, 255));
+    grey.Set(3, 3, new Rgba(14, 10, 10, 255));
+    grey.Flood(0, 0, green, 5);
+    Check(grey.Get(3, 3) == green, "with tolerance it is painted too");
+    var checker = new SpriteCanvas(4, 4);
+    checker.Fill(new Rgba(255, 255, 255, 255));
+    checker.Flood(1, 1, new Rgba(255, 255, 250, 255), 10);   // a color within the tolerance of the one it replaces
+    Check(Enumerable.Range(0, 16).All(i => checker.Get(i % 4, i / 4) == new Rgba(255, 255, 250, 255)), "a fill color within its own tolerance still finishes");
+
+    // Undo and redo.
+    canvas = new SpriteCanvas(8, 8);
+    Check(!canvas.CanUndo && !canvas.Dirty, "a new picture has nothing to undo and nothing to save");
+    canvas.BeginChange();
+    canvas.Stamp(1, 1, 1, false, red);
+    canvas.Line(1, 1, 6, 1, 1, false, red);
+    canvas.EndChange();
+    Check(canvas.CanUndo && canvas.Dirty && Painted(canvas) == 6, "a stroke is one change");
+    canvas.Undo();
+    Check(Painted(canvas) == 0 && canvas.CanRedo && !canvas.CanUndo, "undo takes the whole stroke back");
+    canvas.Redo();
+    Check(Painted(canvas) == 6 && !canvas.CanRedo, "redo brings it back");
+    canvas.BeginChange();
+    canvas.EndChange();
+    canvas.BeginChange();
+    canvas.Stamp(1, 1, 1, false, red);   // paints what is already there
+    canvas.EndChange();
+    canvas.Undo();
+    Check(Painted(canvas) == 0, "a change that changed nothing is not a step of its own");
+    canvas.Redo();
+    canvas.BeginChange();
+    canvas.Stamp(7, 7, 1, false, red);
+    canvas.EndChange();
+    Check(!canvas.CanRedo, "a new change forgets what could be redone");
+    canvas.BeginChange();
+    canvas.Stamp(0, 7, 1, false, red);
+    canvas.RestoreBase();
+    canvas.Stamp(1, 7, 1, false, red);
+    canvas.CancelChange();
+    Check(canvas.Get(0, 7).A == 0 && canvas.Get(1, 7).A == 0 && canvas.Get(7, 7).A > 0 && !canvas.Changing, "a change in progress can be dropped, or redrawn from its start");
+    canvas.MarkSaved();
+    Check(!canvas.Dirty, "saving makes it clean");
+    canvas.Fill(new Rgba(1, 2, 3, 4));
+    Check(canvas.Dirty && canvas.Get(5, 5) == new Rgba(1, 2, 3, 4), "clearing to a color is a change");
+
+    canvas = new SpriteCanvas(4, 4);
+    canvas.Set(3, 3, red);
+    canvas.Resize(8, 6);
+    Check(canvas.Width == 8 && canvas.Height == 6 && canvas.Get(3, 3) == red && canvas.Get(7, 5).A == 0 && canvas.Pixels.Length == 8 * 6 * 4, "making the picture bigger keeps it at the top left");
+    canvas.Resize(2, 2);
+    Check(canvas.Width == 2 && canvas.Get(1, 1).A == 0 && canvas.Pixels.Length == 16, "making it smaller cuts it off");
+    canvas.Undo();
+    Check(canvas.Width == 8 && canvas.Height == 6 && canvas.Get(3, 3) == red, "undo brings back the size and the pixels");
+    canvas.Resize(99999, 0);
+    Check(canvas.Width == SpriteCanvas.MaxSize && canvas.Height == 1, "the size stays between 1 and the most a sprite can be");
+
+    canvas = new SpriteCanvas(64, 64);
+    for (int i = 0; i < 150; i++)
+    {
+        canvas.BeginChange();
+        canvas.Set(i % 64, i / 64, red);
+        canvas.EndChange();
+    }
+    int steps = 0;
+    while (canvas.Undo()) steps++;
+    Check(steps == 100, $"only the last 100 changes can be undone ({steps})");
+
+    var opened = SpriteCanvas.From(2, 2, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
+    Check(opened.Get(1, 1) == new Rgba(13, 14, 15, 16) && !opened.Dirty, "a picture opened from a file is clean");
+    bool tooBig = false;
+    try { SpriteCanvas.From(SpriteCanvas.MaxSize + 1, 1, new byte[(SpriteCanvas.MaxSize + 1) * 4]); } catch (ArgumentException) { tooBig = true; }
+    Check(tooBig, "a picture bigger than the editor can handle is refused");
+}
+
+// ---- sprite editor: pictures in the project ----
+{
+    string project = Path.Combine(Path.GetTempPath(), $"empire-sprites-{Guid.NewGuid():N}");
+    Directory.CreateDirectory(project);
+    try
+    {
+        // A picture written again is read again once the cache is told.
+        File.WriteAllBytes(Path.Combine(project, "a.png"), ImageEncoder.Png(2, 2, new byte[16]));
+        var assets = new AssetCache(project);
+        Check(assets.GetImage("a.png").Width == 2, "a picture in the project is read");
+        File.WriteAllBytes(Path.Combine(project, "a.png"), ImageEncoder.Png(3, 3, new byte[36]));
+        Check(assets.GetImage("a.png").Width == 2, "and kept, so a changed file isn't seen at first");
+        assets.ForgetImage("A.PNG");
+        Check(assets.GetImage("a.png").Width == 3, "until the cache forgets it (whatever the case or slashes), and it is read again");
+    }
+    finally
+    {
+        Directory.Delete(project, recursive: true);
     }
 }
 

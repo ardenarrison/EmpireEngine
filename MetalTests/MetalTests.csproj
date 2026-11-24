@@ -10,6 +10,16 @@
     <EmpireBundleMetal>true</EmpireBundleMetal>
   </PropertyGroup>
   <ItemGroup>
+    <!-- the editor's own interface and the sprite editor, drawn here with a fake window and mouse -->
+    <Compile Include="..\Editor\Ui\*.cs;..\Editor\Sprites\*.cs;..\Editor\SafeLabel.cs" Link="Editor\%(Filename)%(Extension)" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Ahwoo.BRUTAL.ImGui" Version="2026.10.2" />
+    <Using Include="Engine.Brutal.Ui" />
+    <Using Include="Engine.Brutal.Gfx" />
+    <Using Include="Editor.Ui" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\Engine.Brutal\Engine.Brutal.csproj" />
   </ItemGroup>
 </Project>

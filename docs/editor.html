@@ -53,7 +53,7 @@
   <thead><tr><th>Part</th><th>What it does</th></tr></thead>
   <tbody>
     <tr><td>Menu bar</td><td><em>File</em>: Save Scene, Build Project…, Package Manager…, Save and Exit, Exit. <em>Help</em>: Credits.</td></tr>
-    <tr><td>Toolbar</td><td><em>UI</em> edits the game's UI elements, <em>Play</em> runs the game, <em>VC</em> opens the visual script view, <em>Code</em> opens the C# code view, <em>Model</em> opens the <a href="modeling.html">Modeling</a> section (not in 2D projects). While playing it shows only <em>Stop</em>.</td></tr>
+    <tr><td>Toolbar</td><td><em>UI</em> edits the game's UI elements, <em>Play</em> runs the game, <em>VC</em> opens the visual script view, <em>Code</em> opens the C# code view, <em>Sprite</em> opens the <a href="#sprite-editor">sprite editor</a>, <em>Model</em> opens the <a href="modeling.html">Modeling</a> section (not in 2D projects). While playing it shows only <em>Stop</em>.</td></tr>
     <tr><td>Hierarchy</td><td>Every object in the scene, children indented under their parents. <em>Add Child</em> and <em>Delete</em> act on the selection. <strong>Double-click</strong> an object to fly the editor camera to it: it keeps looking the same way and backs off far enough to see the whole object.</td></tr>
     <tr><td>Tool buttons</td><td><em>None</em>, <em>Move</em> and <em>Scale</em> pick the handles shown on the selected object.</td></tr>
     <tr><td>Inspector</td><td>The selected object's name, parent, position, scale and rotation, then one section per component, then <em>Add Component</em>. Click a scene file in Assets to see that scene's settings here instead.</td></tr>
@@ -116,7 +116,7 @@
 <div class="table-wrap"><table>
   <thead><tr><th>Right-click</th><th>Commands</th></tr></thead>
   <tbody>
-    <tr><td>A file</td><td><strong>Copy</strong>, <strong>Cut</strong>, <strong>Rename</strong> and <strong>Delete</strong></td></tr>
+    <tr><td>A file</td><td><strong>Copy</strong>, <strong>Cut</strong>, <strong>Rename</strong> and <strong>Delete</strong>; a PNG, JPEG, BMP or GIF also has <strong>Edit in Sprite Editor</strong> (a double click opens it too)</td></tr>
     <tr><td>A folder</td><td>The same, plus everything below, for the inside of that folder</td></tr>
     <tr><td>Anywhere else</td><td><strong>Create Scene</strong>, <strong>Create Script</strong>, <strong>Create Folder</strong>, <strong>Create Text File</strong> and <strong>Paste</strong></td></tr>
   </tbody>
@@ -165,6 +165,37 @@
   <li>Press <em>3D view</em> (<em>2D view</em> in a 2D project) to go back. <kbd>Esc</kbd> stays inside the code view.</li>
 </ul>
 
+<h2 id="sprite-editor">The sprite editor</h2>
+<p>Press <strong>Sprite</strong> (or <em>Window &gt; Sprite Editor</em>) to draw a picture of your own, pixel by pixel, and save it into the project as a PNG, JPEG or BMP file. It replaces the 3D view until you press <strong>Back to the scene</strong>, and it works in 2D and 3D projects. To change a picture you already have, right-click it in the Assets panel and choose <strong>Edit in Sprite Editor</strong>, or double-click it, or use <strong>Open...</strong> in the sprite editor's File section.</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>Tool</th><th>Key</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td>Brush</td><td><kbd>B</kbd></td><td>Drag to paint. <strong>Size</strong> is the width in pixels, and <strong>Round</strong> makes the brush a disk instead of a square.</td></tr>
+    <tr><td>Eraser</td><td><kbd>E</kbd></td><td>Drag to make pixels clear (see-through).</td></tr>
+    <tr><td>Line</td><td><kbd>L</kbd></td><td>Drag a line, <strong>Size</strong> thick. Hold <kbd>Shift</kbd> for a straight or 45&deg; line.</td></tr>
+    <tr><td>Rectangle</td><td><kbd>R</kbd></td><td>Drag a rectangle. It is an outline <strong>Size</strong> thick, or solid with <strong>Fill shapes</strong>. Hold <kbd>Shift</kbd> for a square.</td></tr>
+    <tr><td>Ellipse</td><td><kbd>O</kbd></td><td>The same for an ellipse. <kbd>Shift</kbd> makes a circle.</td></tr>
+    <tr><td>Fill</td><td><kbd>G</kbd></td><td>Click to paint the whole area of matching pixels. <strong>Tolerance</strong> lets slightly different pixels count as matching.</td></tr>
+    <tr><td>Picker</td><td><kbd>I</kbd></td><td>Click to take a color from the picture. Holding <kbd>Alt</kbd> does this with any tool.</td></tr>
+  </tbody>
+</table></div>
+<ul>
+  <li><strong>Color:</strong> change the red, green, blue and alpha numbers, type a hex color such as <code>#ED1C24</code> (or <code>#ED1C2480</code> with alpha), or click a swatch. The colors you used last are kept under <em>Recent</em>. A color with an alpha below 1 paints see-through pixels, and drawing replaces what was there rather than blending with it.</li>
+  <li><strong>The picture:</strong> scroll to zoom in on the pixel under the mouse, and drag with the right (or middle) mouse button to move around. <em>Fit</em> fits the picture to the window and <em>1:1</em> shows it at its real size. Clear pixels show a checkerboard, and a grid shows between pixels when you are zoomed in (<em>Canvas &gt; Show grid</em>).</li>
+  <li><strong>Undo:</strong> <kbd>Ctrl</kbd>+<kbd>Z</kbd> (<kbd>Cmd</kbd>+<kbd>Z</kbd> on a Mac) undoes a stroke, a shape, a fill or a resize, and <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> or <kbd>Ctrl</kbd>+<kbd>Y</kbd> redoes it. The last 100 steps are kept. <kbd>[</kbd> and <kbd>]</kbd> change the brush size. <kbd>Escape</kbd> drops a shape you are dragging, and otherwise leaves the sprite editor.</li>
+  <li><strong>Canvas:</strong> a new sprite is 32 x 32. Under <em>Canvas</em> set a <strong>Width</strong> and <strong>Height</strong> (1 to 1024, or press a preset): <em>Resize</em> changes this picture and keeps what fits from the top left, <em>New</em> starts an empty one, and <em>Clear</em> empties it.</li>
+  <li><strong>Saving:</strong> under <em>File</em>, type a <strong>Save as</strong> name, which is a path inside the project without an extension, such as <code>Sprites/Hero</code> (folders are made for you), choose the <strong>Format</strong> and press <strong>Save</strong> (or <kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>S</kbd>). A file that already exists is only replaced when you press Save a second time. Sprites in the scene that show the file you saved update at once.</li>
+</ul>
+<div class="table-wrap"><table>
+  <thead><tr><th>Format</th><th>Good for</th><th>See-through pixels</th></tr></thead>
+  <tbody>
+    <tr><td>PNG</td><td>Almost everything. Keeps every pixel exactly.</td><td>Kept</td></tr>
+    <tr><td>JPEG</td><td>Photos and smooth art, in a smaller file. <strong>Quality</strong> (1 to 100, usually 90) trades size against how clean it is. Hard pixel-art edges can get fuzzy.</td><td>Not kept: clear pixels become white</td></tr>
+    <tr><td>BMP</td><td>Programs that only read BMP. Large files.</td><td>Kept (a 32-bit BMP is written when the picture has any)</td></tr>
+  </tbody>
+</table></div>
+<p>A GIF can be opened and edited, and is saved as a PNG, JPEG or BMP; an animated GIF only opens its first frame. If you leave the editor, open another picture, or start a new one with unsaved changes, it asks whether to save them first. Pictures larger than 1024 x 1024 can't be edited.</p>
+
 <h2>The visual script view</h2>
 <p>Press <strong>VC</strong> to build scripts from blocks. See <a href="visual-scripting.html">Visual scripting</a>.</p>
 
@@ -199,11 +230,11 @@
     <tr><td><strong>Position Type</strong> (Float or Double, usually Float)</td><td>How precisely object positions are kept. <em>Float</em> keeps about 7 digits, which suits most games. <em>Double</em> keeps about 16, for very large worlds: far from the origin an object can still be placed and moved in tiny steps, and small movements added up over time stay exact. With Double the Inspector's Position boxes take every digit you type, and scripts read the full value as <code>transform.positionD</code> (see <a href="scripting.html">Scripting</a>). Physics, rendering and audio still work in floats, so a Rigidbody's position is rounded to a float every physics step. Switching back to Float rounds every position in the scene. The built game uses the same type.</td></tr>
     <tr><td><strong>Graphics on Mac</strong> (Vulkan or Metal, usually Vulkan)</td><td>How the editor and the project's Mac games draw on a Mac. <em>Vulkan</em> goes through MoltenVK, which turns it into Metal, and is the same renderer as on Windows and Linux. <em>Metal</em> (experimental) draws with Apple's own API directly. Both draw the same picture; see <a href="rendering.html#metal">Metal on a Mac</a>. The editor switches the next time the project is opened; builds use the choice at once. Games for Windows and Linux always use Vulkan.</td></tr>
     <tr><td><strong>Move Snap</strong>, <strong>Scale Snap</strong> (usually 0.5 and 0.1)</td><td>The grid steps used when you hold <kbd>Ctrl</kbd> while dragging a move or scale handle.</td></tr>
-    <tr><td><strong>Editor Far Clip Plane</strong> (10 to 100000, usually 500)</td><td>How far from the editor's camera the scene is drawn, in world units. Anything farther away isn't drawn. Raise it to see distant objects, such as a big terrain's far edge, while you edit; lower it for finer depth detail close up.</td></tr>
-    <tr><td><strong>Editor Near Clip Plane</strong> (0.01 to 100, usually 0.1)</td><td>How close to the editor's camera things can be and still be drawn. Anything nearer isn't drawn. Lower it to look at small things up close without them being cut off; raise it for finer depth detail far away. It is never more than half the far plane, so lowering the far plane can pull the near plane in with it.</td></tr>
+    <tr><td><strong>Editor Far Clip Plane</strong> (2D projects only; 10 to 100000, usually 500)</td><td>How far back in Z the 2D view draws, in world units. Anything farther away isn't drawn. A 3D project has no far clip plane: its view draws things however far away they are.</td></tr>
+    <tr><td><strong>Editor Near Clip Plane</strong> (0.01 to 100, usually 0.1)</td><td>How close to the editor's camera things can be and still be drawn. Anything nearer isn't drawn. Lower it to look at small things up close without them being cut off; raise it for finer depth detail. In a 2D project it is never more than half the far plane, so lowering the far plane can pull the near plane in with it.</td></tr>
   </tbody>
 </table></div>
-<p>Drag a number, or click it to type one; <em>Reset both to the usual values</em> puts them back to 500 and 0.1. The editor's clip planes only change the camera you fly around the scene with. The cameras in your scene have their own <strong>Near</strong> and <strong>Far</strong> (set on the Camera component), which is what the game and Play mode use, so changing them doesn't change how the game looks. They apply at once and are saved when you let go of the mouse or close the window.</p>
+<p>Drag a number, or click it to type one; the reset button puts them back to 500 and 0.1. The editor's clip planes only change the camera you fly around the scene with. The cameras in your scene have their own <strong>Near</strong> (and <strong>Far</strong>, for an orthographic camera) on the Camera component, which is what the game and Play mode use, so changing them doesn't change how the game looks. They apply at once and are saved when you let go of the mouse or close the window.</p>
 
 <h2>Other windows</h2>
 <ul>

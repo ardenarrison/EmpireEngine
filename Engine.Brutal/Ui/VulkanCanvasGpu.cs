@@ -88,6 +88,17 @@ internal sealed unsafe class VulkanCanvasGpu : ICanvasGpu
         WriteDescriptors();
     }
 
+    // Rewrites the pictures where they are, without waiting for the GPU: a frame in flight may read some old and some new pixels.
+    public void UpdateImages(uint[] pixels)
+    {
+        if (!_hasImageBuffer || (ulong)(pixels.Length * sizeof(uint)) != _imageBytes)
+        {
+            SetImages(pixels);
+            return;
+        }
+        _device.WriteMemory<uint>(pixels, _imageMemory, default, default);
+    }
+
     // Records the shapes into the UI render pass.
     public void Draw(UiPass pass, ReadOnlySpan<float> vertices, int vertexCount, float[] push, float pixelW, float pixelH)
     {

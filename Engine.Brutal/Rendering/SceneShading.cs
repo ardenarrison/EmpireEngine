@@ -89,8 +89,8 @@ internal static class SceneShading
         var forward = -Vector3.UnitZ;
         if (Matrix4x4.Invert(viewProjection, out var inverse))
         {
-            var near = Vector4.Transform(new Vector4(0f, 0f, 0f, 1f), inverse);
-            var far = Vector4.Transform(new Vector4(0f, 0f, 1f, 1f), inverse);
+            var near = Vector4.Transform(new Vector4(0f, 0f, ClipDepth.Near, 1f), inverse);
+            var far = Vector4.Transform(new Vector4(0f, 0f, ClipDepth.Ahead, 1f), inverse);
             var direction = new Vector3(far.X, far.Y, far.Z) / far.W - new Vector3(near.X, near.Y, near.Z) / near.W;
             if (direction.LengthSquared() > 1e-12f && float.IsFinite(direction.X)) forward = Vector3.Normalize(direction);
         }

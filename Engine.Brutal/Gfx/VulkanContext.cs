@@ -24,6 +24,8 @@ public sealed unsafe class VulkanContext : IGraphicsContext
 {
     public const int FramesInFlight = 2;
     public const int DepthFormat = 126;                 // VK_FORMAT_D32_SFLOAT
+    // Depth is reversed (see ClipDepth), so the scene's depth tests keep what is greater: VK_COMPARE_OP_GREATER.
+    public const int DepthCompare = 4;
     public const int LayoutDepthAttachment = 1000241000; // VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL
     public const int LayoutPresentSrc = 1000001002;
 
@@ -674,7 +676,7 @@ public sealed unsafe class VulkanContext : IGraphicsContext
             StoreOp = (VkAttachmentStoreOp)1,
             ClearValue = new VkClearValue
             {
-                DepthStencil = new VkClearDepthStencilValue { Depth = 1f, Stencil = 0 },
+                DepthStencil = new VkClearDepthStencilValue { Depth = ClipDepth.Far, Stencil = 0 },
             },
         };
         var renderInfo = new VkRenderingInfo

@@ -5,7 +5,7 @@ using Engine.Core.Scene;
 namespace Editor;
 
 // File > Project Settings: settings that belong to the project and are kept in its project-settings.json.
-// That is the position type (float or double), the graphics API on a Mac, the snapping steps and the editor's near and far clip planes.
+// That is the position type (float or double), the graphics API on a Mac, the snapping steps and the editor's near clip plane (and far clip plane, in a 2D project).
 // drawingWith is the graphics API this editor session draws with, which only changes when the project is opened again.
 public sealed class ProjectSettingsWindow(ProjectSettings settings, EditorCamera camera, string projectFolder, Action<PositionType> positionTypeChanged,
     Func<GraphicsApi> drawingWith)
@@ -82,16 +82,20 @@ public sealed class ProjectSettingsWindow(ProjectSettings settings, EditorCamera
                       "and the center box scales in steps of it (0.1 is 10% at a time).", Gui.DimColor);
         g.Spacing();
 
-        g.Text("Editor Far Clip Plane");
-        float far = settings.EditorFarClipPlane;
-        if (g.DragFloat("##far", ref far, 25f, ProjectSettings.MinFarClipPlane, ProjectSettings.MaxFarClipPlane))
+        // The 3D view sees forever, so only a 2D project's orthographic view has a far clip plane.
+        if (camera.Is2D)
         {
-            settings.EditorFarClipPlane = far;
-            Apply();
+            g.Text("Editor Far Clip Plane");
+            float far = settings.EditorFarClipPlane;
+            if (g.DragFloat("##far", ref far, 25f, ProjectSettings.MinFarClipPlane, ProjectSettings.MaxFarClipPlane))
+            {
+                settings.EditorFarClipPlane = far;
+                Apply();
+            }
+            g.TextWrapped($"How far from the editor's camera the scene is drawn, in world units ({ProjectSettings.MinFarClipPlane:0} to {ProjectSettings.MaxFarClipPlane:0}, " +
+                          $"usually {ProjectSettings.DefaultFarClipPlane:0}). Raise it to see objects farther back in Z while you edit.", Gui.DimColor);
+            g.Spacing();
         }
-        g.TextWrapped($"How far from the editor's camera the scene is drawn, in world units ({ProjectSettings.MinFarClipPlane:0} to {ProjectSettings.MaxFarClipPlane:0}, " +
-                      $"usually {ProjectSettings.DefaultFarClipPlane:0}). Raise it to see distant objects while you edit; lower it for finer depth detail close up.", Gui.DimColor);
-        g.Spacing();
 
         g.Text("Editor Near Clip Plane");
         float near = settings.EditorNearClipPlane;
@@ -102,14 +106,16 @@ public sealed class ProjectSettingsWindow(ProjectSettings settings, EditorCamera
         }
         g.TextWrapped($"How close to the editor's camera things can be and still be drawn ({ProjectSettings.MinNearClipPlane:0.##} to {ProjectSettings.MaxNearClipPlane:0}, " +
                       $"usually {ProjectSettings.DefaultNearClipPlane:0.0}). Lower it to look at small things up close without them being cut off; " +
-                      "raise it for finer depth detail far away. It is never more than half the far plane.", Gui.DimColor);
+                      (camera.Is2D ? "raise it for finer depth detail. It is never more than half the far plane." : "raise it for finer depth detail."), Gui.DimColor);
         g.Spacing();
 
         g.TextWrapped("Drag a number, or click it to type one. These only change the camera you fly around the scene with while editing. " +
-                      "The cameras in your scene have their own Near and Far, which is what the game uses.", Gui.DimColor);
+                      "The cameras in your scene have their own settings, which is what the game uses. " +
+                      (camera.Is2D ? "" : "The 3D view has no far clip plane: it shows things however far away they are."), Gui.DimColor);
         g.Spacing();
-        bool usual = settings.EditorFarClipPlane == ProjectSettings.DefaultFarClipPlane && settings.EditorNearClipPlane == ProjectSettings.DefaultNearClipPlane;
-        if (g.Button("Reset both to the usual values", enabled: !usual))
+        bool usual = (!camera.Is2D || settings.EditorFarClipPlane == ProjectSettings.DefaultFarClipPlane) &&
+                     settings.EditorNearClipPlane == ProjectSettings.DefaultNearClipPlane;
+        if (g.Button(camera.Is2D ? "Reset both to the usual values" : "Reset to the usual value", enabled: !usual))
         {
             settings.EditorFarClipPlane = ProjectSettings.DefaultFarClipPlane;
             settings.EditorNearClipPlane = ProjectSettings.DefaultNearClipPlane;
